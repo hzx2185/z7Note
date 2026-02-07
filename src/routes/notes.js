@@ -80,6 +80,38 @@ router.get('/api/notes', async (req, res) => {
   }
 });
 
+// 获取回收站列表（当前用户）- 必须在 /api/notes/:id 之前
+router.get('/api/notes/trash', async (req, res) => {
+  try {
+    const notes = await getConnection().all(
+      'SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 1 ORDER BY updatedAt DESC',
+      [req.user]
+    );
+    res.json(notes);
+  } catch (e) {
+    log('ERROR', '获取回收站失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
+// 恢复笔记 - 必须在 /api/notes/:id 之前
+router.put('/api/notes/:id/restore', async (req, res) => {
+  try {
+    const result = await getConnection().run(
+      'UPDATE notes SET deleted = 0, updatedAt = ? WHERE id = ? AND username = ?',
+      [Date.now(), req.params.id, req.user]
+    );
+    if (result.changes === 0) {
+      return res.status(404).json({ error: '笔记不存在' });
+    }
+    log('INFO', '恢复笔记', { username: req.user, noteId: req.params.id });
+    res.json({ status: 'ok' });
+  } catch (e) {
+    log('ERROR', '恢复笔记失败', { username: req.user, noteId: req.params.id, error: e.message });
+    res.status(500).json({ error: '恢复失败' });
+  }
+});
+
 // 获取单个笔记
 router.get('/api/notes/:id', async (req, res) => {
   try {
@@ -621,38 +653,6 @@ router.post('/api/files', async (req, res) => {
   } catch (e) {
     log('ERROR', '笔记同步失败', { username: req.user, error: e.message });
     res.status(500).json({ error: "同步失败" });
-  }
-});
-
-// 获取回收站列表（当前用户）
-router.get('/api/notes/trash', async (req, res) => {
-  try {
-    const notes = await getConnection().all(
-      'SELECT id, title, updated_at FROM notes WHERE username = ? AND deleted = 1 ORDER BY updated_at DESC',
-      [req.user]
-    );
-    res.json(notes);
-  } catch (e) {
-    log('ERROR', '获取回收站失败', { username: req.user, error: e.message });
-    res.status(500).json({ error: '获取失败' });
-  }
-});
-
-// 恢复笔记
-router.put('/api/notes/:id/restore', async (req, res) => {
-  try {
-    const result = await getConnection().run(
-      'UPDATE notes SET deleted = 0, updated_at = ? WHERE id = ? AND username = ?',
-      [Date.now(), req.params.id, req.user]
-    );
-    if (result.changes === 0) {
-      return res.status(404).json({ error: '笔记不存在' });
-    }
-    log('INFO', '恢复笔记', { username: req.user, noteId: req.params.id });
-    res.json({ status: 'ok' });
-  } catch (e) {
-    log('ERROR', '恢复笔记失败', { username: req.user, noteId: req.params.id, error: e.message });
-    res.status(500).json({ error: '恢复失败' });
   }
 });
 

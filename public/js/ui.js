@@ -1451,7 +1451,7 @@ const UIManager = {
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
                         <div style="flex:1;min-width:0;">
                             <div style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this.escapeHtml(note.title || '无标题')}</div>
-                            <div style="font-size:11px;color:var(--gray);margin-top:2px;">${new Date(note.updated_at).toLocaleString('zh-CN')}</div>
+                            <div style="font-size:11px;color:var(--gray);margin-top:2px;">${new Date(note.updatedAt).toLocaleString('zh-CN')}</div>
                         </div>
                         <div style="display:flex;gap:8px;flex-shrink:0;">
                             <button onclick="ui.restoreNote(${note.id})" style="background:var(--green);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">恢复</button>
