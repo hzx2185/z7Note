@@ -1447,9 +1447,11 @@ const UIManager = {
                     return;
                 }
 
-                listBody.innerHTML = notes.map(note => {
+                // 使用循环构建 HTML
+                let html = '';
+                for (const note of notes) {
                     console.log('[回收站] 笔记:', note);
-                    return `
+                    html += `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
                         <div style="flex:1;min-width:0;">
                             <div style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${note.title || '无标题'}</div>
@@ -1459,16 +1461,17 @@ const UIManager = {
                             <button onclick="ui.restoreNote(${note.id})" style="background:var(--green);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">恢复</button>
                             <button onclick="ui.deleteNoteFromTrash(${note.id})" style="background:var(--red);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">永久删除</button>
                         </div>
-                    </div>
-                `).join('');
+                    </div>`;
+                }
+                listBody.innerHTML = html;
             } else {
                 const data = await res.json();
                 listBody.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red);">加载失败: ${data.error || '未知错误'}</div>`;
             }
-            } catch (e) {
-                console.error('[回收站] 加载失败:', e);
-                listBody.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red);">网络错误: ${e.message}</div>`;
-            }
+        } catch (e) {
+            console.error('[回收站] 加载失败:', e);
+            listBody.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red);">网络错误: ${e.message}</div>`;
+        }
     },
 
     // 恢复笔记
