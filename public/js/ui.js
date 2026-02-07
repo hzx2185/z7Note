@@ -1447,7 +1447,9 @@ const UIManager = {
                     return;
                 }
 
-                listBody.innerHTML = notes.map(note => `
+                listBody.innerHTML = notes.map(note => {
+                    console.log('[回收站] 笔记:', note);
+                    return `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
                         <div style="flex:1;min-width:0;">
                             <div style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${note.title || '无标题'}</div>
