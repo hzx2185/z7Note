@@ -174,7 +174,7 @@ html.dark-mode .cm-s-default .cm-header {
     color: #79c0ff;
 }
 
-.dark-mode .cm-s-default .cm-number {
+.dark-mode .cm-s-default .cm-number:not(.cm-custom-number) {
     color: #79c0ff;
 }
 
@@ -1275,83 +1275,20 @@ input[type="checkbox"].share-checkbox {
         margin: 2px;
     }
 }
-:root {
-    --number-highlight-color: #ff4500;
-    --number-highlight-color-dark: #ffa500;
-}
 
-.cm-custom-number {
+/* 数字高亮 - 多重选择器确保覆盖 */
+span.cm-custom-number,
+.CodeMirror span.cm-custom-number,
+.cm-s-default span.cm-custom-number,
+.CodeMirror .cm-s-default span.cm-custom-number {
     color: var(--number-highlight-color) !important;
+    font-weight: 500 !important;
 }
 
-.dark-mode .cm-custom-number {
+html.dark-mode span.cm-custom-number,
+html.dark-mode .CodeMirror span.cm-custom-number,
+html.dark-mode .cm-s-default span.cm-custom-number,
+html.dark-mode .CodeMirror .cm-s-default span.cm-custom-number {
     color: var(--number-highlight-color-dark) !important;
-}
-
-div.CodeMirror span.cm-custom-number {
-    color: var(--number-highlight-color) !important;
-}
-
-html.dark-mode div.CodeMirror span.cm-custom-number {
-    color: var(--number-highlight-color-dark) !important;
-}
-
-body .CodeMirror .cm-s-default span.cm-custom-number {
-    color: var(--number-highlight-color) !important;
-}
-
-html.dark-mode body .CodeMirror .cm-s-default span.cm-custom-number {
-    color: var(--number-highlight-color-dark) !important;
-}
-
-.cm-s-default span.cm-custom-number.cm-number {
-    color: var(--number-highlight-color) !important;
-}
-
-html.dark-mode .cm-s-default span.cm-custom-number.cm-number {
-    color: var(--number-highlight-color-dark) !important;
-}
-
-/* 强制覆盖 CodeMirror 的 color: #000 - 增强特异性 */
-div.CodeMirror .cm-custom-number {
-    color: #ff4500 !important;
-    font-weight: 500 !important;
-}
-
-html.dark-mode div.CodeMirror .cm-custom-number {
-    color: #ffa500 !important;
-    font-weight: 500 !important;
-}
-
-/* 覆盖所有可能的 CodeMirror 选择器 */
-.CodeMirror .cm-custom-number {
-    color: #ff4500 !important;
-    font-weight: 500 !important;
-}
-
-html.dark-mode .CodeMirror .cm-custom-number {
-    color: #ffa500 !important;
-    font-weight: 500 !important;
-}
-
-/* 覆盖 cm-s-default 主题 */
-.cm-s-default .CodeMirror .cm-custom-number {
-    color: #ff4500 !important;
-    font-weight: 500 !important;
-}
-
-html.dark-mode .cm-s-default .CodeMirror .cm-custom-number {
-    color: #ffa500 !important;
-    font-weight: 500 !important;
-}
-
-/* 覆盖 cm-number 类 */
-.cm-s-default .cm-number.cm-custom-number {
-    color: #ff4500 !important;
-    font-weight: 500 !important;
-}
-
-html.dark-mode .cm-s-default .cm-number.cm-custom-number {
-    color: #ffa500 !important;
     font-weight: 500 !important;
 }
