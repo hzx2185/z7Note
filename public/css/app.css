@@ -1,0 +1,1357 @@
+/* 导入基础样式 */
+@import './variables.css';
+@import './base.css';
+
+body,html {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* ==================== 主应用布局 ==================== */
+.header {
+    height: 40px;
+    background: var(--side);
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    width: 100%;
+}
+
+.header > div {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.header > div:last-child {
+    gap: 1px;
+}
+
+/* 主容器 */
+.container {
+    display: flex;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    width: 100vw;
+    padding-top: 40px;
+}
+#sidebar { width:260px;background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;position:relative;z-index:100;transition: width 0.2s ease; overflow:hidden; will-change: width; }
+#sidebar.collapsed { width:0;border-right:none;overflow:hidden; }
+
+/* sidebar 折叠时，main 占据全部宽度 */
+.sidebar-collapsed #main {
+    width: 100%;
+    flex: 1;
+}
+
+/* 移动端sidebar样式 - 默认隐藏，通过show类显示 */
+@media (max-width: 768px) {
+    #sidebar {
+        position: fixed;
+        top: 40px;
+        left: 0;
+        bottom: 0;
+        width: 80%;
+        max-width: 300px;
+        z-index: 2001;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        border-right: 1px solid var(--border);
+        box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+    }
+    
+    #sidebar.show {
+        transform: translateX(0);
+    }
+    
+    #sidebar.collapsed {
+        width: 80%;
+        max-width: 300px;
+        transform: translateX(-100%);
+    }
+}
+#main { flex:1;display:flex;flex-direction:column;overflow:hidden;position: relative; padding-top: 44px; }
+.quick-tools {
+    background: var(--side);
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    z-index: 2000;
+    flex-shrink: 0;
+    position: fixed;
+    top: 44px;
+    left: 0;
+    right: 0;
+    height: 36px;
+}
+
+.quick-tools::-webkit-scrollbar {
+    height: 6px;
+}
+.quick-tools::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+#main-view { flex:1;display:flex;overflow:hidden;position: relative;height: calc(100% - 80px); }
+#editor-container { flex:1;overflow:hidden;position: relative;min-width: 0; }
+#preview-wrapper { flex:1;overflow:hidden;position: relative;background: var(--bg);min-width: 0; }
+#preview-frame { width: 100%;height: 100%;border: none; }
+.edit-only #preview-wrapper { display: none; }
+.preview-only #editor-container { display: none; }
+.split #editor-container,.split #preview-wrapper { flex: 1;display: block;min-width: 0;border-left: 1px solid var(--border); }
+.split #editor-container { border-left: none; }
+#editor-container textarea { width: 100%;height: 100%;border: none;resize: none;outline: none;background: var(--bg) !important;color: var(--text) !important;line-height: 1.6;padding: 12px; }
+.CodeMirror { height: 100% !important;width: 100% !important; }
+.CodeMirror-scroll { overflow-x: auto !important; overflow-y: auto !important; }
+.CodeMirror-vscrollbar { overflow-y: auto !important; }
+
+/* CodeMirror 黑暗模式样式 - 高优先级 */
+html.dark-mode .CodeMirror,
+html.dark-mode .CodeMirror-scroll,
+html.dark-mode .CodeMirror-gutters,
+html.dark-mode .CodeMirror-sizer {
+    background: var(--bg) !important;
+    background-color: var(--bg) !important;
+}
+
+html.dark-mode .CodeMirror,
+html.dark-mode .cm-s-default {
+    color: var(--text) !important;
+}
+
+html.dark-mode .CodeMirror-gutters {
+    background: var(--side) !important;
+    background-color: var(--side) !important;
+    border-right: 1px solid var(--border) !important;
+}
+
+html.dark-mode .CodeMirror-linenumber {
+    color: var(--gray) !important;
+}
+
+html.dark-mode .CodeMirror-cursor {
+    border-left-color: var(--text) !important;
+}
+
+html.dark-mode .CodeMirror-selected,
+html.dark-mode .CodeMirror-selectedtext,
+html.dark-mode .cm-s-default .cm-selection,
+html.dark-mode .cm-s-default .cm-selection-background {
+    background: rgba(88, 166, 255, 0.2) !important;
+}
+
+html.dark-mode .cm-s-default .cm-header {
+    color: var(--accent);
+}
+
+.dark-mode .cm-s-default .cm-link {
+    color: var(--accent);
+}
+
+.dark-mode .cm-s-default .cm-string,
+.dark-mode .cm-s-default .cm-string-2 {
+    color: #a5d6ff;
+}
+
+.dark-mode .cm-s-default .cm-keyword {
+    color: #ff7b72;
+}
+
+.dark-mode .cm-s-default .cm-atom {
+    color: #79c0ff;
+}
+
+.dark-mode .cm-s-default .cm-number {
+    color: #79c0ff;
+}
+
+.dark-mode .cm-s-default .cm-def {
+    color: #d2a8ff;
+}
+
+.dark-mode .cm-s-default .cm-variable,
+.dark-mode .cm-s-default .cm-punctuation,
+.dark-mode .cm-s-default .cm-property,
+.dark-mode .cm-s-default .cm-operator {
+    color: var(--text);
+}
+
+.dark-mode .cm-s-default .cm-tag {
+    color: #7ee787;
+}
+
+.dark-mode .cm-s-default .cm-attribute {
+    color: #79c0ff;
+}
+
+.dark-mode .cm-s-default .cm-comment {
+    color: var(--gray);
+    font-style: italic;
+}
+
+/* CodeMirror 当前编辑行高亮 */
+.CodeMirror-activeline-background {
+    background: rgba(37, 99, 235, 0.08) !important;
+}
+
+.dark-mode .CodeMirror-activeline-background {
+    background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.CodeMirror-activeline-gutter {
+    background: rgba(37, 99, 235, 0.15) !important;
+}
+
+.dark-mode .CodeMirror-activeline-gutter {
+    background: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* 强制消除移动端工具栏下方的神秘空白 */
+@media (max-width: 768px) {
+    /* 统一移动端字体大小 */
+    body, html {
+        font-size: 14px;
+    }
+
+    /* 1. 移除主容器的所有上边距和内边距 */
+    #main {
+        padding: 0 !important;
+        margin: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    /* 2. 确保编辑器容器紧贴工具栏 */
+    #main-view {
+        margin: 0 !important;
+        padding: 0 !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    /* 3. 如果你使用的是简单 textarea 编辑器，也一并重置 */
+    #editor-container textarea {
+        padding-top: 5px !important; /* 留极小间距避免顶死 */
+        margin-top: 0 !important;
+    }
+
+    /* 4. 确保快捷工具栏没有底部 margin */
+    .quick-tools {
+        margin-bottom: 0 !important;
+        border-bottom: 1px solid var(--border) !important;
+    }
+}
+
+.search-bar {
+    background: var(--side);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.search-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-input:focus {
+    border-color: var(--accent);
+}
+
+.sidebar-tools {
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidebar-tools input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.sidebar-tools input:focus {
+    border-color: var(--accent);
+}
+.sidebar-tools > div { display:flex;gap:2px;flex-wrap:wrap; }
+.sidebar-footer { padding: 6px 8px;border-top:1px solid var(--border); }
+.sidebar-footer > div { display: flex;gap: 2px;align-items: center;flex-wrap:wrap; }
+.sidebar-user { padding: 8px;border-top: 1px solid var(--border);margin-top: auto;background: var(--side); }
+.sidebar-user > div { display: flex;align-items: center;justify-content: space-between;margin-bottom: 3px; }
+.sidebar-user a { text-decoration: none;color: var(--accent);font-size: 12px; }
+.sidebar-user > div > div { display:flex;gap:4px;align-items:center; }
+.sidebar-user span { color: var(--gray);font-size: 12px; }
+.progress-bar { height: 2px;background: var(--border);border-radius: 1px;overflow: hidden;display: flex;gap: 1px; }
+.progress-bar div { width: 0%;transition: 0.3s; }
+#note-bar { background: var(--accent); }
+#file-bar { background: var(--green); }
+#user-display { opacity: 0.9;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;text-decoration: none;color: var(--text); }
+
+/* 笔记列表容器 - 添加滚动 */
+#list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 10px;
+  /* 优化滚动性能 */
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+  /* 启用硬件加速 */
+  transform: translateZ(0);
+}
+
+.note-item { padding: 10px 12px;border-bottom: 1px solid var(--border);cursor: pointer;display: flex;align-items: center;gap: 8px;flex-shrink: 0;font-size: 13px;line-height: 1.4;transition: background 0.1s;will-change: background-color; }
+.note-item:hover { background: rgba(9, 105, 218, 0.05); }
+.note-item.active { background: rgba(88,166,255,0.12);border-left: 3px solid var(--accent); }
+.note-item.selected { background: rgba(88,166,255,0.15);border-left: 3px solid var(--accent); }
+
+/* 批量模式下的笔记项样式 */
+#sidebar.batch-mode .note-item {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+#sidebar.batch-mode .note-item:hover {
+  background: rgba(88,166,255,0.08);
+}
+
+.note-info { flex: 1;overflow: hidden;white-space: nowrap;text-overflow: ellipsis; }
+
+/* 笔记列表项的操作按钮 - 只在 hover 时显示 */
+.note-item .note-action-share {
+    font-size: 12px;
+    padding: 2px 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    will-change: opacity;
+}
+.note-item:hover .note-action-share {
+    opacity: 0.6;
+}
+.note-item .note-action-delete {
+    font-size: 16px;
+    padding: 0 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    will-change: opacity;
+}
+.note-item:hover .note-action-delete {
+    opacity: 0.6;
+}
+
+/* 文件夹样式 - 提高优先级 */
+div.folder-item {
+  padding: 8px 12px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text) !important;
+  background: rgba(0,0,0,0.02) !important;
+  border-bottom: 1px solid var(--border) !important;
+  user-select: none !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+div.folder-item::before {
+  content: '·';
+  color: var(--gray);
+  margin-right: 0px;
+}
+div.folder-content {
+  will-change: display;
+}
+div.folder-content.hidden {
+  display: none !important;
+}
+
+#batch-bar {
+  position: relative;
+  background: var(--side);
+  border-top: 2px solid var(--accent);
+  padding: 8px 10px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 110;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  flex-shrink: 0;
+  /* 优化渲染性能 */
+  will-change: display;
+  transform: translateZ(0);
+}
+
+#batch-replace-bar {
+  display: none;
+  padding: 8px 10px;
+  background: var(--side);
+  border-top: 1px solid var(--border);
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+#batch-replace-bar.show {
+  display: flex;
+}
+
+/* 批量模式时显示批量操作栏 */
+#sidebar.batch-mode #batch-bar {
+  display: flex;
+}
+
+#batch-bar #batch-count {
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+#batch-bar .tool-btn {
+  flex-shrink: 0;
+  min-width: auto;
+  padding: 4px 8px;
+  border-radius: 3px;
+  transition: background-color 0.1s, border-color 0.1s;
+  will-change: background-color, border-color;
+}
+
+#batch-bar .tool-btn:hover {
+  background-color: rgba(88,166,255,0.1);
+}
+
+/* 复选框样式 - 优先级提高 */
+input[type="checkbox"].note-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0 4px 0 2px;
+  accent-color: var(--accent);
+  /* 优化复选框渲染性能 */
+  will-change: appearance;
+  /* 启用硬件加速 */
+  transform: translateZ(0);
+}
+
+/* 批量模式下显示复选框 */
+#sidebar.batch-mode #list .note-item input[type="checkbox"].note-checkbox {
+  display: block !important;
+}
+
+/* Admin页面的复选框默认显示 */
+input[type="checkbox"].share-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* 模态框操作区域 */
+.modal-actions {
+    padding: 12px 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+/* 深色模式下的文件夹样式 */
+.dark-mode .folder-item {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom-color: var(--border);
+    color: var(--text);
+}
+
+.dark-mode .folder-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* 深色模式搜索栏适配 */
+.dark-mode .search-bar {
+    background: var(--side);
+}
+
+.attachment-grid { display: grid;gap: 14px;grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));padding: 10px;overflow-y: auto;max-height: 500px; }
+.attachment-grid:empty::before { content: "暂无文件";grid-column: 1 / -1;text-align: center;color: var(--gray);padding: 40px 0; }
+.attachment-item { border: 1px solid var(--border);border-radius: 8px;padding: 12px;overflow: hidden;transition: border-color 0.15s;cursor: pointer; }
+.attachment-item:hover { border-color: var(--accent);background: rgba(9, 105, 218, 0.05); }
+.attachment-item > div:first-child { height: 120px;background: var(--bg);display: flex;align-items: center;justify-content: center;margin-bottom: 10px;border-radius: 4px;overflow: hidden; }
+.attachment-item > div:first-child img { width: 100%;height: 100%;object-fit: cover; }
+.attachment-item > div:nth-child(2) { font-size: 14px;color: var(--text);overflow: hidden;text-overflow: ellipsis;white-space: nowrap;padding-bottom: 4px; }
+.attachment-item > div:nth-child(3) { font-size: 12px;color: var(--gray);margin-top: 4px; }
+.attachment-item > div:last-child { margin-top: 10px;display: flex;gap: 6px;justify-content: center; }
+.attachment-item > div:last-child button { flex: 1;font-size: 13px;padding: 6px 12px; }
+
+/* 附件管理 file-card 样式 - 紧凑布局 */
+.file-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.file-card:hover {
+    border-color: var(--accent);
+    background: rgba(9, 105, 218, 0.05);
+}
+
+.file-preview {
+    height: 80px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.file-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.file-name {
+    font-size: 13px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-bottom: 4px;
+}
+
+.file-name[onclick] {
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.file-name[onclick]:hover {
+    color: var(--accent);
+}
+
+.file-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.file-actions .btn {
+    padding: 2px 5px;
+    font-size: 13px;
+    min-width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.file-actions .btn:hover {
+    border-color: var(--accent);
+}
+
+/* file-actions 中的 tool-btn 样式覆盖 */
+.file-actions .tool-btn {
+    padding: 2px 5px;
+    font-size: 13px;
+    min-width: 24px;
+    height: 24px;
+}
+
+/* file-actions 中的链接样式 - 参照 tool-btn */
+.file-actions a.tool-btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-card + .file-card {
+    margin-top: 8px;
+}
+
+/* 特殊按钮样式 */
+.file-actions .btn[title="插入到编辑器"] {
+    color: var(--accent);
+}
+
+.file-actions .btn[title="彻底删除"] {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--red);
+}
+
+/* 状态指示灯 */
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gray);
+    display: inline-block;
+    transition: all 0.2s;
+}
+
+.status-dot.working {
+    background: var(--accent);
+    animation: blink 1s infinite;
+}
+
+.status-dot.success {
+    background: var(--green);
+}
+
+.status-dot.error {
+    background: var(--red);
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* 附件列表视图 */
+.attachment-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+}
+
+.attachment-list-view .file-card {
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--bg);
+    font-size: 14px;
+    margin-bottom: -1px;
+}
+
+.attachment-list-view .file-card:hover {
+    border-color: var(--accent);
+    position: relative;
+    z-index: 1;
+}
+
+.attachment-list-view .file-preview {
+    height: 32px;
+    width: 32px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.attachment-list-view .file-name {
+    flex: 1;
+    padding-bottom: 0;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.attachment-list-view .file-name:hover {
+    color: var(--accent);
+}
+
+.attachment-list-view .file-actions {
+    margin-top: 0;
+    flex-shrink: 0;
+    gap: 3px;
+}
+
+/* 列表视图工具按钮更小 */
+.attachment-list-view .file-actions .tool-btn {
+    padding: 2px 4px;
+    font-size: 12px;
+    min-width: 20px;
+    height: 20px;
+}
+
+/* 附件分页样式 */
+#attachment-pagination {
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--side);
+}
+
+#attachment-pagination .tool-btn {
+    font-size: 12px;
+    padding: 4px 10px;
+    min-height: 28px;
+}
+
+#attachment-pagination button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 附件管理模态框优化 */
+#attachment-modal .modal-content {
+    max-height: 90vh;
+}
+
+#attachment-modal .modal-body {
+    padding: 0;
+}
+
+#attachment-container {
+    max-height: calc(90vh - 130px);
+    overflow-y: auto;
+}
+
+#attachment-list {
+    padding: 8px;
+}
+
+/* 附件管理 actions 栏 - 使用 tool-btn 风格 */
+#attachment-modal .modal-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 12px;
+}
+
+#attachment-modal .modal-actions .btn {
+    font-size: 12px;
+    padding: 4px 8px;
+    min-height: 32px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+/* 附件管理特殊按钮样式 */
+#attachment-modal .modal-actions .btn.btn-green {
+    background: var(--green);
+    color: white;
+    border-color: transparent;
+}
+
+#attachment-modal .modal-actions .btn.btn-green:hover {
+    background: #2c974b;
+}
+
+/* 附件管理操作按钮组 - 参照新建、批量按钮 */
+#attachment-modal .modal-actions button {
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 3px;
+    min-height: 32px;
+}
+
+#attachment-modal .modal-actions button[title*="上传"],
+#attachment-modal .modal-actions button[onclick*="refresh"] {
+    flex: 0 0 auto;
+}
+
+#attachment-modal .modal-actions #attachment-search {
+    flex: 1;
+    padding: 6px 10px;
+    min-height: 32px;
+}
+
+@media (max-width: 640px) {
+    .attachment-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        padding: 8px;
+    }
+    .attachment-item {
+        padding: 10px;
+    }
+    .attachment-item > div:first-child {
+        height: 100px;
+    }
+
+    /* file-card 手机端优化 */
+    .file-card {
+        padding: 6px;
+    }
+
+    .file-preview {
+        height: 70px;
+    }
+
+    .file-name {
+        font-size: 12px;
+    }
+
+    .file-actions .btn {
+        padding: 3px 6px;
+        font-size: 10px;
+        height: 24px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        height: 44px !important;
+        padding: 0 8px;
+    }
+    .header > div {
+        gap: 2px;
+    }
+    .header > div:last-child {
+        gap: 1px;
+    }
+    .tool-btn {
+        min-width: 26px;
+        height: 26px;
+        padding: 2px 5px;
+        font-size: 13px;
+        border-radius: 3px;
+    }
+    .quick-tools {
+        height: 38px;
+        padding: 3px 6px;
+        gap: 2px;
+        top: 44px !important;
+    }
+    .divider {
+        width: 1px;
+        height: 18px;
+        margin: 0 2px;
+    }
+
+    /* 所有按钮在所有终端都可见 */
+    .quick-tools .tool-btn {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* 确保工具栏按钮可触摸 */
+    .quick-tools .tool-btn {
+        min-width: 32px !important;
+        height: 32px !important;
+        padding: 4px 8px !important;
+    }
+
+    /* 查找替换栏移动端优化 */
+    #search-replace-bar.search-bar {
+        padding: 6px 8px !important;
+        gap: 6px !important;
+        flex-wrap: wrap !important;
+        width: 100% !important;
+    }
+    
+    /* 默认隐藏，通过 JS 控制显示 */
+    #search-replace-bar.search-bar[style*="display: none"] {
+        display: none !important;
+    }
+    
+    #search-replace-bar .search-row {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        width: 100% !important;
+        display: flex !important;
+    }
+    
+    #search-replace-bar .search-input {
+        flex: 1 !important;
+        min-width: 100px !important;
+        padding: 8px 10px !important;
+        box-sizing: border-box !important;
+    }
+
+    #search-replace-bar .search-row .tool-btn {
+        padding: 6px 10px !important;
+        height: 32px !important;
+        white-space: nowrap !important;
+    }
+
+    /* 批量操作工具栏手机端优化 */
+    #batch-bar {
+        padding: 10px 8px;
+        flex-wrap: nowrap;
+    }
+
+    /* 移动端批量模式时，增加底部内边距 */
+    #sidebar.batch-mode #list {
+        padding-bottom: 55px;
+    }
+    #batch-bar #batch-count {
+        font-size: 12px;
+        flex-shrink: 0;
+        min-width: 60px;
+    }
+
+    @media (max-width: 480px) {
+    #batch-bar .tool-btn {
+        min-width: auto;
+        padding: 4px 8px;
+        font-size: 12px;
+        height: 28px;
+    }
+
+    #main {
+        padding: 0 !important;
+        margin: 0 !important;
+        margin-top: 0 !important;
+    }
+    #main-view {
+        height: calc(100% - 38px);
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* 小屏幕sidebar样式 */
+    #sidebar {
+        top: 44px;
+        width: 85%;
+        max-width: 280px;
+    }
+
+    /* 笔记列表优化 */
+    .note-item {
+        padding: 12px 10px;
+        font-size: 13px;
+    }
+    .folder-item {
+        padding: 10px 10px;
+        font-size: 13px;
+    }
+}
+
+/* ==================== 内容容器系统 ==================== */
+
+/* 博客页头 */
+.blog-header.visible {
+    display: block;
+}
+
+/* 统一内容容器 */
+.page-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* 博客内容 */
+.main-content {
+    flex: 1;
+    margin: 30px auto;
+    width: 100%;
+    display: flex;
+    gap: 30px;
+}
+
+/* 设置内容容器 */
+.settings-container {
+    max-width: 900px;
+    margin: 24px auto;
+    padding: 0 20px;
+}
+
+/* 表单样式 */
+.form-card {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+}
+
+.form-card h2 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text);
+}
+
+.form-group input[type="text"],
+.form-group textarea,
+.form-group select {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1);
+}
+
+.form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.form-group .hint {
+    font-size: 12px;
+    color: var(--gray);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
+.form-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.form-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.form-row label {
+    margin: 0;
+    cursor: pointer;
+}
+
+.radio-group {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.radio-item input {
+    cursor: pointer;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.preview-link {
+    display: inline-block;
+    margin-left: 8px;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.preview-link:hover {
+    text-decoration: underline;
+}
+
+/* 空状态 */
+.empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--gray);
+}
+
+/* 自定义CSS容器 */
+#custom-styles {
+    display: none;
+}
+
+/* 暗色模式表单适配 */
+.dark-mode .form-card h2 {
+    border-bottom-color: var(--border);
+}
+
+/* 博客和设置页面响应式 */
+@media (max-width: 768px) {
+    .main-content {
+        margin: 15px auto;
+        padding: 0 15px;
+        gap: 20px;
+    }
+    .sidebar.blog-sidebar {
+        width: 100%;
+    }
+}
+
+@media (max-width: 600px) {
+    /* 表单优化 */
+    .form-card {
+        padding: 16px;
+    }
+    .btn-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .btn {
+        width: 100%;
+        padding: 10px;
+    }
+    .form-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    /* 设置页面优化 */
+    .container.settings-container {
+        padding: 0 12px;
+        margin: 16px auto;
+    }
+    .header.settings-header {
+        padding: 12px 15px;
+    }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 375px) {
+    .main-content {
+        margin: 12px auto;
+        padding: 0 12px;
+    }
+    .form-card {
+        padding: 14px;
+    }
+}
+
+/* ==================== 分享列表样式（表格对齐） ==================== */
+
+/* 分享列表模态框优化 */
+#share-modal .modal-content {
+    width: min(700px, 95%);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+#share-modal .modal-body {
+    padding: 0;
+    max-height: 60vh;
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+#share-modal .modal-header h3 {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+@media (max-width: 640px) {
+    #share-modal .modal-content {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        border-radius: 0;
+    }
+    
+    #share-modal .modal-body {
+        max-height: calc(100vh - 140px);
+    }
+
+    /* 搜索框区域优化 */
+    #share-search-area div {
+        padding: 10px 12px;
+        gap: 6px;
+    }
+    
+    #share-search-area button {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    #share-search-input {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    /* 表格列宽优化 */
+    .share-col-type {
+        width: 36px !important;
+        padding: 4px 6px !important;
+    }
+
+    .share-col-name {
+        font-size: 10px !important;
+        padding: 4px 6px !important;
+    }
+
+    .share-col-expires {
+        width: 60px !important;
+        font-size: 10px !important;
+        padding: 4px 6px !important;
+    }
+
+    .share-col-actions {
+        width: 90px !important;
+        padding: 4px 6px !important;
+    }
+
+    /* 操作按钮优化 */
+    .share-item button {
+        padding: 2px 4px !important;
+        min-width: 24px !important;
+        height: 22px !important;
+        font-size: 11px !important;
+        margin-right: 2px !important;
+    }
+
+    /* 复选框优化 */
+    .share-col-type input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* 分页优化 */
+    #share-modal .pagination {
+        padding: 10px 12px;
+        flex-wrap: wrap;
+    }
+
+    #share-modal .pagination span {
+        font-size: 11px;
+    }
+
+    #share-modal .pagination button {
+        padding: 3px 8px;
+        font-size: 11px;
+        margin: 2px;
+    }
+}
+:root {
+    --number-highlight-color: #ff4500;
+    --number-highlight-color-dark: #ffa500;
+}
+
+.cm-custom-number {
+    color: var(--number-highlight-color) !important;
+}
+
+.dark-mode .cm-custom-number {
+    color: var(--number-highlight-color-dark) !important;
+}
+
+div.CodeMirror span.cm-custom-number {
+    color: var(--number-highlight-color) !important;
+}
+
+html.dark-mode div.CodeMirror span.cm-custom-number {
+    color: var(--number-highlight-color-dark) !important;
+}
+
+body .CodeMirror .cm-s-default span.cm-custom-number {
+    color: var(--number-highlight-color) !important;
+}
+
+html.dark-mode body .CodeMirror .cm-s-default span.cm-custom-number {
+    color: var(--number-highlight-color-dark) !important;
+}
+
+.cm-s-default span.cm-custom-number.cm-number {
+    color: var(--number-highlight-color) !important;
+}
+
+html.dark-mode .cm-s-default span.cm-custom-number.cm-number {
+    color: var(--number-highlight-color-dark) !important;
+}
+
+/* 强制覆盖 CodeMirror 的 color: #000 - 增强特异性 */
+div.CodeMirror .cm-custom-number {
+    color: #ff4500 !important;
+    font-weight: 500 !important;
+}
+
+html.dark-mode div.CodeMirror .cm-custom-number {
+    color: #ffa500 !important;
+    font-weight: 500 !important;
+}
+
+/* 覆盖所有可能的 CodeMirror 选择器 */
+.CodeMirror .cm-custom-number {
+    color: #ff4500 !important;
+    font-weight: 500 !important;
+}
+
+html.dark-mode .CodeMirror .cm-custom-number {
+    color: #ffa500 !important;
+    font-weight: 500 !important;
+}
+
+/* 覆盖 cm-s-default 主题 */
+.cm-s-default .CodeMirror .cm-custom-number {
+    color: #ff4500 !important;
+    font-weight: 500 !important;
+}
+
+html.dark-mode .cm-s-default .CodeMirror .cm-custom-number {
+    color: #ffa500 !important;
+    font-weight: 500 !important;
+}
+
+/* 覆盖 cm-number 类 */
+.cm-s-default .cm-number.cm-custom-number {
+    color: #ff4500 !important;
+    font-weight: 500 !important;
+}
+
+html.dark-mode .cm-s-default .cm-number.cm-custom-number {
+    color: #ffa500 !important;
+    font-weight: 500 !important;
+}

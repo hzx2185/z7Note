@@ -1,0 +1,34 @@
+services:
+  z7note-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: z7note:latest
+    container_name: z7note
+    env_file: .env
+    user: "1001:1001"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./public:/app/public
+      - ./src:/app/src
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    name: z7note-network

@@ -1,0 +1,504 @@
+/* 基础样式重置 */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body, html {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* 表单元素 */
+input, button, textarea, select {
+    font-family: inherit;
+    font-size: 14px;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+}
+
+/* 通用工具类 */
+.divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+/* 按钮基础样式 */
+.btn {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+}
+
+.btn:hover {
+    border-color: var(--accent);
+}
+
+.btn-primary {
+    background: var(--green);
+    color: #fff;
+    border-color: transparent;
+}
+
+.btn-primary:hover {
+    background: #2c974b;
+}
+
+.btn-green {
+    background: var(--green);
+    color: white;
+}
+
+.btn-green:hover {
+    background: #2c974b;
+}
+
+.btn-green:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.btn-secondary {
+    background: var(--border);
+    color: var(--text);
+}
+
+.btn-secondary:hover {
+    background: var(--side);
+}
+
+button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 暗色模式按钮适配 */
+.dark-mode .btn {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.dark-mode .btn:hover {
+    border-color: var(--accent);
+}
+
+/* 卡片基础样式 */
+.card {
+    background: var(--bg);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid var(--border);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+/* 暗色模式卡片适配 */
+.dark-mode .card {
+    background: var(--side);
+    border-color: var(--border);
+}
+
+/* 工具按钮基础样式 */
+.tool-btn {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+    cursor: pointer;
+    flex-shrink: 0;
+    min-width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.tool-btn:hover {
+    border-color: var(--accent);
+}
+
+.tool-btn:active {
+    transform: scale(0.95);
+}
+
+.tool-btn.active {
+    background: var(--accent);
+    color: white;
+}
+
+.tool-btn.success {
+    background: var(--green) !important;
+    color: white !important;
+}
+
+.tool-btn.btn-danger {
+    color: var(--red);
+}
+
+/* 主题切换按钮样式 */
+.theme-toggle {
+    min-width: 28px !important;
+    font-size: 14px !important;
+    transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover {
+    transform: rotate(15deg) scale(1.1);
+}
+
+/* 输入框基础样式 */
+.input-base {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-base:focus {
+    border-color: var(--accent);
+}
+
+/* 暗色模式输入框适配 */
+.dark-mode .input-base {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+/* 加载和错误状态 */
+.loading, .error {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray);
+    font-size: 14px;
+}
+
+.error {
+    color: var(--red);
+}
+
+/* Toast 消息 */
+#toast {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    z-index: 3000;
+    display: none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+    animation: slideDown 0.3s ease;
+}
+
+#toast.toast-success {
+    background: var(--green);
+}
+
+#toast.toast-error {
+    background: var(--red);
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translate(-50%, -20px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Overlay 遮罩层 */
+#overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1500;
+}
+
+#overlay.show {
+    display: block;
+}
+
+/* 模态框基础样式 */
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 4001;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.5);
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    width: min(960px, 95%);
+    max-height: 85vh;
+    background: var(--bg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--side);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.modal-header button {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--text);
+    transition: color 0.15s;
+}
+
+.modal-header button:hover {
+    color: var(--red);
+}
+
+.modal-body {
+    padding: 12px;
+    overflow: auto;
+}
+
+.modal-body input {
+    width: 100%;
+    padding: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.modal-body input:focus {
+    border-color: var(--accent);
+}
+
+.modal-body label {
+    display: block;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+/* 深色模式适配 */
+.dark-mode .modal-content {
+    background: var(--bg);
+    border-color: var(--border);
+}
+
+.dark-mode .modal-header {
+    background: var(--side);
+    border-color: var(--border);
+}
+
+.dark-mode .modal-header h3 {
+    color: var(--text);
+}
+
+.dark-mode .modal-body input {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+/* ==================== 认证页面样式 ==================== */
+
+.auth-card h2 {
+    margin: 0 0 20px 0;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.auth-card input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.auth-card button {
+    width: 100%;
+    padding: 10px;
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.auth-card button:hover {
+    opacity: 0.9;
+}
+
+.auth-card button:disabled {
+    background: var(--border);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.alt-btn {
+    background: transparent;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 13px;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    margin-top: 12px;
+    display: block;
+    text-align: center;
+}
+
+.alt-btn:hover {
+    text-decoration: underline;
+}
+
+.auth-card hr {
+    border: 0;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+}
+
+.error-msg {
+    color: var(--red);
+    font-size: 12px;
+    text-align: center;
+    margin-bottom: 10px;
+    display: none;
+}
+
+/* 登录页布局 - 居中 */
+.auth-layout {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    padding: 20px;
+}
+
+.auth-layout .auth-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--side);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+
+.auth-card form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.auth-card input {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+
+.auth-card input::placeholder {
+    color: var(--gray);
+}
+
+/* 主题切换按钮 */
+.theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--side);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.2s;
+}
+
+.theme-toggle:hover {
+    background: var(--bg);
+    border-color: var(--accent);
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+    .auth-layout {
+        padding: 16px;
+    }
+
+    .auth-layout .auth-card {
+        padding: 24px 20px;
+    }
+
+    .theme-toggle {
+        top: 12px;
+        right: 12px;
+        padding: 6px 10px;
+        font-size: 16px;
+    }
+}

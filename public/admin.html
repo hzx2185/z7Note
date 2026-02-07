@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>z7Note Admin - 管理后台</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <link rel="stylesheet" href="/css/app.css">
+    <style>
+        body { display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: 280px;
+            background: var(--side);
+            border-right: 1px solid var(--border);
+            padding: 16px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            max-width: 1200px;
+            min-width: 0;
+            overflow-y: auto;
+            height: 100vh;
+        }
+
+        h1 { font-size: 18px; margin-bottom: 20px; font-weight: 600; color: var(--text); }
+        h2 { font-size: 12px; margin-bottom: 12px; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; border-left: 3px solid var(--accent); padding-left: 8px; margin-top: 24px; }
+
+        .card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+        th { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); color: var(--gray); font-weight: 500; user-select: none; }
+        td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:hover { background: rgba(255,255,255,0.02); }
+
+        button {
+            cursor: pointer; border-radius: 6px; border: 1px solid var(--border);
+            padding: 6px 10px; font-size: 12px; background: var(--side);
+            color: var(--text); transition: all 0.2s;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        button:hover:not(:disabled) { border-color: var(--accent); background: var(--border); }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .btn-green { background: var(--green); color: white; border: none; }
+        .btn-green:hover:not(:disabled) { opacity: 0.9; }
+        .btn-red { color: var(--red); }
+        .btn-red:hover:not(:disabled) { background: var(--red); color: white; border-color: var(--red); }
+        .btn-small { padding: 4px 8px; font-size: 11px; }
+
+        input, select, textarea {
+            width: 100%; padding: 6px 10px; background: var(--bg);
+            border: 1px solid var(--border); color: var(--text); border-radius: 6px;
+            font-size: 13px; margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1); }
+        textarea { resize: vertical; min-height: 60px; }
+
+        .search-box { width: 180px; margin-bottom: 0; }
+
+        .badge { padding: 2px 8px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; font-size: 11px; color: var(--gray); white-space: nowrap; }
+        .pagination { display: flex; align-items: center; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+
+        .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index: 4000; backdrop-filter: blur(2px); padding: 20px;}
+        .modal-content { background:var(--side); padding:20px; border-radius:8px; width:100%; max-width:340px; border:1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+        .modal-content.large { max-width: 500px; }
+
+        .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .sort-icon { margin-left: 4px; color: var(--accent); }
+
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .status-online { background: var(--green); }
+        .status-offline { background: var(--red); }
+
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn-group button { flex: 1; min-width: 80px; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; position: relative; border-right: none; border-bottom: 1px solid var(--border); padding: 12px; }
+            .main-content { padding: 12px; }
+            table,thead, tbody, th, td, tr { display: block; }
+            thead tr { position: absolute; top: -9999px; left: -9999px; }
+            tr { border: 1px solid var(--border); margin-bottom: 8px; border-radius: 6px; padding: 8px; background: rgba(255,255,255,0.01); }
+            td { border: none; border-bottom: 1px solid rgba(255,255,255,0.05); position: relative; padding-left: 50% !important; text-align: right !important; min-height: 36px; display: flex; align-items: center; justify-content: flex-end; }
+            td:before { position: absolute; left: 10px; width: 45%; text-align: left; font-weight: bold; color: var(--gray); content: attr(data-label); }
+            /* 修复复选框列的显示 */
+            td[data-label="选择"] { padding-left: 10px !important; text-align: left !important; justify-content: flex-start; }
+            td[data-label="选择"]:before { display: none; }
+            .btn-group { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h1>z7Note Admin</h1>
+
+    <!-- 系统配置 -->
+    <div class="card">
+        <h2>系统配置</h2>
+        <div class="btn-group">
+            <button onclick="showSystemConfig()">文件上传</button>
+            <button onclick="cleanupExpiredUploads()">清理上传</button>
+        </div>
+    </div>
+
+    <!-- 备份配置 -->
+    <div class="card">
+        <h2>备份配置</h2>
+        <form onsubmit="event.preventDefault(); saveBackupConfig();">
+            <div>
+                <label style="color:var(--gray); font-size:12px;">备份模式</label>
+                <select id="bc-backupMode">
+                    <option value="incremental">增量备份</option>
+                    <option value="full">全量备份</option>
+                </select>
+                <small style="color:var(--gray); display:block; margin-top:4px; font-size:11px;">增量备份只包含自上次备份后修改的文件</small>
+            </div>
+            <div>
+                <label style="color:var(--gray); font-size:12px;">备份频率</label>
+                <select id="bc-schedule" onchange="toggleCustomSchedule(this)">
+                    <option value="none">关闭</option>
+                    <option value="0 0 * * *">每天凌晨</option>
+                    <option value="0 0 * * 0">每周日凌晨</option>
+                    <option value="0 */6 * * *">每6小时</option>
+                    <option value="0 */12 * * *">每12小时</option>
+                    <option value="custom">自定义</option>
+                </select>
+                <input type="text" id="bc-schedule-custom" placeholder="cron 表达式，如: 0 2 * * *" style="display:none; margin-top:8px;">
+                <small style="color:var(--gray); display:block; margin-top:4px; font-size:11px;">格式: 分 时 日 月 周（5个字段，用空格分隔），如: 0 2 * * * 表示每天凌晨2点</small>
+            </div>
+            <div>
+                <label style="color:var(--gray); font-size:12px;">保留备份数量</label>
+                <input type="number" id="bc-keepCount" min="0" max="100" placeholder="0 表示不限制">
+                <small style="color:var(--gray); display:block; margin-top:4px; font-size:11px;">保留最近的 N 个备份，0 表示不自动清理</small>
+            </div>
+            <div>
+                <label style="color:var(--gray); font-size:12px;">WebDAV URL</label>
+                <input type="text" id="bc-webdavUrl" placeholder="http://...">
+            </div>
+            <div>
+                <label style="color:var(--gray); font-size:12px;">WebDAV 用户</label>
+                <input type="text" id="bc-webdavUser" placeholder="用户名">
+            </div>
+            <div>
+                <label style="color:var(--gray); font-size:12px;">WebDAV 密码</label>
+                <input type="password" id="bc-webdavPassword" placeholder="密码">
+            </div>
+            <div>
+                <label style="color:var(--gray); font-size:12px;">通知邮箱</label>
+                <input type="email" id="bc-emailAddress" placeholder="your@email.com">
+            </div>
+            <div style="margin: 8px 0; font-size: 12px; display:flex; align-items:center;">
+                <input type="checkbox" id="bc-attachments" style="width:auto; margin:0 8px 0 0;"> 打包附件
+            </div>
+            <button type="submit" class="btn-green" style="width:100%;">保存备份配置</button>
+        </form>
+
+        <div class="btn-group" style="margin-top: 12px;">
+            <button onclick="window.open('/api/admin/backup/download-full')">下载全量</button>
+            <button onclick="window.open('/api/admin/backup/download-inc')">下载增量</button>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="flex-between" style="margin-bottom: 24px;">
+        <div style="font-size: 14px; color: var(--gray);">
+            <span class="status-dot status-online"></span>服务器状态: 运行中
+        </div>
+        <button class="btn-green" onclick="showAddUser()">+ 新增用户</button>
+    </div>
+
+    <!-- 用户管理 -->
+    <div class="card">
+        <div class="flex-between">
+            <h2>用户管理</h2>
+            <input type="text" id="userSearch" class="search-box" placeholder="搜索用户..." oninput="debounceUserSearch()">
+        </div>
+        <table>
+            <thead>
+            <tr>
+                <th onclick="sortUsers('username')" style="cursor:pointer">用户信息 <span id="sort-username">⇅</span></th>
+                <th onclick="sortUsers('noteSize')" style="cursor:pointer">笔记存储 <span id="sort-noteSize">⇅</span></th>
+                <th onclick="sortUsers('attachmentSize')" style="cursor:pointer">附件空间 <span id="sort-attachmentSize">⇅</span></th>
+                <th style="text-align:right">操作</th>
+            </tr>
+            </thead>
+            <tbody id="userList"></tbody>
+        </table>
+    </div>
+
+    <!-- 分享管理 -->
+    <div class="card">
+        <div class="flex-between">
+            <h2>分享管理</h2>
+            <button class="btn-red btn-small" onclick="batchDeleteShares()">批量删除</button>
+        </div>
+        <table>
+            <thead>
+            <tr>
+                <th style="width:30px;"><input type="checkbox" onclick="toggleSelectAllShares(this)"></th>
+                <th>用户</th>
+                <th>标题</th>
+                <th>类型</th>
+                <th>创建时间</th>
+                <th>有效期</th>
+                <th>状态</th>
+                <th style="text-align:right">操作</th>
+            </tr>
+            </thead>
+            <tbody id="shareList"></tbody>
+        </table>
+    </div>
+
+    <!-- 内容审计 -->
+    <div class="card">
+        <div class="flex-between">
+            <h2>内容审计</h2>
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
+                <input type="text" id="noteSearch" class="search-box" placeholder="搜索内容..." oninput="debounceNoteSearch()">
+                <button class="btn-red btn-small" onclick="batchDeleteNotes()">批量删除</button>
+                <button class="btn-red btn-small" onclick="emptyAllTrash()">清空所有回收站</button>
+            </div>
+        </div>
+        <table>
+            <thead>
+            <tr>
+                <th style="width:30px;"><input type="checkbox" onclick="toggleSelectAll(this)"></th>
+                <th>所属用户</th>
+                <th>标题</th>
+                <th>状态</th>
+                <th style="text-align:right">操作</th>
+            </tr>
+            </thead>
+            <tbody id="noteList"></tbody>
+        </table>
+        <div class="pagination">
+            <span id="pageInfo" style="font-size: 12px; color: var(--gray);">第 1 / 1 页</span>
+            <div style="display:flex; gap:4px;">
+                <button id="prevBtn" onclick="changePage(-1)">上一页</button>
+                <button id="nextBtn" onclick="changePage(1)">下一页</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 弹窗 -->
+<div id="modal" class="modal">
+    <form class="modal-content" id="modal-form">
+        <h3 id="modalTitle" style="margin-top:0; font-size: 16px;">操作</h3>
+        <div id="modalInputs"></div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+            <button type="button" style="flex:1" onclick="closeModal()">取消</button>
+            <button type="submit" id="modalConfirm" class="btn-green" style="flex:1">确认</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    let currentPage = 1, totalPages = 1;
+    let userSortField = 'noteSize', userSortOrder = 'desc';
+    let userSearchTimer, noteSearchTimer;
+
+    // ==================== 系统配置 ====================
+    async function showSystemConfig() {
+        try {
+            const res = await fetch('/api/admin/system/config');
+            const data = await res.json();
+
+            if (!res.ok || data.status !== 'ok') {
+                alert('加载配置失败: ' + (data.error || '未知错误'));
+                return;
+            }
+
+            const config = data.config;
+            const html = `
+                <div style="max-height: 500px; overflow-y: auto;">
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">最大文件大小 (MB)</label>
+                        <input type="number" id="sc-maxFileSize" value="${config.maxFileSize?.value || 500}" min="1">
+                        <small style="color:var(--gray); display:block; margin-top:4px;">单个文件的最大大小限制</small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">允许的文件类型</label>
+                        <textarea id="sc-allowedFileTypes" style="height:100px;">${config.allowedFileTypes?.value || ''}</textarea>
+                        <small style="color:var(--gray); display:block; margin-top:4px;">MIME类型，逗号分隔</small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">分片上传</label>
+                            <select id="sc-chunkUploadEnabled">
+                            <option value="true" ${(config.chunkUploadEnabled?.value || 'true') === 'true' ? 'selected' : ''}>启用</option>
+                            <option value="false" ${(config.chunkUploadEnabled?.value || 'true') === 'false' ? 'selected' : ''}>禁用</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">分片大小 (MB)</label>
+                        <input type="number" id="sc-chunkSize" value="${config.chunkSize?.value || 5}" min="1" max="100">
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">图片压缩</label>
+                            <select id="sc-imageCompressionEnabled">
+                            <option value="true" ${(config.imageCompressionEnabled?.value || 'true') === 'true' ? 'selected' : ''}>启用</option>
+                            <option value="false" ${(config.imageCompressionEnabled?.value || 'true') === 'false' ? 'selected' : ''}>禁用</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">压缩质量 (0-100)</label>
+                        <input type="number" id="sc-imageCompressionQuality" value="${config.imageCompressionQuality?.value || 85}" min="1" max="100">
+                        <small style="color:var(--gray); display:block; margin-top:4px;">
+                            JPEG/WebP: 越高质量越好但文件越大 | PNG: 影响压缩级别
+                        </small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">最大宽度 (px)</label>
+                        <input type="number" id="sc-imageCompressionMaxWidth" value="${config.imageCompressionMaxWidth?.value || 1920}" min="100" max="10000">
+                        <small style="color:var(--gray); display:block; margin-top:4px;">超过此宽度的图片会被自动缩放，0表示不限制</small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">最大高度 (px)</label>
+                        <input type="number" id="sc-imageCompressionMaxHeight" value="${config.imageCompressionMaxHeight?.value || 1080}" min="100" max="10000">
+                        <small style="color:var(--gray); display:block; margin-top:4px;">超过此高度的图片会被自动缩放，0表示不限制</small>
+                    </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">动态限流</label>
+                            <select id="sc-dynamicRateLimitEnabled">
+                            <option value="true" ${(config.dynamicRateLimitEnabled?.value || 'true') === 'true' ? 'selected' : ''}>启用</option>
+                            <option value="false" ${(config.dynamicRateLimitEnabled?.value || 'true') === 'false' ? 'selected' : ''}>禁用</option>
+                        </select>
+                        <small style="color:var(--gray); display:block; margin-top:4px;">
+                            < 10MB: 30次/分钟 | 10-50MB: 20次/分钟 | 50-100MB: 10次/分钟 | >100MB: 5次/分钟
+                        </small>
+                    </div>
+                </div>
+            `;
+
+            openModal('文件上传配置', html, async (e) => {
+                e.preventDefault();
+                const configs = {
+                    maxFileSize: document.getElementById('sc-maxFileSize').value,
+                    allowedFileTypes: document.getElementById('sc-allowedFileTypes').value,
+                    chunkUploadEnabled: document.getElementById('sc-chunkUploadEnabled').value,
+                    chunkSize: document.getElementById('sc-chunkSize').value,
+                    imageCompressionEnabled: document.getElementById('sc-imageCompressionEnabled').value,
+                    imageCompressionQuality: document.getElementById('sc-imageCompressionQuality').value,
+                    imageCompressionMaxWidth: document.getElementById('sc-imageCompressionMaxWidth').value,
+                    imageCompressionMaxHeight: document.getElementById('sc-imageCompressionMaxHeight').value,
+                    dynamicRateLimitEnabled: document.getElementById('sc-dynamicRateLimitEnabled').value
+                };
+
+                const saveRes = await fetch('/api/admin/system/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ configs })
+                });
+
+                if (saveRes.ok) {
+                    const saveData = await saveRes.json();
+                    if (saveData.status === 'ok') {
+                        alert('配置已保存');
+                        closeModal();
+                    } else {
+                        alert('保存失败: ' + (saveData.error || '未知错误'));
+                    }
+                } else {
+                    alert('保存失败: HTTP ' + saveRes.status);
+                }
+            });
+        } catch (e) {
+            console.error('加载配置失败:', e);
+            alert('加载配置失败: ' + e.message);
+        }
+    }
+
+    async function cleanupExpiredUploads() {
+        if (!confirm('确定要清理所有过期的上传会话吗？')) return;
+
+        try {
+            const res = await fetch('/api/admin/system/cleanup-uploads', { method: 'POST' });
+            const data = await res.json();
+
+            if (res.ok && data.status === 'ok') {
+                alert(`已清理 ${data.count} 个过期上传会话`);
+            } else {
+                alert('清理失败: ' + (data.error || '未知错误'));
+            }
+        } catch (e) {
+            alert('清理失败: ' + e.message);
+        }
+    }
+
+    // ==================== CDN 配置 ====================
+    async function loadCDNConfig() {
+        try {
+            const res = await fetch('/api/admin/cdn/config');
+            const data = await res.json();
+            if(res.ok) {
+                document.getElementById('cdnBaseUrl').value = data.baseUrl || '';
+            }
+        } catch(e) {
+            console.error('加载系统配置失败:', e);
+        }
+    }
+
+    async function saveSystemConfig() {
+        // 保存系统配置
+    }
+
+    async function cleanupExpiredUploads() {
+        // 清理过期上传
+    }
+            } else {
+                alert(`保存失败: ${data.error}`);
+            }
+        } catch(e) {
+            alert(`保存失败: ${e.message}`);
+        }
+    }
+
+    // ==================== 备份配置 ====================
+    async function loadBackupConfig() {
+        try {
+            const c = await fetch('/api/admin/backup/config').then(r => r.json());
+            if (c.id) {
+                const schedule = c.schedule || 'none';
+                const scheduleSelect = document.getElementById('bc-schedule');
+                const customInput = document.getElementById('bc-schedule-custom');
+
+                // 检查是否是预设选项
+                const presetOptions = ['none', '0 0 * * *', '0 0 * * 0', '0 */6 * * *', '0 */12 * * *'];
+                if (presetOptions.includes(schedule)) {
+                    scheduleSelect.value = schedule;
+                    customInput.style.display = 'none';
+                } else {
+                    scheduleSelect.value = 'custom';
+                    customInput.value = schedule;
+                    customInput.style.display = 'block';
+                }
+
+                document.getElementById('bc-backupMode').value = c.backupMode || 'incremental';
+                document.getElementById('bc-attachments').checked = !!c.includeAttachments;
+                document.getElementById('bc-keepCount').value = c.keepCount || 0;
+                document.getElementById('bc-emailAddress').value = c.emailAddress || '';
+                document.getElementById('bc-webdavUrl').value = c.webdavUrl || '';
+                document.getElementById('bc-webdavUser').value = c.webdavUser || '';
+                document.getElementById('bc-webdavPassword').value = c.webdavPassword || '';
+            }
+        } catch(e) {
+            console.error("加载备份配置失败", e);
+        }
+    }
+
+    function toggleCustomSchedule(select) {
+        const customInput = document.getElementById('bc-schedule-custom');
+        customInput.style.display = select.value === 'custom' ? 'block' : 'none';
+    }
+
+    async function saveBackupConfig() {
+        let schedule = document.getElementById('bc-schedule').value;
+        if (schedule === 'custom') {
+            schedule = document.getElementById('bc-schedule-custom').value.trim();
+            if (!schedule) {
+                alert('请输入 cron 表达式');
+                return;
+            }
+        }
+
+        const body = {
+            schedule: schedule,
+            backupMode: document.getElementById('bc-backupMode').value,
+            includeAttachments: document.getElementById('bc-attachments').checked,
+            keepCount: parseInt(document.getElementById('bc-keepCount').value) || 0,
+            emailAddress: document.getElementById('bc-emailAddress').value,
+            webdavUrl: document.getElementById('bc-webdavUrl').value,
+            webdavUser: document.getElementById('bc-webdavUser').value,
+            webdavPassword: document.getElementById('bc-webdavPassword').value
+        };
+        const res = await fetch('/api/admin/backup/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        if(res.ok) {
+            alert("备份配置已保存");
+        } else {
+            alert("保存失败");
+        }
+    }
+
+    // ==================== 用户管理 ====================
+    async function loadUsers() {
+        const search = document.getElementById('userSearch').value;
+        const url = `/api/admin/users/stats?search=${encodeURIComponent(search)}&sort=${userSortField}&order=${userSortOrder}`;
+
+        const fields = ['username', 'noteSize', 'attachmentSize'];
+        fields.forEach(f => {
+            const el = document.getElementById(`sort-${f}`);
+            if (f === userSortField) {
+                el.innerText = userSortOrder === 'desc' ? '↓' : '↑';
+                el.style.color = 'var(--accent)';
+            } else {
+                el.innerText = '⇅';
+                el.style.color = 'var(--gray)';
+            }
+        });
+
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("API 返回错误");
+            const users = await res.json();
+            document.getElementById('userList').innerHTML = users.map(u => `
+                <tr>
+                    <td data-label="用户信息"><strong>${u.username}</strong><br><small>${u.email || '无邮箱'}</small></td>
+                    <td data-label="笔记存储">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span class="badge" style="background:rgba(47,129,247,0.1); border-color:var(--accent); color:var(--accent)">${u.noteCount} 篇</span>
+                            <span class="badge">${(u.noteSize/1024/1024).toFixed(2)} MB</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="number" value="${u.noteLimit}" style="width:60px; margin:0;" onchange="updateQuotaInline('${u.username}', this.value, ${u.fileLimit})">
+                                <span style="font-size: 11px; color: var(--gray);">MB</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="附件空间">
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span class="badge" style="color:var(--green)">${(u.attachmentSize/1024/1024).toFixed(2)} MB</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <input type="number" value="${u.fileLimit}" style="width:60px; margin:0;" onchange="updateQuotaInline('${u.username}', ${u.noteLimit}, this.value)">
+                                <span style="font-size: 11px; color: var(--gray);">MB</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="操作" style="text-align:right">
+                        <div class="btn-group" style="justify-content: flex-end;">
+                            <button class="btn-small" onclick="resetPass('${u.username}')">改密</button>
+                            <button class="btn-red btn-small" onclick="deleteUser('${u.username}')">注销</button>
+                        </div>
+                    </td>
+                </tr>`).join('');
+        } catch(e) {
+            console.error("加载用户失败", e);
+            document.getElementById('userList').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--red)">加载失败，请检查 API 接口</td></tr>`;
+        }
+    }
+
+    function sortUsers(field) {
+        if (userSortField === field) {
+            userSortOrder = userSortOrder === 'desc' ? 'asc' : 'desc';
+        } else {
+            userSortField = field;
+            userSortOrder = 'asc';
+        }
+        loadUsers();
+    }
+
+    function debounceUserSearch() {
+        clearTimeout(userSearchTimer);
+        userSearchTimer = setTimeout(loadUsers, 500);
+    }
+
+    async function updateQuotaInline(username, nLimit, fLimit) {
+        await fetch('/api/admin/users/update-quota', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username, noteLimit: parseInt(nLimit), fileLimit: parseInt(fLimit) })
+        });
+    }
+
+    async function deleteUser(username) {
+        if(confirm(`警告：确定彻底删除用户 ${username} 吗？`)) {
+            await fetch(`/api/admin/users/${username}`, { method: 'DELETE' });
+            loadUsers();
+        }
+    }
+
+    // ==================== 分享管理 ====================
+    async function loadShares() {
+        try {
+            const res = await fetch('/api/share/list');
+            if (!res.ok) throw new Error("获取分享列表失败");
+            const shares = await res.json();
+
+            document.getElementById('shareList').innerHTML = shares.map(s => {
+                const now = Date.now();
+                const isExpired = s.expiresAt && now > s.expiresAt;
+                const isPublic = s.public === 1;
+
+                let title = '';
+                if (s.targetType === 'note') {
+                    title = s.noteTitle || s.target || '无标题';
+                } else {
+                    title = s.target.split('/').pop() || s.target;
+                }
+
+                const expiresText = s.expiresAt
+                    ? (isExpired ? '<span style="color:var(--red)">已过期</span>' : new Date(s.expiresAt).toLocaleDateString())
+                    : '永久';
+                const statusText = isExpired
+                    ? '<span style="color:var(--red)">已过期</span>'
+                    : (isPublic == 1 ? '<span style="color:var(--green)">公开</span>' : '<span style="color:var(--gray)">私有</span>');
+
+                const shareUrl = `${location.protocol}//${location.host}/s/${s.token}`;
+
+                return `
+                    <tr>
+                        <td data-label="选择"><input type="checkbox" class="share-checkbox" value="${s.token}"></td>
+                        <td data-label="用户">${s.owner || '未知'}</td>
+                        <td data-label="标题"><strong>${title}</strong></td>
+                        <td data-label="类型"><span class="badge">${s.targetType === 'note' ? '📝 笔记' : '📎 文件'}</span></td>
+                        <td data-label="创建时间">${new Date(s.createdAt).toLocaleDateString()}</td>
+                        <td data-label="有效期">${expiresText}</td>
+                        <td data-label="状态">${statusText}</td>
+                        <td data-label="操作" style="text-align:right">
+                            <div class="btn-group" style="justify-content: flex-end;">
+                                <button class="btn-small" onclick="copyShareLink('${shareUrl}')" title="复制链接">🔗</button>
+                                <button class="btn-small" onclick="window.open('${shareUrl}')" title="打开">👁️</button>
+                                <button class="btn-red btn-small" onclick="revokeShare('${s.token}', '${title.replace(/'/g, "\\'")}')" title="撤销">🗑️</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            if (shares.length === 0) {
+                document.getElementById('shareList').innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align:center;color:var(--gray);padding:20px;">
+                            暂无分享内容
+                        </td>
+                    </tr>
+                `;
+            }
+        } catch (e) {
+            console.error("加载分享列表失败", e);
+            document.getElementById('shareList').innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align:center;color:var(--red);">加载失败</td>
+                </tr>
+            `;
+        }
+    }
+
+    function copyShareLink(url) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert("分享链接已复制到剪贴板");
+        }).catch(() => {
+            prompt("分享链接：", url);
+        });
+    }
+
+    async function revokeShare(token, title) {
+        if (!confirm(`确定撤销分享 "${title}" 吗？`)) return;
+        try {
+            const res = await fetch('/api/share/revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            if (res.ok) {
+                alert("分享已撤销");
+                loadShares();
+            } else {
+                const j = await res.json();
+                alert("撤销失败：" + (j.error || "未知错误"));
+            }
+        } catch (e) {
+            alert("操作失败，请检查网络");
+        }
+    }
+
+    function toggleSelectAllShares(master) {
+        document.querySelectorAll('.share-checkbox').forEach(cb => cb.checked = master.checked);
+    }
+
+    async function batchDeleteShares() {
+        const tokens = Array.from(document.querySelectorAll('.share-checkbox:checked')).map(cb => cb.value);
+        if (!tokens.length || !confirm(`确认删除这 ${tokens.length} 个分享？`)) return;
+        try {
+            const res = await fetch('/api/share/batch-revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tokens })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    alert(`已删除 ${tokens.length} 个分享`);
+                    loadShares();
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } else {
+                alert('删除失败，请检查网络');
+            }
+        } catch (e) {
+            alert('操作失败: ' + e.message);
+        }
+    }
+
+    // ==================== 内容审计 ====================
+    async function loadNotes(page = 1) {
+        const keyword = document.getElementById('noteSearch').value;
+        try {
+            const res = await fetch(`/api/admin/notes/all?page=${page}&limit=15&search=${encodeURIComponent(keyword)}`);
+            const data = await res.json();
+            currentPage = data.page;
+            totalPages = data.totalPages;
+
+            document.getElementById('noteList').innerHTML = data.notes.map(n => `
+                <tr>
+                    <td data-label="选择"><input type="checkbox" class="note-checkbox" value="${n.id}"></td>
+                    <td data-label="所属用户">${n.username}</td>
+                    <td data-label="标题">${n.title || '无标题'}</td>
+                    <td data-label="状态">${n.deleted ? '<span style="color:var(--red)">已删除</span>' : '活跃'}</td>
+                    <td data-label="操作" style="text-align:right">
+                        <button class="btn-red btn-small" onclick="deleteNote('${n.id}')">销毁</button>
+                    </td>
+                </tr>`).join('');
+
+            document.getElementById('pageInfo').innerText = `第 ${currentPage} / ${totalPages || 1} 页`;
+            document.getElementById('prevBtn').disabled = (currentPage <= 1);
+            document.getElementById('nextBtn').disabled = (currentPage >= totalPages);
+        } catch(e) {
+            console.error("笔记加载失败", e);
+        }
+    }
+
+    function debounceNoteSearch() {
+        clearTimeout(noteSearchTimer);
+        noteSearchTimer = setTimeout(() => loadNotes(1), 500);
+    }
+
+    function changePage(delta) {
+        const target = currentPage + delta;
+        if(target >= 1 && target <= totalPages) loadNotes(target);
+    }
+
+    function toggleSelectAll(master) {
+        document.querySelectorAll('.note-checkbox').forEach(cb => cb.checked = master.checked);
+    }
+
+    async function batchDeleteNotes() {
+        const ids = Array.from(document.querySelectorAll('.note-checkbox:checked')).map(cb => cb.value);
+        if (!ids.length || !confirm(`确认销毁这 ${ids.length} 篇笔记？`)) return;
+        for (const id of ids) await fetch(`/api/admin/notes/${id}`, { method: 'DELETE' });
+        loadNotes(currentPage);
+    }
+
+    async function deleteNote(id) {
+        if(confirm("确认销毁此笔记？")) {
+            await fetch(`/api/admin/notes/${id}`, { method: 'DELETE' });
+            loadNotes(currentPage);
+        }
+    }
+
+    async function emptyAllTrash() {
+        if(!confirm("确定要清空所有用户的回收站吗？此操作不可撤销。")) return;
+        try {
+            const res = await fetch('/api/admin/trash/empty-all', { method: 'DELETE' });
+            if(res.ok) {
+                const data = await res.json();
+                alert(`已清空 ${data.count} 条回收站记录`);
+                loadNotes(currentPage);
+            } else {
+                alert('清空失败');
+            }
+        } catch(e) {
+            alert('操作失败');
+        }
+    }
+
+    // ==================== 弹窗逻辑 ====================
+    function showAddUser() {
+        const html = `
+            <input id="newU" placeholder="用户名" required>
+            <input id="newE" type="email" placeholder="邮箱地址" required>
+            <input id="newP" type="password" placeholder="初始密码" required>
+        `;
+        openModal('新增用户', html, async (e) => {
+            e.preventDefault();
+            const res = await fetch('/api/admin/users/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: document.getElementById('newU').value,
+                    email: document.getElementById('newE').value,
+                    password: document.getElementById('newP').value
+                })
+            });
+            if(res.ok) {
+                closeModal();
+                loadUsers();
+            } else {
+                alert("创建失败，用户名可能已存在");
+            }
+        });
+    }
+
+    function resetPass(username) {
+        openModal(`重置密码: ${username}`, `
+            <input id="newP" type="password" placeholder="输入新密码" required>
+        `, async (e) => {
+            e.preventDefault();
+            await fetch('/api/admin/users/reset-password', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, newPassword: document.getElementById('newP').value})
+            });
+            closeModal();
+            alert("密码已更新");
+        });
+    }
+
+    function openModal(title, html, onSubmit) {
+        document.getElementById('modalTitle').innerText = title;
+        document.getElementById('modalInputs').innerHTML = html;
+        document.getElementById('modal-form').onsubmit = onSubmit;
+        document.getElementById('modal').style.display = 'flex';
+        document.querySelector('.modal-content').classList.remove('large');
+        if (html.length > 1000) {
+            document.querySelector('.modal-content').classList.add('large');
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    // ==================== 初始化 ====================
+    document.addEventListener('DOMContentLoaded', () => {
+        loadBackupConfig();
+        loadUsers();
+        loadShares();
+        loadNotes();
+    });
+</script>
+</body>
+</html>
