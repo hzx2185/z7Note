@@ -1463,9 +1463,10 @@ const UIManager = {
                 const data = await res.json();
                 listBody.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red);">加载失败: ${data.error || '未知错误'}</div>`;
             }
-        } catch (e) {
-            listBody.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);">网络错误</div>';
-        }
+            } catch (e) {
+                console.error('[回收站] 加载失败:', e);
+                listBody.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red);">网络错误: ${e.message}</div>`;
+            }
     },
 
     // 恢复笔记
