@@ -79,7 +79,7 @@ body,html {
         transform: translateX(-100%);
     }
 }
-#main { flex:1;display:flex;flex-direction:column;overflow:hidden;position: relative; padding-top: 44px; }
+#main { flex:1;display:flex;flex-direction:column;overflow:hidden;position: relative; }
 .quick-tools {
     background: var(--side);
     padding: 3px 6px;
@@ -91,11 +91,6 @@ body,html {
     overflow-x: auto;
     z-index: 2000;
     flex-shrink: 0;
-    position: fixed;
-    top: 44px;
-    left: 0;
-    right: 0;
-    height: 36px;
 }
 
 .quick-tools::-webkit-scrollbar {
@@ -105,7 +100,7 @@ body,html {
     background: var(--border);
     border-radius: 3px;
 }
-#main-view { flex:1;display:flex;overflow:hidden;position: relative;height: calc(100% - 80px); }
+#main-view { flex:1;display:flex;overflow:hidden;position: relative; }
 #editor-container { flex:1;overflow:hidden;position: relative;min-width: 0; }
 #preview-wrapper { flex:1;overflow:hidden;position: relative;background: var(--bg);min-width: 0; }
 #preview-frame { width: 100%;height: 100%;border: none; }
@@ -219,38 +214,11 @@ html.dark-mode .cm-s-default .cm-header {
     background: rgba(59, 130, 246, 0.2) !important;
 }
 
-/* 强制消除移动端工具栏下方的神秘空白 */
+/* 移动端样式优化 */
 @media (max-width: 768px) {
     /* 统一移动端字体大小 */
     body, html {
         font-size: 14px;
-    }
-
-    /* 1. 移除主容器的所有上边距和内边距 */
-    #main {
-        padding: 0 !important;
-        margin: 0 !important;
-        margin-top: 0 !important;
-    }
-
-    /* 2. 确保编辑器容器紧贴工具栏 */
-    #main-view {
-        margin: 0 !important;
-        padding: 0 !important;
-        margin-top: 0 !important;
-        padding-top: 0 !important;
-    }
-
-    /* 3. 如果你使用的是简单 textarea 编辑器，也一并重置 */
-    #editor-container textarea {
-        padding-top: 5px !important; /* 留极小间距避免顶死 */
-        margin-top: 0 !important;
-    }
-
-    /* 4. 确保快捷工具栏没有底部 margin */
-    .quick-tools {
-        margin-bottom: 0 !important;
-        border-bottom: 1px solid var(--border) !important;
     }
 }
 
@@ -855,7 +823,6 @@ input[type="checkbox"].share-checkbox {
         height: 38px;
         padding: 3px 6px;
         gap: 2px;
-        top: 44px !important;
     }
     .divider {
         width: 1px;
@@ -926,23 +893,11 @@ input[type="checkbox"].share-checkbox {
         min-width: 60px;
     }
 
-    @media (max-width: 480px) {
     #batch-bar .tool-btn {
         min-width: auto;
         padding: 4px 8px;
         font-size: 12px;
         height: 28px;
-    }
-
-    #main {
-        padding: 0 !important;
-        margin: 0 !important;
-        margin-top: 0 !important;
-    }
-    #main-view {
-        height: calc(100% - 38px);
-        margin: 0 !important;
-        padding: 0 !important;
     }
 
     /* 小屏幕sidebar样式 */
