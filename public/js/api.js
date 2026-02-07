@@ -392,7 +392,7 @@ const APIManager = {
             const res = await fetchWithTimeout(`/api/attachments/${encodeURIComponent(decoded)}`, { method: 'DELETE' });
             if (res.ok) {
                 ui.showToast("已删除");
-                this.loadAttachments();
+                this.loadAttachments(true); // 强制刷新
                 ui.refreshUserInfo();
             }
         } catch (e) {

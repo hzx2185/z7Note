@@ -315,6 +315,7 @@
                 <button class="tool-btn" onclick="api.checkNotesWithInvalidAttachments()" title="检测引用无效附件的笔记" style="color:var(--orange);">检测无效</button>
                 <button class="tool-btn" onclick="api.findUnreferencedAttachments()" title="查询未被引用的附件">查询未引用</button>
                 <button class="tool-btn" onclick="api.purgeAttachmentsInManager()">清理未引用</button>
+                <button class="tool-btn" onclick="api.loadAttachments(true)" title="刷新列表">刷新</button>
             </div>
             <!-- 未引用附件列表展示区域 -->
             <div id="unreferenced-attachments-area" style="display:none;border-bottom:1px solid var(--border);background:var(--side);">
