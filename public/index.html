@@ -166,7 +166,7 @@
             <!-- 侧边栏底部 -->
             <div class="sidebar-footer">
                 <div style="display: flex; gap: 3px; align-items: center;">
-                    <button onclick="ui.emptyTrash()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">清空</button>
+                    <button onclick="ui.showTrash()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">回收站</button>
                     <button onclick="window.location.reload()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">重载</button>
                     <button onclick="ui.exportData()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">导出</button>
                     <input type="file" id="importFile" style="display:none" onchange="ui.importData(event)">
@@ -266,6 +266,23 @@
             </div>
             <div class="modal-body" id="share-list-body">
                 <div style="text-align:center;padding:20px;color:var(--gray);">点击刷新列表加载分享内容</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 回收站模态框 -->
+    <div id="trash-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>回收站</h3>
+                <button onclick="document.getElementById('trash-modal').classList.remove('show')">×</button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="ui.loadTrash()">刷新</button>
+                <button class="btn btn-red" onclick="ui.emptyTrash()">清空回收站</button>
+            </div>
+            <div class="modal-body" id="trash-list-body">
+                <div style="text-align:center;padding:20px;color:var(--gray);">加载中...</div>
             </div>
         </div>
     </div>
