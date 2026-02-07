@@ -1450,7 +1450,7 @@ const UIManager = {
                 listBody.innerHTML = notes.map(note => `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
                         <div style="flex:1;min-width:0;">
-                            <div style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${this.escapeHtml(note.title || '无标题')}</div>
+                            <div style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${note.title || '无标题'}</div>
                             <div style="font-size:11px;color:var(--gray);margin-top:2px;">${new Date(note.updatedAt).toLocaleString('zh-CN')}</div>
                         </div>
                         <div style="display:flex;gap:8px;flex-shrink:0;">
