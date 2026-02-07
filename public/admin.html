@@ -155,13 +155,16 @@
                 <label style="color:var(--gray); font-size:12px;">WebDAV URL</label>
                 <input type="text" id="bc-webdavUrl" placeholder="http://...">
             </div>
+            <div style="margin: 8px 0; font-size: 12px; display:flex; align-items:center;">
+                <input type="checkbox" id="bc-useWebDAV" style="width:auto; margin:0 8px 0 0;"> 启用 WebDAV
+            </div>
             <div>
                 <label style="color:var(--gray); font-size:12px;">WebDAV 用户</label>
-                <input type="text" id="bc-webdavUser" placeholder="用户名">
+                <input type="text" id="bc-webdavUser" placeholder="用户名" autocomplete="username">
             </div>
             <div>
                 <label style="color:var(--gray); font-size:12px;">WebDAV 密码</label>
-                <input type="password" id="bc-webdavPassword" placeholder="密码">
+                <input type="password" id="bc-webdavPassword" placeholder="密码" autocomplete="current-password">
             </div>
             <div>
                 <label style="color:var(--gray); font-size:12px;">通知邮箱</label>
@@ -170,7 +173,10 @@
             <div style="margin: 8px 0; font-size: 12px; display:flex; align-items:center;">
                 <input type="checkbox" id="bc-attachments" style="width:auto; margin:0 8px 0 0;"> 打包附件
             </div>
-            <button type="submit" class="btn-green" style="width:100%;">保存备份配置</button>
+            <div class="btn-group">
+                <button type="submit" class="btn-green">保存备份配置</button>
+                <button type="button" class="btn-blue" onclick="backupNow()">立即备份</button>
+            </div>
         </form>
 
         <div class="btn-group" style="margin-top: 12px;">
@@ -434,13 +440,6 @@
     async function cleanupExpiredUploads() {
         // 清理过期上传
     }
-            } else {
-                alert(`保存失败: ${data.error}`);
-            }
-        } catch(e) {
-            alert(`保存失败: ${e.message}`);
-        }
-    }
 
     // ==================== 备份配置 ====================
     async function loadBackupConfig() {
@@ -464,6 +463,7 @@
 
                 document.getElementById('bc-backupMode').value = c.backupMode || 'incremental';
                 document.getElementById('bc-attachments').checked = !!c.includeAttachments;
+                document.getElementById('bc-useWebDAV').checked = !!c.useWebDAV;
                 document.getElementById('bc-keepCount').value = c.keepCount || 0;
                 document.getElementById('bc-emailAddress').value = c.emailAddress || '';
                 document.getElementById('bc-webdavUrl').value = c.webdavUrl || '';
@@ -494,6 +494,7 @@
             schedule: schedule,
             backupMode: document.getElementById('bc-backupMode').value,
             includeAttachments: document.getElementById('bc-attachments').checked,
+            useWebDAV: document.getElementById('bc-useWebDAV').checked,
             keepCount: parseInt(document.getElementById('bc-keepCount').value) || 0,
             emailAddress: document.getElementById('bc-emailAddress').value,
             webdavUrl: document.getElementById('bc-webdavUrl').value,
@@ -509,6 +510,30 @@
             alert("备份配置已保存");
         } else {
             alert("保存失败");
+        }
+    }
+
+    async function backupNow() {
+        if (!confirm('确定要立即执行备份吗？')) return;
+
+        const btn = event.target;
+        const originalText = btn.innerText;
+        btn.innerText = '备份中...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/admin/backup/now', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                alert('备份执行成功！');
+            } else {
+                alert('备份失败: ' + (data.error || '未知错误'));
+            }
+        } catch(e) {
+            alert('备份失败: ' + e.message);
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
     }
 

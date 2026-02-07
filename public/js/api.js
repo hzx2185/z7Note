@@ -1112,7 +1112,7 @@ const APIManager = {
 
         } catch (e) {
             console.error('上传失败:', e);
-            ui.showToast(`上传失败: ${e.message}`, false);
+            alert(`上传失败: ${e.message}`);
             this.showUploadProgress(true, '上传失败', 0, e.message);
             setTimeout(() => {
                 this.showUploadProgress(false);

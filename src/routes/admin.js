@@ -61,6 +61,22 @@ router.get('/api/admin/backup/list', async (req, res) => {
   res.json(await getBackupList());
 });
 
+// 立即备份
+router.post('/api/admin/backup/now', async (req, res) => {
+  try {
+    const { performBackup } = require('../services/backup');
+    const backupConfig = await getConnection().get('SELECT * FROM backup_config WHERE id = 1') || {};
+    if (!backupConfig.schedule) {
+      return res.status(400).json({ error: '请先配置备份选项' });
+    }
+    await performBackup(backupConfig);
+    res.json({ status: 'ok', message: '备份已执行' });
+  } catch (e) {
+    console.error('[Admin] 立即备份失败:', e);
+    res.status(500).json({ error: '备份失败: ' + e.message });
+  }
+});
+
 // 获取用户统计
 router.get('/api/admin/users/stats', async (req, res) => {
   try {

@@ -21,7 +21,8 @@ async function fileFilter(req, file, cb) {
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支持的文件类型: ${file.mimetype}`), false);
+      console.log('[上传] 文件类型不被支持:', file.mimetype, file.originalname);
+      cb(new Error(`不支持的文件类型: ${file.mimetype}，请检查文件格式或联系管理员添加支持`), false);
     }
   } catch (error) {
     console.error('文件类型验证失败:', error);
@@ -73,8 +74,24 @@ router.get('/api/attachments', async (req, res) => {
   }
 });
 
+// Multer 错误处理中间件
+const multerErrorHandler = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: `文件大小超过限制` });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: `文件上传错误` });
+    }
+    return res.status(400).json({ error: `文件上传错误: ${err.message}` });
+  } else if (err && err.message) {
+    return res.status(400).json({ error: err.message });
+  }
+  return res.status(500).json({ error: '服务器内部错误' });
+};
+
 // 上传附件
-router.post('/api/upload', createFileBasedUploadLimitMiddleware(), upload.single('file'), async (req, res) => {
+router.post('/api/upload', createFileBasedUploadLimitMiddleware(), upload.single('file'), multerErrorHandler, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "未接收到文件" });
 
   const filename = req.file.filename;
@@ -135,9 +152,9 @@ router.post('/api/upload', createFileBasedUploadLimitMiddleware(), upload.single
       compressionResult
     });
   } catch (err) {
-    log('ERROR', '上传拦截器异常', { error: err.message });
+    log('ERROR', '上传拦截器异常', { error: err.message, stack: err.stack });
     if (req.file?.path) await fs.unlink(req.file.path).catch(()=>{});
-    res.status(500).json({ error: "服务器内部错误" });
+    res.status(500).json({ error: "上传失败: " + err.message });
   }
 });
 

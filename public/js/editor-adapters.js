@@ -46,7 +46,7 @@ async function uploadFileAndInsertCodeMirror(editor, file, ui) {
         }
     } catch (e) {
         console.error('上传失败:', e);
-        ui.showToast(`上传失败: ${e.message || file.name}`, false);
+        alert(`上传失败: ${e.message || file.name}`);
 
         // 显示错误信息
         if (window.api && window.api.showUploadProgress) {

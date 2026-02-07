@@ -194,10 +194,15 @@ function setupCron(configObj) {
   }
 
   if (configObj.schedule && configObj.schedule !== 'none') {
+    console.log('[备份] 正在设置定时任务，cron 表达式:', configObj.schedule);
     scheduledTask = cron.schedule(configObj.schedule, async () => {
+      console.log('[备份] 定时任务触发，开始执行备份...');
       await performBackup(configObj);
-    }, { scheduled: true });
+    }, { scheduled: true, timezone: 'Asia/Shanghai' });
+    console.log('[备份] 定时任务已启动');
     log('INFO', '定时备份任务已设置', { schedule: configObj.schedule });
+  } else {
+    console.log('[备份] 定时任务未设置或已关闭');
   }
 }
 
@@ -233,6 +238,7 @@ async function getBackupList() {
 
 module.exports = {
   createBackupArchive,
+  performBackup,
   setupCron,
   getBackupConfig,
   updateBackupConfig,
