@@ -1450,7 +1450,7 @@ const UIManager = {
                 // 使用循环构建 HTML
                 let html = '';
                 for (const note of notes) {
-                    console.log('[回收站] 笔记:', note);
+                    const noteIdStr = String(note.id);
                     html += `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
                         <div style="flex:1;min-width:0;">
@@ -1458,12 +1458,27 @@ const UIManager = {
                             <div style="font-size:11px;color:var(--gray);margin-top:2px;">${new Date(note.updatedAt).toLocaleString('zh-CN')}</div>
                         </div>
                         <div style="display:flex;gap:8px;flex-shrink:0;">
-                            <button onclick="ui.restoreNote(${note.id})" style="background:var(--green);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">恢复</button>
-                            <button onclick="ui.deleteNoteFromTrash(${note.id})" style="background:var(--red);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">永久删除</button>
+                            <button class="restore-note-btn" data-note-id="${noteIdStr}" style="background:var(--green);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">恢复</button>
+                            <button class="delete-note-btn" data-note-id="${noteIdStr}" style="background:var(--red);color:#fff;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:12px;">永久删除</button>
                         </div>
                     </div>`;
                 }
                 listBody.innerHTML = html;
+
+                // 绑定事件监听器
+                listBody.querySelectorAll('.restore-note-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const noteId = e.target.getAttribute('data-note-id');
+                        this.restoreNote(noteId);
+                    });
+                });
+
+                listBody.querySelectorAll('.delete-note-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const noteId = e.target.getAttribute('data-note-id');
+                        this.deleteNoteFromTrash(noteId);
+                    });
+                });
             } else {
                 const data = await res.json();
                 listBody.innerHTML = `<div style="text-align:center;padding:20px;color:var(--red);">加载失败: ${data.error || '未知错误'}</div>`;
@@ -1503,10 +1518,16 @@ const UIManager = {
         if (!confirm('确定要永久删除这篇笔记吗？此操作不可撤销。')) return;
 
         try {
-            const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/notes/${id}/permanent`, { method: 'DELETE' });
             if (res.ok) {
                 this.showToast('已永久删除');
                 this.loadTrash();
+                // 重新加载笔记列表
+                const notesRes = await fetch('/api/files');
+                if (notesRes.ok) {
+                    this.notes = await notesRes.json() || [];
+                    this.render();
+                }
             } else {
                 const data = await res.json();
                 this.showToast('删除失败: ' + (data.error || '未知错误'), false);
@@ -1523,6 +1544,8 @@ const UIManager = {
             const res = await fetch('/api/notes/trash/empty', { method: 'DELETE' });
             if (res.ok) {
                 this.showToast('回收站已清空');
+                // 重新加载笔记列表
+                this.loadTrash();
                 // 重新加载笔记
                 const notesRes = await fetch('/api/files');
                 if (notesRes.ok) {

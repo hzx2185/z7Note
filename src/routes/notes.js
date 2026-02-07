@@ -112,6 +112,29 @@ router.put('/api/notes/:id/restore', async (req, res) => {
   }
 });
 
+// 永久删除笔记 - 必须在 /api/notes/:id 之前
+router.delete('/api/notes/:id/permanent', async (req, res) => {
+  try {
+    const result = await getConnection().run(
+      'DELETE FROM notes WHERE id = ? AND username = ?',
+      [req.params.id, req.user]
+    );
+    if (result.changes === 0) {
+      return res.status(404).json({ error: '笔记不存在' });
+    }
+    // 同步删除该笔记的分享链接
+    await getConnection().run(
+      'DELETE FROM shares WHERE targetType = ? AND target = ? AND owner = ?',
+      ['note', req.params.id, req.user]
+    );
+    log('INFO', '永久删除笔记', { username: req.user, noteId: req.params.id });
+    res.json({ status: 'ok' });
+  } catch (e) {
+    log('ERROR', '永久删除笔记失败', { username: req.user, noteId: req.params.id, error: e.message });
+    res.status(500).json({ error: '删除失败' });
+  }
+});
+
 // 获取单个笔记
 router.get('/api/notes/:id', async (req, res) => {
   try {
