@@ -671,19 +671,26 @@ window.tools = ToolsManager;
 // 加载备份配置
 async function loadBackupConfig() {
     try {
+        console.log('[备份配置] 开始加载配置...');
         const res = await fetch('/api/user/backup/config');
         if (!res.ok) throw new Error('加载配置失败');
         const config = await res.json();
+        console.log('[备份配置] 加载到的配置:', config);
 
         // 填充表单
-        document.getElementById('backup-enabled').checked = config.enabled;
-        document.getElementById('backup-schedule').value = config.schedule || '0 20 * * *';
-        document.getElementById('backup-webdav-url').value = config.webdavUrl || '';
-        document.getElementById('backup-webdav-username').value = config.webdavUsername || '';
-        document.getElementById('backup-webdav-password').value = config.webdavPassword || '';
-        document.getElementById('backup-include-attachments').checked = config.includeAttachments;
-        document.getElementById('backup-send-email').checked = config.sendEmail;
-        document.getElementById('backup-email-address').value = config.emailAddress || '';
+        if (document.getElementById('backup-enabled')) {
+            document.getElementById('backup-enabled').checked = config.enabled;
+            document.getElementById('backup-schedule').value = config.schedule || '0 20 * * *';
+            document.getElementById('backup-webdav-url').value = config.webdavUrl || '';
+            document.getElementById('backup-webdav-username').value = config.webdavUsername || '';
+            document.getElementById('backup-webdav-password').value = config.webdavPassword || '';
+            document.getElementById('backup-include-attachments').checked = config.includeAttachments;
+            document.getElementById('backup-send-email').checked = config.sendEmail;
+            document.getElementById('backup-email-address').value = config.emailAddress || '';
+            console.log('[备份配置] 表单已填充');
+        } else {
+            console.error('[备份配置] 找不到表单元素');
+        }
     } catch (e) {
         console.error('加载备份配置失败:', e);
         ui.showToast('加载配置失败', false);
@@ -693,6 +700,7 @@ async function loadBackupConfig() {
 // 保存备份配置
 async function saveBackupConfig(event) {
     event.preventDefault();
+    console.log('[备份配置] 开始保存配置...');
 
     const config = {
         enabled: document.getElementById('backup-enabled').checked,
@@ -704,6 +712,7 @@ async function saveBackupConfig(event) {
         sendEmail: document.getElementById('backup-send-email').checked,
         emailAddress: document.getElementById('backup-email-address').value
     };
+    console.log('[备份配置] 要保存的配置:', config);
 
     // 验证必填字段
     if (config.enabled) {
@@ -725,13 +734,17 @@ async function saveBackupConfig(event) {
             body: JSON.stringify(config)
         });
 
-        if (!res.ok) throw new Error('保存失败');
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || '保存失败');
+        }
 
+        console.log('[备份配置] 保存成功');
         ui.showToast('配置已保存');
         document.getElementById('backup-modal').classList.remove('show');
     } catch (e) {
         console.error('保存备份配置失败:', e);
-        ui.showToast('保存失败', false);
+        ui.showToast('保存失败: ' + e.message, false);
     }
 }
 
