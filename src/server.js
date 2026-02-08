@@ -14,6 +14,7 @@ const { initWebSocketServer } = require('./routes/ws');
 const { initDefaultConfig } = require('./services/systemConfig');
 const { cleanupExpiredSessions, initChunksDir } = require('./services/chunkUpload');
 const { cleanupAllLimiters } = require('./utils/dynamicRateLimiter');
+const { setupUserBackupCron, getUserBackupConfig } = require('./services/userExport');
 
 const app = express();
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -71,6 +72,7 @@ const sharesRoutes = require('./routes/shares');
 const adminRoutes = require('./routes/admin');
 const userRoutes = require('./routes/user');
 const sseRoutes = require('./routes/sse');
+const userBackupRoutes = require('./routes/userBackup');
 
 // 分享路由必须在静态文件之前注册，否则 /s/ 会被当作静态目录处理
 app.use(sharesRoutes);
@@ -106,6 +108,7 @@ app.use(notesRoutes);
 app.use(attachmentsRoutes);
 app.use(adminAuth, adminRoutes);
 app.use(userRoutes);
+app.use(userBackupRoutes);
 
 // 设置 SSE 路由
 sseRoutes.setupSSE(app);
@@ -180,6 +183,17 @@ let server;
     const backupConfig = await getBackupConfig();
     if (backupConfig) {
       setupCron(backupConfig);
+    }
+
+    // 初始化用户备份任务
+    const db = getConnection();
+    const users = await db.all('SELECT username FROM users');
+    console.log(`[用户备份] 正在初始化 ${users.length} 个用户的备份任务`);
+    for (const user of users) {
+      const userBackupConfig = await getUserBackupConfig(user.username);
+      if (userBackupConfig && userBackupConfig.enabled) {
+        setupUserBackupCron(user.username, userBackupConfig);
+      }
     }
 
     // 设置 CDN 自动更新任务

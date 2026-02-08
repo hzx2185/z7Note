@@ -16,7 +16,7 @@
 
     <!-- CSS - 关键样式立即加载 -->
     <link rel="stylesheet" href="/cdn/codemirror.min.css">
-    <link rel="stylesheet" href="/css/app.css?v=20250208091000">
+    <link rel="stylesheet" href="/css/app.css?v=20250208110000">
 
     <!-- 非关键样式延迟加载 -->
     <link rel="preload" href="/cdn/highlight-dark.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -235,10 +235,11 @@
                 <button class="tool-btn" onclick="tools.insertSymbol('```\n', '\n```')">块</button>
                 <button class="tool-btn" onclick="tools.insertSymbol('[', '](url)')" title="超链接">链</button>
                 <button class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理">📂</button>
+                <button class="tool-btn" onclick="tools.openBackupConfig()" title="备份配置">💾</button>
                 <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号">🔢</button>
                 <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行">↩️</button>
-                <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">📍</button>
-                <button onclick="ui.setMarkerEnd()" class="tool-btn" title="标记终 (Alt+])">🏁</button>
+                <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">「</button>
+                <button onclick="ui.setMarkerEnd()" class="tool-btn" title="标记终 (Alt+])">」</button>
                 <div style="width:1px; height:18px; background:var(--border); margin:0 2px;"></div>
                 <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换">🔍</button>
                 <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT">📃</button>
@@ -371,7 +372,7 @@
     </div>
 
     <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
-    <script type="module" src="/js/app-entry.js?v=20250208091000"></script>
+    <script type="module" src="/js/app-entry.js?v=20250208100000"></script>
 
     <script>
         // 预加载关键字体和图标（提升首屏感知速度）
@@ -407,6 +408,86 @@
             }
         });
     </script>
+
+    <!-- 备份配置模态框 -->
+    <div id="backup-modal" class="modal">
+        <div class="modal-content" style="max-width:600px;">
+            <div class="modal-header">
+                <h2>💾 自动备份</h2>
+                <button class="modal-close" onclick="document.getElementById('backup-modal').classList.remove('show')">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="backup-config-form" onsubmit="saveBackupConfig(event)">
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="backup-enabled" style="width:auto;">
+                            <span>启用自动备份</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>备份频率</label>
+                        <select id="backup-schedule" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+                            <option value="0 20 * * *">每天晚上8点</option>
+                            <option value="0 3 * * *">每天凌晨3点</option>
+                            <option value="0 3 * * 0">每周日凌晨3点</option>
+                            <option value="0 3 1 * *">每月1号凌晨3点</option>
+                            <option value="0 */6 * * *">每6小时</option>
+                            <option value="0 */12 * * *">每12小时</option>
+                        </select>
+                    </div>
+
+                    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+                        <h3 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">WebDAV 配置</h3>
+                        <p style="font-size:12px;color:var(--gray);margin:0 0 12px 0;">备份文件将上传到您的 WebDAV 服务器</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label>WebDAV 地址</label>
+                        <input type="url" id="backup-webdav-url" placeholder="https://dav.example.com" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>WebDAV 用户名</label>
+                        <input type="text" id="backup-webdav-username" placeholder="用户名" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>WebDAV 密码</label>
+                        <input type="password" id="backup-webdav-password" placeholder="密码" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+                    </div>
+
+                    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
+                        <h3 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">备份选项</h3>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="backup-include-attachments" style="width:auto;" checked>
+                            <span>包含附件文件</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="backup-send-email" style="width:auto;" checked>
+                            <span>发送邮件通知</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>邮箱地址</label>
+                        <input type="email" id="backup-email-address" placeholder="your@email.com" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+                    </div>
+
+                    <div style="display:flex;gap:8px;margin-top:20px;">
+                        <button type="submit" class="btn-green" style="flex:1;padding:10px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">保存配置</button>
+                        <button type="button" onclick="backupNow()" class="btn-blue" style="flex:1;padding:10px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">立即备份</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <!-- 快捷键提示弹窗 -->
     <div id="shortcuts-modal" class="modal" style="display:none;">

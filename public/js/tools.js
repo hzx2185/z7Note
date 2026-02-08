@@ -5,6 +5,14 @@ const ToolsManager = {
         // 调用 API 打开附件管理模态框
         api.loadAttachments();
     },
+
+    // 打开备份配置
+    openBackupConfig() {
+        const modal = document.getElementById('backup-modal');
+        if (!modal) return;
+        modal.classList.add('show');
+        loadBackupConfig();
+    },
     // 编辑器操作 - 使用适配器接口
     async editorAction(type) {
         if (!ui.editor) return;
@@ -657,3 +665,110 @@ const ToolsManager = {
 
 // 导出
 window.tools = ToolsManager;
+
+// ==================== 备份配置相关函数 ====================
+
+// 加载备份配置
+async function loadBackupConfig() {
+    try {
+        const res = await fetch('/api/user/backup/config');
+        if (!res.ok) throw new Error('加载配置失败');
+        const config = await res.json();
+
+        // 填充表单
+        document.getElementById('backup-enabled').checked = config.enabled;
+        document.getElementById('backup-schedule').value = config.schedule || '0 20 * * *';
+        document.getElementById('backup-webdav-url').value = config.webdavUrl || '';
+        document.getElementById('backup-webdav-username').value = config.webdavUsername || '';
+        document.getElementById('backup-webdav-password').value = config.webdavPassword || '';
+        document.getElementById('backup-include-attachments').checked = config.includeAttachments;
+        document.getElementById('backup-send-email').checked = config.sendEmail;
+        document.getElementById('backup-email-address').value = config.emailAddress || '';
+    } catch (e) {
+        console.error('加载备份配置失败:', e);
+        ui.showToast('加载配置失败', false);
+    }
+}
+
+// 保存备份配置
+async function saveBackupConfig(event) {
+    event.preventDefault();
+
+    const config = {
+        enabled: document.getElementById('backup-enabled').checked,
+        schedule: document.getElementById('backup-schedule').value,
+        webdavUrl: document.getElementById('backup-webdav-url').value,
+        webdavUsername: document.getElementById('backup-webdav-username').value,
+        webdavPassword: document.getElementById('backup-webdav-password').value,
+        includeAttachments: document.getElementById('backup-include-attachments').checked,
+        sendEmail: document.getElementById('backup-send-email').checked,
+        emailAddress: document.getElementById('backup-email-address').value
+    };
+
+    // 验证必填字段
+    if (config.enabled) {
+        if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
+            ui.showToast('请填写完整的 WebDAV 配置', false);
+            return;
+        }
+    }
+
+    if (config.sendEmail && !config.emailAddress) {
+        ui.showToast('请填写邮箱地址', false);
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/user/backup/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (!res.ok) throw new Error('保存失败');
+
+        ui.showToast('配置已保存');
+        document.getElementById('backup-modal').classList.remove('show');
+    } catch (e) {
+        console.error('保存备份配置失败:', e);
+        ui.showToast('保存失败', false);
+    }
+}
+
+// 立即备份
+async function backupNow() {
+    const config = {
+        webdavUrl: document.getElementById('backup-webdav-url').value,
+        webdavUsername: document.getElementById('backup-webdav-username').value,
+        webdavPassword: document.getElementById('backup-webdav-password').value,
+        includeAttachments: document.getElementById('backup-include-attachments').checked,
+        sendEmail: document.getElementById('backup-send-email').checked,
+        emailAddress: document.getElementById('backup-email-address').value
+    };
+
+    if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
+        ui.showToast('请先配置 WebDAV 信息', false);
+        return;
+    }
+
+    try {
+        ui.showToast('正在备份...', true);
+
+        const res = await fetch('/api/user/backup/now', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || '备份失败');
+        }
+
+        const result = await res.json();
+        ui.showToast(`备份成功！${result.fileCount} 个文件`);
+    } catch (e) {
+        console.error('备份失败:', e);
+        ui.showToast(e.message || '备份失败', false);
+    }
+}
