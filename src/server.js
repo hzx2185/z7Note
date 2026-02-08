@@ -188,7 +188,6 @@ let server;
     // 初始化用户备份任务
     const db = getConnection();
     const users = await db.all('SELECT username FROM users');
-    console.log(`[用户备份] 正在初始化 ${users.length} 个用户的备份任务`);
     for (const user of users) {
       const userBackupConfig = await getUserBackupConfig(user.username);
       if (userBackupConfig && userBackupConfig.enabled) {

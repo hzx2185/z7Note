@@ -671,7 +671,6 @@ window.tools = ToolsManager;
 // 加载备份配置
 async function loadBackupConfig() {
     try {
-        console.log('[备份配置] 开始加载配置...');
         const res = await fetch('/api/user/backup/config');
 
         if (!res.ok) {
@@ -680,12 +679,10 @@ async function loadBackupConfig() {
         }
 
         const config = await res.json();
-        console.log('[备份配置] 加载到的配置:', config);
 
         // 填充表单
         const modal = document.getElementById('backup-modal');
         if (!modal) {
-            console.error('[备份配置] 找不到模态框元素');
             return;
         }
 
@@ -701,25 +698,15 @@ async function loadBackupConfig() {
             'backup-email-address': { type: 'value', value: config.emailAddress || '' }
         };
 
-        let missingElements = [];
         for (const [id, elementConfig] of Object.entries(elements)) {
             const el = document.getElementById(id);
-            if (!el) {
-                missingElements.push(id);
-                continue;
-            }
+            if (!el) continue;
 
             if (elementConfig.type === 'checkbox') {
                 el.checked = Boolean(elementConfig.value);
             } else {
                 el.value = elementConfig.value;
             }
-        }
-
-        if (missingElements.length > 0) {
-            console.warn('[备份配置] 以下表单元素未找到:', missingElements.join(', '));
-        } else {
-            console.log('[备份配置] 表单已填充');
         }
 
         // 显示最后备份时间（如果有）
@@ -761,7 +748,6 @@ async function loadBackupConfig() {
             }
         }
     } catch (e) {
-        console.error('加载备份配置失败:', e);
         ui.showToast('加载配置失败: ' + e.message, false);
     }
 }
@@ -772,12 +758,10 @@ async function saveBackupConfig(event) {
 
     // 检查 ui 对象是否存在
     if (!window.ui) {
-        console.error('[备份配置] ui 对象未定义');
         alert('UI 对象未初始化，请刷新页面重试');
         return;
     }
 
-    console.log('[备份配置] 开始保存配置...');
 
     // 获取表单元素
     const enabledEl = document.getElementById('backup-enabled');
@@ -790,19 +774,9 @@ async function saveBackupConfig(event) {
     const emailAddressEl = document.getElementById('backup-email-address');
 
     // 检查元素是否存在
-    console.log('[备份配置] 检查表单元素...');
-    console.log('[备份配置] enabledEl:', enabledEl);
-    console.log('[备份配置] scheduleEl:', scheduleEl);
-    console.log('[备份配置] webdavUrlEl:', webdavUrlEl);
-    console.log('[备份配置] webdavUsernameEl:', webdavUsernameEl);
-    console.log('[备份配置] webdavPasswordEl:', webdavPasswordEl);
-    console.log('[备份配置] includeAttachmentsEl:', includeAttachmentsEl);
-    console.log('[备份配置] sendEmailEl:', sendEmailEl);
-    console.log('[备份配置] emailAddressEl:', emailAddressEl);
 
     if (!enabledEl || !scheduleEl || !webdavUrlEl || !webdavUsernameEl ||
         !webdavPasswordEl || !includeAttachmentsEl || !sendEmailEl || !emailAddressEl) {
-        console.error('[备份配置] 表单元素未找到');
         ui.showToast('表单元素未找到', false);
         return;
     }
@@ -817,7 +791,6 @@ async function saveBackupConfig(event) {
         sendEmail: sendEmailEl.checked,
         emailAddress: emailAddressEl.value.trim()
     };
-    console.log('[备份配置] 要保存的配置:', config);
 
     // 验证必填字段
     if (config.enabled) {
@@ -864,7 +837,6 @@ async function saveBackupConfig(event) {
     }
 
     try {
-        console.log('[备份配置] 发送请求到服务器...');
         ui.updateStatus('working', '正在保存...');
 
         const res = await fetch('/api/user/backup/config', {
@@ -872,22 +844,17 @@ async function saveBackupConfig(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
         }).catch(err => {
-            console.error('[备份配置] 网络请求失败:', err);
             throw new Error('网络请求失败，请检查网络连接');
         });
 
-        console.log('[备份配置] 响应状态:', res.status, res.statusText);
 
         if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
-            console.error('[备份配置] 服务器返回错误:', errorData);
             throw new Error(errorData.error || '保存失败');
         }
 
         const result = await res.json();
-        console.log('[备份配置] 服务器响应:', result);
 
-        console.log('[备份配置] 保存成功');
         ui.showToast('配置已保存');
         ui.updateStatus('success', '配置已保存');
 
@@ -902,8 +869,6 @@ async function saveBackupConfig(event) {
             if (modal) modal.classList.remove('show');
         }, 1500);
     } catch (e) {
-        console.error('[备份配置] 保存失败，错误详情:', e);
-        console.error('[备份配置] 错误堆栈:', e.stack);
         ui.updateStatus('error', '保存失败');
         alert('保存失败: ' + e.message);
         setTimeout(() => {
@@ -932,7 +897,6 @@ async function testWebDAVConnection() {
             return;
         }
 
-        console.log('[WebDAV 测试] 开始测试连接...');
         ui.updateStatus('working', '正在测试连接...');
 
         const res = await fetch('/api/user/backup/test', {
@@ -947,12 +911,10 @@ async function testWebDAVConnection() {
 
         if (!res.ok) {
             const error = await res.json().catch(() => ({ error: '测试失败' }));
-            console.error('[WebDAV 测试] 服务器返回错误:', error);
             throw new Error(error.error || '测试失败');
         }
 
         const result = await res.json();
-        console.log('[WebDAV 测试] 测试结果:', result);
 
         let message = 'WebDAV 连接成功！';
         if (result.details && result.details.hasBackupDir) {
@@ -972,7 +934,6 @@ async function testWebDAVConnection() {
             ui.updateStatus('idle', '就绪');
         }, 3000);
     } catch (e) {
-        console.error('[WebDAV 测试] 测试失败:', e);
         ui.updateStatus('error', '连接失败');
         alert('连接失败: ' + e.message);
         setTimeout(() => {
@@ -985,7 +946,6 @@ async function testWebDAVConnection() {
 async function backupNow() {
     // 检查 ui 对象是否存在
     if (!window.ui) {
-        console.error('[备份配置] ui 对象未定义');
         alert('UI 对象未初始化，请刷新页面重试');
         return;
     }
@@ -1060,7 +1020,6 @@ async function backupNow() {
 
         if (!res.ok) {
             const error = await res.json().catch(() => ({ error: '备份失败' }));
-            console.error('[备份配置] 服务器返回错误:', error);
 
             // 提供更友好的错误提示
             let errorMessage = error.error || '备份失败';
@@ -1117,9 +1076,3 @@ window.saveBackupConfig = saveBackupConfig;
 window.backupNow = backupNow;
 window.loadBackupConfig = loadBackupConfig;
 window.testWebDAVConnection = testWebDAVConnection;
-
-// 调试：确认函数已导出
-console.log('[tools.js] 备份配置函数已导出到 window 对象');
-console.log('[tools.js] window.saveBackupConfig:', typeof window.saveBackupConfig);
-console.log('[tools.js] window.backupNow:', typeof window.backupNow);
-console.log('[tools.js] window.loadBackupConfig:', typeof window.loadBackupConfig);

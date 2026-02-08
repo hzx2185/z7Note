@@ -85,7 +85,6 @@ async function sendToWebDAV(username, webdavConfig, exportData) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const folderPath = `/z7note-backups/${username}/${timestamp}/`;
 
-    console.log(`[用户备份] ${username} 创建备份目录: ${folderPath}`);
 
     // 创建备份目录（忽略已存在的错误）
     try {
@@ -93,11 +92,9 @@ async function sendToWebDAV(username, webdavConfig, exportData) {
       const userDir = `/z7note-backups/${username}/`;
       try {
         await client.createDirectory(userDir);
-        console.log(`[用户备份] ${username} 用户目录创建成功`);
       } catch (e) {
         // 忽略 405（不支持创建目录）、409（已存在）等错误
         if (e.message && (e.message.includes('405') || e.message.includes('409'))) {
-          console.log(`[用户备份] ${username} 用户目录已存在或不支持创建`);
         } else {
           console.error(`[用户备份] ${username} 用户目录创建失败:`, e.message);
           throw e;
@@ -107,11 +104,9 @@ async function sendToWebDAV(username, webdavConfig, exportData) {
       // 再尝试创建时间戳目录
       try {
         await client.createDirectory(folderPath);
-        console.log(`[用户备份] ${username} 目录创建成功`);
       } catch (e) {
         // 忽略 405（不支持创建目录）、409（已存在）等错误
         if (e.message && (e.message.includes('405') || e.message.includes('409'))) {
-          console.log(`[用户备份] ${username} 目录已存在或不支持创建，将直接上传文件`);
         } else {
           console.error(`[用户备份] ${username} 目录创建失败:`, e.message);
           throw e;
@@ -123,27 +118,23 @@ async function sendToWebDAV(username, webdavConfig, exportData) {
     }
 
     // 上传 JSON 文件
-    console.log(`[用户备份] ${username} 开始上传 JSON 文件...`);
     try {
       await client.putFileContents(
         folderPath + exportData.json.filename,
         exportData.json.buffer
       );
-      console.log(`[用户备份] ${username} JSON 已上传: ${folderPath}${exportData.json.filename}`);
     } catch (e) {
       console.error(`[用户备份] ${username} JSON 上传失败:`, e.message);
       throw e;
     }
 
     // 上传附件
-    console.log(`[用户备份] ${username} 开始上传 ${exportData.attachments.length} 个附件...`);
     for (const attachment of exportData.attachments) {
       try {
         await client.putFileContents(
           folderPath + attachment.filename,
           attachment.buffer
         );
-        console.log(`[用户备份] ${username} 附件已上传: ${folderPath}${attachment.filename}`);
       } catch (e) {
         console.error(`[用户备份] ${username} 附件上传失败 (${attachment.filename}):`, e.message);
         throw e;

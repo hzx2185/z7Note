@@ -53,7 +53,6 @@ import wsManager from './websocket.js';
                 ui.notes = notes;
 
                 const loadTime = performance.now() - startTime;
-                console.log(`[App] 加载 ${notes.length} 篇笔记耗时: ${loadTime.toFixed(0)}ms`);
 
                 // 使用 requestAnimationFrame 优化渲染
                 requestAnimationFrame(() => {

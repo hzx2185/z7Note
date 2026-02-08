@@ -257,7 +257,6 @@ const UIManager = {
                 });
             }
         } catch (e) {
-            console.error('[UI] 编辑器初始化失败:', e);
         } finally {
             // 初始化完成，检查是否有待处理的内容
             this._isInitializingEditor = false;
@@ -834,7 +833,6 @@ const UIManager = {
 
         // 二次检查输入法状态，确保不会在输入时保存
         if (this._isComposing) {
-            console.warn('[UI] 输入法正在进行中，跳过保存');
             return;
         }
 
@@ -2074,7 +2072,6 @@ const UIManager = {
             // 添加键盘监听器
             editorElement.addEventListener('keydown', this._markerKeyHandler);
 
-            console.log('[UI] 标记快捷键已设置 (Mac: Cmd+, Windows: Ctrl+)');
         } catch (error) {
             console.error('设置标记快捷键失败:', error);
         }
@@ -2090,7 +2087,6 @@ const UIManager = {
                 editorElement.removeEventListener('keydown', this._markerKeyHandler);
             }
             this._markerKeyHandler = null;
-            console.log('[UI] 标记快捷键已清除');
         } catch (error) {
             console.error('清除标记快捷键失败:', error);
         }
@@ -2101,7 +2097,6 @@ const UIManager = {
         const modal = document.getElementById('shortcuts-modal');
         if (modal) {
             modal.style.display = 'flex';
-            console.log('[UI] 显示快捷键提示');
         }
     },
 
@@ -2110,7 +2105,6 @@ const UIManager = {
         const modal = document.getElementById('shortcuts-modal');
         if (modal) {
             modal.style.display = 'none';
-            console.log('[UI] 隐藏快捷键提示');
         }
     },
 
@@ -2182,7 +2176,6 @@ const UIManager = {
                     ...this.attachmentPreviewConfig,
                     ...data.attachmentPreviewConfig
                 };
-                console.log('[UI] 附件预览配置已更新:', this.attachmentPreviewConfig);
             }
         } catch (e) {
             console.error('加载用户信息失败:', e);
