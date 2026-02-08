@@ -188,6 +188,7 @@
                         用户: 加载中...
                     </a>
                     <div style="display:flex;gap:6px;align-items:center;">
+                        <a href="javascript:tools.openBackupConfig()" style="color: var(--accent); text-decoration: none; font-size: 11px;" title="备份配置">💾 备份</a>
                         <a href="javascript:ui.loadShares()" style="color: var(--accent); text-decoration: none; font-size: 11px;">分享</a>
                         <a id="admin-link" href="/admin" target="_blank" style="color: var(--green); text-decoration: none; font-size: 11px; display: none;">管理</a>
                         <a href="javascript:ui.logout()" style="color: var(--red); text-decoration: none; font-size: 11px;">退出</a>
@@ -235,7 +236,6 @@
                 <button class="tool-btn" onclick="tools.insertSymbol('```\n', '\n```')">块</button>
                 <button class="tool-btn" onclick="tools.insertSymbol('[', '](url)')" title="超链接">链</button>
                 <button class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理">📂</button>
-                <button class="tool-btn" onclick="tools.openBackupConfig()" title="备份配置">💾</button>
                 <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号">🔢</button>
                 <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行">↩️</button>
                 <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">「</button>
@@ -454,7 +454,7 @@
 
                     <div class="form-group">
                         <label>WebDAV 密码</label>
-                        <input type="password" id="backup-webdav-password" placeholder="密码" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
+                        <input type="password" id="backup-webdav-password" placeholder="密码" autocomplete="current-password" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
                     </div>
 
                     <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
