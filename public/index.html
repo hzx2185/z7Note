@@ -16,7 +16,7 @@
 
     <!-- CSS - 关键样式立即加载 -->
     <link rel="stylesheet" href="/cdn/codemirror.min.css">
-    <link rel="stylesheet" href="/css/app.css?v=20250207120000">
+    <link rel="stylesheet" href="/css/app.css?v=20250208091000">
 
     <!-- 非关键样式延迟加载 -->
     <link rel="preload" href="/cdn/highlight-dark.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -70,12 +70,18 @@
             padding: 0 8px;
             border-radius: 4px;
             transition: background-color 0.15s;
+            -webkit-tap-highlight-color: transparent;
         }
         .CodeMirror-linenumber:hover {
             background-color: rgba(37, 99, 235, 0.1);
             color: var(--accent);
         }
         .CodeMirror-selectedtext {
+            background-color: rgba(37, 99, 235, 0.2);
+        }
+
+        /* 移动端行号点击反馈 */
+        .CodeMirror-linenumber:active {
             background-color: rgba(37, 99, 235, 0.2);
         }
 
@@ -133,6 +139,7 @@
             <button class="tool-btn" onclick="ui.setMode('split')" title="分屏">↔️</button>
             <button id="btn-preview" class="tool-btn" onclick="ui.togglePreview()" title="预览">👁️</button>
             <button class="tool-btn" onclick="ui.toggleTheme()" title="切换主题">🌓</button>
+            <button class="tool-btn" onclick="ui.showShortcuts()" title="快捷键 (F1)">⌨️</button>
         </div>
     </div>
 
@@ -213,6 +220,7 @@
                 <button class="tool-btn" onclick="tools.moveCursor('right')" title="右移光标">→</button>
 
                 <button class="tool-btn" onclick="tools.editorAction('copy')" title="复制内容">复</button>
+                <button class="tool-btn" onclick="tools.editorAction('cut')" title="剪切内容">剪</button>
                 <button class="tool-btn" onclick="tools.editorAction('paste')" title="粘贴内容">粘</button>
                 <button class="tool-btn" onclick="tools.editorAction('selectAll')" title="全选内容">全</button>
                 <button class="tool-btn" onclick="tools.editorAction('selectLine')" title="选择当前行">行</button>
@@ -229,6 +237,8 @@
                 <button class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理">📂</button>
                 <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号">🔢</button>
                 <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行">↩️</button>
+                <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">📍</button>
+                <button onclick="ui.setMarkerEnd()" class="tool-btn" title="标记终 (Alt+])">🏁</button>
                 <div style="width:1px; height:18px; background:var(--border); margin:0 2px;"></div>
                 <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换">🔍</button>
                 <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT">📃</button>
@@ -361,7 +371,7 @@
     </div>
 
     <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
-    <script type="module" src="/js/app-entry.js?v=20250207150000"></script>
+    <script type="module" src="/js/app-entry.js?v=20250208091000"></script>
 
     <script>
         // 预加载关键字体和图标（提升首屏感知速度）
@@ -374,6 +384,80 @@
                 document.head.appendChild(link);
             });
         }
+
+        // 全局F1快捷键监听
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F1') {
+                e.preventDefault();
+                if (window.ui && window.ui.showShortcuts) {
+                    window.ui.showShortcuts();
+                }
+            }
+        });
+
+        // 点击弹窗外部关闭
+        document.addEventListener('click', (e) => {
+            const modal = document.getElementById('shortcuts-modal');
+            if (modal && modal.style.display === 'flex') {
+                if (e.target === modal) {
+                    if (window.ui && window.ui.hideShortcuts) {
+                        window.ui.hideShortcuts();
+                    }
+                }
+            }
+        });
     </script>
+
+    <!-- 快捷键提示弹窗 -->
+    <div id="shortcuts-modal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:600px;max-height:80vh;overflow-y:auto;">
+            <div class="modal-header">
+                <h2>⌨️ 快捷键指南</h2>
+                <button class="modal-close" onclick="ui.hideShortcuts()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-section">
+                    <h3>📍 标记功能</h3>
+                    <table class="shortcuts-table">
+                        <tr><td>标记起</td><td><kbd>Alt</kbd> + <kbd>[</kbd></td></tr>
+                        <tr><td>标记终</td><td><kbd>Alt</kbd> + <kbd>]</kbd></td></tr>
+                        <tr><td>复制区域</td><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd></td></tr>
+                        <tr><td>剪切区域</td><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd></td></tr>
+                        <tr><td>删除区域</td><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd></td></tr>
+                        <tr><td>清除标记</td><td><kbd>Escape</kbd></td></tr>
+                    </table>
+                    <div style="font-size:12px;color:var(--gray);margin-top:8px;">
+                        💡 Mac 使用 <kbd>Cmd</kbd>, Windows/Linux 使用 <kbd>Ctrl</kbd>
+                    </div>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>📝 编辑操作</h3>
+                    <table class="shortcuts-table">
+                        <tr><td>撤销</td><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td></tr>
+                        <tr><td>重做</td><td><kbd>Ctrl</kbd> + <kbd>Y</kbd></td></tr>
+                        <tr><td>保存</td><td>自动保存</td></tr>
+                        <tr><td>全选</td><td><kbd>Ctrl</kbd> + <kbd>A</kbd></td></tr>
+                        <tr><td>复制</td><td><kbd>Ctrl</kbd> + <kbd>C</kbd></td></tr>
+                        <tr><td>剪切</td><td><kbd>Ctrl</kbd> + <kbd>X</kbd></td></tr>
+                        <tr><td>粘贴</td><td><kbd>Ctrl</kbd> + <kbd>V</kbd></td></tr>
+                        <tr><td>查找</td><td><kbd>Ctrl</kbd> + <kbd>F</kbd></td></tr>
+                    </table>
+                    <div style="font-size:12px;color:var(--gray);margin-top:8px;">
+                        💡 复制/剪切/粘贴为浏览器原生功能，支持选择文本后操作
+                    </div>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>🎯 其他</h3>
+                    <table class="shortcuts-table">
+                        <tr><td>显示快捷键</td><td><kbd>F1</kbd></td></tr>
+                    </table>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

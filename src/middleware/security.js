@@ -1,16 +1,16 @@
 function securityHeaders(req, res, next) {
   // 严格传输安全 (HSTS)
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  
+
   // 内容类型选项
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  
-  // 点击劫持防护
-  res.setHeader('X-Frame-Options', 'DENY');
-  
+
+  // 点击劫持防护 - 允许同源iframe嵌入（用于PDF预览等）
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+
   // XSS防护
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  
+
   // 引用策略
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
@@ -22,7 +22,7 @@ function securityHeaders(req, res, next) {
     "img-src 'self' data: https: http:",
     "font-src 'self'",
     "connect-src 'self'",
-    "frame-src 'self'",
+    "frame-src 'self'", // 允许同源iframe
     "worker-src 'self' blob:",
     "manifest-src 'self'"
   ].join('; ');

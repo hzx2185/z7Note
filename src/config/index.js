@@ -63,6 +63,16 @@ const config = {
     ]
   },
 
+  // 附件预览配置
+  attachmentPreview: {
+    enabled: process.env.ATTACHMENT_PREVIEW_ENABLED !== 'false', // 默认开启
+    lazyLoad: process.env.ATTACHMENT_LAZY_LOAD !== 'false', // 默认开启懒加载
+    autoLoad: process.env.ATTACHMENT_AUTO_LOAD === 'true', // 默认不自动加载，需要点击
+    pdfMaxSize: parseInt(process.env.PDF_MAX_SIZE) || 10, // PDF最大预览大小（MB）
+    videoMaxSize: parseInt(process.env.VIDEO_MAX_SIZE) || 50, // 视频最大预览大小（MB）
+    audioMaxSize: parseInt(process.env.AUDIO_MAX_SIZE) || 20, // 音频最大预览大小（MB）
+  },
+
   // 管理员用户
   adminUsers: (process.env.ADMIN_USER || 'admin').split(',').map(u => u.trim()),
 

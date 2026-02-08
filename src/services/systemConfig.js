@@ -19,6 +19,11 @@ const DEFAULT_CONFIG = {
   imageCompressionMaxWidth: { value: '1920', description: '图片最大宽度(像素，0表示不限制)' },
   imageCompressionMaxHeight: { value: '1080', description: '图片最大高度(像素，0表示不限制)' },
   dynamicRateLimitEnabled: { value: 'true', description: '是否启用动态限流' },
+  pdfMaxSize: { value: '10', description: 'PDF最大预览大小(MB)' },
+  videoMaxSize: { value: '50', description: '视频最大预览大小(MB)' },
+  audioMaxSize: { value: '20', description: '音频最大预览大小(MB)' },
+  attachmentLazyLoad: { value: 'true', description: '是否启用附件懒加载' },
+  attachmentAutoLoad: { value: 'false', description: '是否自动加载附件预览（点击加载）' },
 };
 
 /**

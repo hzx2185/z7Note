@@ -290,148 +290,90 @@ const CodeMirrorAdapter = {
 
         // 存储上次点击的行号，用于Shift+点击多选
         let lastClickedLine = null;
-        
-        // 多选模式状态（移动端）
-        let isMultiSelectMode = false;
-        let multiSelectStartLine = null;
-        
-        // 拖动多选状态（桌面端）
-        let isDragging = false;
-        let dragStartLine = null;
 
-        // 长按检测（用于移动端）
-        let longPressTimer = null;
-        const LONG_PRESS_DURATION = 500; // 500ms 长按
+        // 点击两次选择模式（移动端和桌面端通用）
+        let firstClickLine = null;
+        let clickCount = 0;
+        let clickCountTimer = null;
+        const DOUBLE_CLICK_INTERVAL = 5000; // 两次点击间隔时间5秒
 
-        // 触摸开始 - 检测长按
-        editor.on('gutterTouchstart', (cm, line, gutter, event) => {
-            // 只处理行号gutter
-            if (gutter !== 'CodeMirror-linenumbers') return;
-            
-            longPressTimer = setTimeout(() => {
-                // 长按触发，进入多选模式
-                isMultiSelectMode = true;
-                multiSelectStartLine = line;
-                window.ui && window.ui.showToast('已进入多选模式，点击其他行号选择范围', true);
-            }, LONG_PRESS_DURATION);
-        });
-
-        // 触摸移动 - 取消长按
-        editor.on('gutterTouchmove', () => {
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
-            }
-        });
-
-        // 触摸结束 - 处理长按后的选择
-        editor.on('gutterTouchend', (cm, line, gutter, event) => {
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
-            }
-            
-            // 只处理行号gutter
-            if (gutter !== 'CodeMirror-linenumbers') return;
-            
-            const lineHandle = cm.getLineHandle(line);
-            if (!lineHandle) return;
-            
-            let start, end;
-            
-            // 如果在多选模式，选择范围
-            if (isMultiSelectMode && multiSelectStartLine !== null) {
-                const startLine = Math.min(multiSelectStartLine, line);
-                const endLine = Math.max(multiSelectStartLine, line);
-                
-                start = { line: startLine, ch: 0 };
-                end = { line: endLine, ch: cm.getLine(endLine).length };
-                
-                // 退出多选模式
-                isMultiSelectMode = false;
-                multiSelectStartLine = null;
-            } else {
-                // 普通点击，选中单行
-                start = { line: line, ch: 0 };
-                end = { line: line, ch: lineHandle.text.length };
-            }
-            
-            cm.setSelection(start, end);
-            cm.focus();
-            lastClickedLine = line;
-        });
-
-        // 鼠标按下 - 开始拖动选择
-        editor.on('gutterMouseDown', (cm, line, gutter, event) => {
-            // 只处理行号gutter
-            if (gutter !== 'CodeMirror-linenumbers') return;
-            
-            isDragging = true;
-            dragStartLine = line;
-            
-            // 选中起始行
-            const lineHandle = cm.getLineHandle(line);
-            if (lineHandle) {
-                cm.setSelection(
-                    { line: line, ch: 0 },
-                    { line: line, ch: lineHandle.text.length }
-                );
-            }
-            cm.focus();
-            lastClickedLine = line;
-        });
-
-        // 鼠标移动 - 拖动选择
-        editor.on('gutterMouseover', (cm, line, gutter, event) => {
-            // 只处理行号gutter
-            if (gutter !== 'CodeMirror-linenumbers') return;
-            if (!isDragging || dragStartLine === null) return;
-            
-            // 选择从起始行到当前行的所有内容
-            const startLine = Math.min(dragStartLine, line);
-            const endLine = Math.max(dragStartLine, line);
-            
-            cm.setSelection(
-                { line: startLine, ch: 0 },
-                { line: endLine, ch: cm.getLine(endLine).length }
-            );
-        });
-
-        // 鼠标释放 - 结束拖动
-        editor.on('gutterMouseup', (cm, line, gutter, event) => {
-            isDragging = false;
-            dragStartLine = null;
-        });
-
-        // 点击行号选中整行（桌面端）
+        // 点击行号选中整行 - 支持两次点击选择多行
         editor.on('gutterClick', (cm, line, gutter, clickEvent) => {
             // 只处理行号gutter
             if (gutter !== 'CodeMirror-linenumbers') return;
-            
+
             // 选中整行
             const lineHandle = cm.getLineHandle(line);
             if (!lineHandle) return;
-            
+
+            console.log('[行号点击] 行号:', line);
+
             let start, end;
-            
-            // 如果按住Shift键且上次有点击的行，则选中多行
+
+            // 如果按住Shift键且上次有点击的行，则选中多行（桌面端传统方式）
             if (clickEvent.shiftKey && lastClickedLine !== null) {
                 const startLine = Math.min(lastClickedLine, line);
                 const endLine = Math.max(lastClickedLine, line);
-                
+
                 start = { line: startLine, ch: 0 };
                 end = { line: endLine, ch: cm.getLine(endLine).length };
-            } else {
+
+                cm.setSelection(start, end);
+                cm.focus();
+
+                // 记录本次点击的行号
+                lastClickedLine = line;
+                return;
+            }
+
+            // 两次点击选择模式（移动端友好，不需要Shift）
+            // 清除之前的计时器
+            if (clickCountTimer) {
+                clearTimeout(clickCountTimer);
+                clickCountTimer = null;
+            }
+
+            clickCount++;
+
+            if (clickCount === 1) {
+                // 第一次点击
+                firstClickLine = line;
+
+                // 选中该行
                 start = { line: line, ch: 0 };
                 end = { line: line, ch: lineHandle.text.length };
+                cm.setSelection(start, end);
+                cm.focus();
+
+                // 设置超时，如果1秒内没有第二次点击，重置计数
+                clickCountTimer = setTimeout(() => {
+                    clickCount = 0;
+                    firstClickLine = null;
+                    clickCountTimer = null;
+                }, DOUBLE_CLICK_INTERVAL);
+
+            } else if (clickCount === 2) {
+                // 第二次点击
+                if (firstClickLine !== null) {
+                    const startLine = Math.min(firstClickLine, line);
+                    const endLine = Math.max(firstClickLine, line);
+
+                    start = { line: startLine, ch: 0 };
+                    end = { line: endLine, ch: cm.getLine(endLine).length };
+
+                    cm.setSelection(start, end);
+                    cm.focus();
+
+                    console.log('[两次点击选择] 选择范围:', startLine + 1, '到', endLine + 1);
+                }
+
+                // 重置计数
+                clickCount = 0;
+                firstClickLine = null;
+                clickCountTimer = null;
             }
-            
-            cm.setSelection(start, end);
-            
-            // 聚焦编辑器
-            cm.focus();
-            
-            // 记录本次点击的行号
+
+            // 记录本次点击的行号（用于Shift键）
             lastClickedLine = line;
         });
 
@@ -454,6 +396,32 @@ const CodeMirrorAdapter = {
                 for (const file of files) {
                     uploadFileAndInsertCodeMirror(editor, file, ui);
                 }
+            }
+        });
+
+        // 拖拽事件处理
+        editor.on('dragover', (editor, event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            editor.getWrapperElement().style.backgroundColor = 'rgba(37, 99, 235, 0.1)';
+        });
+
+        editor.on('dragleave', (editor, event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            editor.getWrapperElement().style.backgroundColor = '';
+        });
+
+        editor.on('drop', (editor, event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            editor.getWrapperElement().style.backgroundColor = '';
+
+            const files = event.dataTransfer?.files;
+            if (!files || files.length === 0) return;
+
+            for (const file of files) {
+                uploadFileAndInsertCodeMirror(editor, file, ui);
             }
         });
 
@@ -598,7 +566,16 @@ const CodeMirrorAdapter = {
             getLayoutInfo: () => ({
                 height: editor.getScrollInfo().clientHeight,
                 width: editor.getScrollInfo().clientWidth
-            })
+            }),
+            // 标记功能所需的方法
+            getWrapperElement: () => editor.getWrapperElement(),
+            addLineClass: (line, where, cls) => editor.addLineClass(line, where, cls),
+            removeLineClass: (line, where, cls) => editor.removeLineClass(line, where, cls),
+            markText: (from, to, options) => editor.markText(from, to, options),
+            getAllMarks: () => editor.getAllMarks(),
+            scrollIntoView: (pos, margin) => editor.scrollIntoView(pos, margin),
+            // 暴露原生 CodeMirror 实例 (用于高级操作)
+            _editor: editor
         };
     }
 };

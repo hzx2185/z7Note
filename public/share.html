@@ -174,6 +174,93 @@
         }
         .download-btn:hover { opacity: 0.9; }
 
+        /* PDF预览 */
+        .pdf-preview-container {
+            width: 100%;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg);
+        }
+        .pdf-preview-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .pdf-placeholder {
+            width: 100%;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: var(--side);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .pdf-placeholder:hover {
+            background: var(--border);
+        }
+        .pdf-placeholder-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        .pdf-placeholder-text {
+            font-size: 14px;
+            color: var(--text);
+        }
+        .pdf-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+        }
+        .pdf-loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .pdf-loading-text {
+            margin-top: 12px;
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .pdf-preview-container,
+            .pdf-placeholder,
+            .pdf-loading {
+                height: 60vh;
+                min-height: 300px;
+                max-height: 600px;
+            }
+        }
+        @media (max-width: 480px) {
+            .pdf-preview-container,
+            .pdf-placeholder,
+            .pdf-loading {
+                height: 50vh;
+                min-height: 250px;
+                max-height: 500px;
+            }
+        }
+
         /* 导航 */
         .nav-links {
             display: flex;
@@ -438,6 +525,8 @@
             document.getElementById('content-card').style.display = 'block';
 
             const fileName = data.target.split('/').pop() || data.target;
+            const fileExt = fileName.split('.').pop().toLowerCase();
+
             document.getElementById('title').textContent = fileName;
             document.getElementById('meta').innerHTML = `
                 <span>📎 附件</span>
@@ -455,7 +544,69 @@
                         <a href="${url}" download class="download-btn">📥 下载图片</a>
                     </div>
                 `;
-            } else {
+            }
+            // PDF预览
+            else if (fileExt === 'pdf') {
+                document.getElementById('content').innerHTML = `
+                    <div class="pdf-placeholder" id="pdf-placeholder">
+                        <div class="pdf-placeholder-icon">📄</div>
+                        <div class="pdf-placeholder-text">点击加载PDF预览</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <a href="${url}" download class="download-btn">📥 下载PDF</a>
+                    </div>
+                `;
+
+                // 添加PDF加载逻辑
+                const placeholder = document.getElementById('pdf-placeholder');
+                if (placeholder) {
+                    placeholder.onclick = function() {
+                        // 显示加载状态
+                        this.innerHTML = `
+                            <div class="pdf-loading">
+                                <div class="pdf-loading-spinner"></div>
+                                <div class="pdf-loading-text">加载中...</div>
+                            </div>
+                        `;
+
+                        // 创建iframe
+                        const iframe = document.createElement('iframe');
+                        iframe.style.width = '100%';
+                        iframe.style.maxWidth = '100%';
+                        iframe.style.height = '70vh';
+                        iframe.style.minHeight = '400px';
+                        iframe.style.maxHeight = '800px';
+                        iframe.style.border = 'none';
+                        iframe.style.display = 'block';
+                        iframe.style.overflow = 'hidden';
+                        iframe.allow = 'fullscreen';
+                        iframe.allowFullscreen = true;
+                        iframe.referrerPolicy = 'no-referrer';
+
+                        iframe.onload = function() {
+                            console.log('[Share PDF] 加载成功');
+                        };
+
+                        iframe.onerror = function() {
+                            console.error('[Share PDF] 加载失败');
+                            placeholder.innerHTML = `
+                                <div style="padding:20px;text-align:center;">
+                                    <div style="font-size:64px;margin-bottom:16px;">❌</div>
+                                    <div style="font-size:16px;color:var(--red);">PDF加载失败</div>
+                                </div>
+                            `;
+                        };
+
+                        // 延迟加载
+                        setTimeout(() => {
+                            this.replaceWith(iframe);
+                            iframe.src = url;
+                        }, 100);
+                    };
+                }
+            }
+            // 其他文件类型
+            else {
                 document.getElementById('content').innerHTML = `
                     <div class="file-preview">
                         <div style="font-size: 64px; margin-bottom: 16px;">📄</div>

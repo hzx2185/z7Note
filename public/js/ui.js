@@ -23,6 +23,21 @@ const UIManager = {
     _isComposing: false, // 输入法状态锁
     _isSaving: false, // 防止重复保存
 
+    // 标记功能相关属性
+    markerStart: null,    // 标记起始位置
+    markerEnd: null,      // 标记结束位置
+    markerActive: false,  // 标记是否激活
+    markerTimeouts: {},   // 存储标记定时器引用
+
+    // 附件预览配置
+    attachmentPreviewConfig: {
+        pdfMaxSize: 10, // MB
+        videoMaxSize: 50, // MB
+        audioMaxSize: 20, // MB
+        lazyLoad: true,
+        autoLoad: false,
+    },
+
     // 初始化
     async init(db) {
         this.db = db;
@@ -222,6 +237,25 @@ const UIManager = {
                     this.editor.trigger('change', event);
                 }
             }, 1000);
+
+            // 添加键盘快捷键监听
+            this.setupMarkerShortcuts();
+
+            // 添加点击监听器,只在标记完成后点击其他区域时清除标记
+            const editorElement = this.editor.getWrapperElement();
+            if (editorElement) {
+                editorElement.addEventListener('click', (e) => {
+                    // 只有在标记已经完成（起和终都有）的情况下，点击其他区域才清除标记
+                    // 如果正在标记过程中（只有起没有终，或只有终没有起），允许用户继续操作
+                    if (this.markerStart && this.markerEnd) {
+                        // 检查是否点击了标记相关的元素
+                        const isMarkerClick = e.target.closest('.marker-start, .marker-end, .marker-highlight, .marker-btn');
+                        if (!isMarkerClick) {
+                            this.clearMarker();
+                        }
+                    }
+                });
+            }
         } catch (e) {
             console.error('[UI] 编辑器初始化失败:', e);
         } finally {
@@ -459,22 +493,87 @@ const UIManager = {
         const btnBg = isLight ? '#f6f8fa' : '#30363d';
         const hlStyle = isLight ? '/cdn/highlight-light.min.css' : '/cdn/highlight-dark.min.css';
 
+        // 获取附件预览配置
+        const attachmentConfig = window.parent.ui ? window.parent.ui.attachmentPreviewConfig : {
+            pdfMaxSize: 10,
+            videoMaxSize: 50,
+            audioMaxSize: 20,
+            lazyLoad: true,
+            autoLoad: false,
+        };
+
         iframe.srcdoc = `<!DOCTYPE html><html><head>
             <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
             <link rel="stylesheet" href="${hlStyle}">
             <style>
+                * {
+                    box-sizing: border-box;
+                }
+                html, body {
+                    width: 100%;
+                    height: 100%;
+                    margin: 0;
+                    padding: 0;
+                    overflow-x: hidden;
+                }
                 body { background: ${bodyBg} !important; padding: 20px; margin: 0; color: ${bodyColor} !important; overflow-x: hidden; }
-                .markdown-body { background: transparent !important; color: ${bodyColor} !important; }
+                .markdown-body { background: transparent !important; color: ${bodyColor} !important; width: 100%; max-width: 100%; }
                 .markdown-body img, .markdown-body > img { max-width: 100% !important; height: auto !important; display: block; }
                 .markdown-body pre, .markdown-body code { background-color: ${preBg} !important; }
                 pre { position: relative; border: 1px solid ${isLight ? '#d0d7de':'#30363d'}; border-radius: 6px; padding: 16px !important; }
                 .copy-code-btn { position: absolute; top: 8px; right: 8px; padding: 4px 8px; background: ${btnBg}; color: ${bodyColor}; border: 1px solid ${isLight ? '#d0d7de':'#30363d'}; border-radius: 4px; cursor: pointer; font-size: 11px; }
-            .attachment-preview { margin: 15px 0; border: 1px solid ${isLight ? '#d0d7de':'#30363d'}; border-radius: 8px; overflow: hidden; background: ${preBg}; }
+            .attachment-preview { margin: 15px 0; border: 1px solid ${isLight ? '#d0d7de':'#30363d'}; border-radius: 8px; overflow: hidden; background: ${preBg}; width: 100%; max-width: 100%; }
             .attachment-info { padding: 10px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid ${isLight ? '#d0d7de':'#30363d'}; }
             .attachment-name { color: ${bodyColor}; font-weight: bold; overflow: hidden; text-overflow: ellipsis; }
             .dl-link { color: var(--accent); text-decoration: none; font-size: 12px; }
-            .pdf-preview { width: 100%; height: 500px; border: none; }
-            video, audio { width: 100%; display: block; }
+            .pdf-preview { width: 100% !important; max-width: 100% !important; height: 70vh; min-height: 400px; max-height: 800px; border: none; display: block; overflow: hidden; }
+            .pdf-preview object { width: 100% !important; max-width: 100% !important; height: 100% !important; min-height: 100% !important; max-height: 100% !important; border: none; display: block; }
+            .pdf-placeholder { width: 100% !important; max-width: 100% !important; height: 70vh; min-height: 400px; max-height: 800px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+            .pdf-placeholder:hover { background-color: ${isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)'}; }
+            .pdf-placeholder-icon { font-size: 48px; margin-bottom: 12px; }
+            .pdf-placeholder-text { font-size: 14px; color: ${bodyColor}; opacity: 0.7; }
+            .pdf-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 70vh; min-height: 400px; max-height: 800px; width: 100% !important; max-width: 100% !important; }
+            .pdf-loading-spinner { width: 32px; height: 32px; border: 3px solid ${isLight ? '#d0d7de':'#30363d'}; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .pdf-loading-text { margin-top: 12px; font-size: 14px; color: ${bodyColor}; opacity: 0.7; }
+            .file-too-large { padding: 20px; text-align: center; color: var(--accent); font-size: 13px; }
+            video, audio { width: 100% !important; max-width: 100% !important; display: block; }
+            .media-placeholder { width: 100% !important; max-width: 100% !important; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+            .media-placeholder:hover { background-color: ${isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)'}; }
+            .media-placeholder-icon { font-size: 40px; margin-bottom: 8px; }
+            .media-placeholder-text { font-size: 13px; color: ${bodyColor}; opacity: 0.7; }
+
+            /* 响应式设计 - 移动端优化 */
+            @media (max-width: 768px) {
+                body { padding: 10px !important; }
+                .attachment-info { padding: 8px; font-size: 12px; flex-direction: column; align-items: flex-start; gap: 8px; }
+                .dl-link { font-size: 11px; align-self: flex-end; }
+                .pdf-preview { height: 60vh !important; min-height: 300px; max-height: 600px; width: 100% !important; max-width: 100% !important; }
+                .pdf-placeholder { height: 60vh !important; min-height: 300px; max-height: 600px; width: 100% !important; max-width: 100% !important; }
+                .pdf-placeholder-icon { font-size: 36px; }
+                .pdf-placeholder-text { font-size: 12px; }
+                .pdf-loading { height: 60vh !important; min-height: 300px; max-height: 600px; width: 100% !important; max-width: 100% !important; }
+                .pdf-loading-spinner { width: 28px; height: 28px; }
+                .pdf-loading-text { font-size: 12px; }
+                .file-too-large { padding: 15px; font-size: 12px; }
+                .media-placeholder { min-height: 80px; width: 100% !important; max-width: 100% !important; }
+                .media-placeholder-icon { font-size: 32px; }
+                .media-placeholder-text { font-size: 11px; }
+            }
+
+            /* 超小屏幕优化 */
+            @media (max-width: 480px) {
+                body { padding: 8px !important; }
+                .attachment-info { padding: 6px; font-size: 11px; }
+                .pdf-preview { height: 50vh !important; min-height: 250px; max-height: 500px; width: 100% !important; max-width: 100% !important; }
+                .pdf-placeholder { height: 50vh !important; min-height: 250px; max-height: 500px; width: 100% !important; max-width: 100% !important; }
+                .pdf-placeholder-icon { font-size: 32px; }
+                .pdf-placeholder-text { font-size: 11px; }
+                .pdf-loading { height: 50vh !important; min-height: 250px; max-height: 500px; width: 100% !important; max-width: 100% !important; }
+                .pdf-loading-spinner { width: 24px; height: 24px; }
+                .pdf-loading-text { font-size: 11px; }
+            }
         </style>
     </head><body class="markdown-body">
         <div id="content">${html}</div>
@@ -493,31 +592,211 @@ const UIManager = {
                     };
                     pre.appendChild(btn);
                 });
+
+                // 监听来自父窗口的resize消息
+                window.addEventListener('message', (event) => {
+                    if (event.data.type === 'resize') {
+                        console.log('[PDF iframe] 收到resize消息:', event.data);
+                        // 可以在这里添加额外的调整逻辑
+                    }
+                });
+
                 document.querySelectorAll('a').forEach(a => {
                     const url = a.getAttribute('href');
                     if(!url || !url.includes('.')) return;
                     const ext = url.split('.').pop().toLowerCase();
                     const fileName = a.innerText || '附件';
                     let previewEl = null;
+                    let shouldLazyLoad = ${attachmentConfig.lazyLoad};
+                    let autoLoad = ${attachmentConfig.autoLoad};
+
+                    // PDF文件处理：添加懒加载和文件大小检查
                     if(ext === 'pdf') {
-                        previewEl = document.createElement('iframe');
-                        previewEl.className = 'pdf-preview';
-                        previewEl.src = url;
-                    } else if(['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
-                        previewEl = document.createElement('video');
-                        previewEl.controls = true;
-                        previewEl.src = url;
-                    } else if(['mp3', 'wav', 'm4a', 'aac'].includes(ext)) {
-                        previewEl = document.createElement('audio');
-                        previewEl.controls = true;
-                        previewEl.src = url;
+                        // 创建PDF占位符
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'pdf-placeholder';
+                        placeholder.innerHTML = '<div class="pdf-placeholder-icon">📄</div><div class="pdf-placeholder-text">点击加载PDF预览</div>';
+
+                        // 点击加载PDF
+                        placeholder.onclick = async () => {
+                            // 显示加载状态
+                            placeholder.innerHTML = '<div class="pdf-loading"><div class="pdf-loading-spinner"></div><div class="pdf-loading-text">加载中...</div></div>';
+
+                            try {
+                                // 检查文件大小（使用配置的最大值）
+                                const maxSize = ${attachmentConfig.pdfMaxSize} * 1024 * 1024;
+                                const response = await fetch(url, { method: 'HEAD' });
+                                const size = parseInt(response.headers.get('content-length'));
+
+                                if (size > maxSize) {
+                                    // 文件过大，显示提示
+                                    placeholder.innerHTML = '<div class="file-too-large">⚠️ 文件过大（' + (size / 1024 / 1024).toFixed(2) + 'MB），建议下载查看</div>';
+                                    return;
+                                }
+
+                                // 由于iframe嵌套问题，使用object标签代替iframe
+                                const object = document.createElement('object');
+                                object.className = 'pdf-preview';
+                                object.style.border = 'none';
+                                object.style.width = '100%';
+                                object.style.maxWidth = '100%';
+                                object.style.display = 'block';
+                                object.style.overflow = 'hidden';
+                                object.style.height = '70vh';
+                                object.style.minHeight = '400px';
+                                object.style.maxHeight = '800px';
+                                object.style.transition = 'height 0.3s ease';
+                                object.setAttribute('data', url);
+                                object.setAttribute('type', 'application/pdf');
+
+                                // 添加data属性用于调试
+                                object.setAttribute('data-pdf-viewer', 'true');
+                                object.setAttribute('data-time', Date.now().toString());
+
+                                // 添加错误处理
+                                let isLoaded = false;
+                                let loadTimeout;
+
+                                const showError = (message) => {
+                                    if (!isLoaded) {
+                                        isLoaded = true;
+                                        clearTimeout(loadTimeout);
+                                        console.error('PDF加载错误:', message);
+                                        placeholder.innerHTML = '<div class="file-too-large">❌ ' + message + '</div><div style="margin-top:10px;"><a href="' + url + '" download style="color:var(--accent);">点击下载PDF</a></div>';
+                                    }
+                                };
+
+                                object.onerror = () => {
+                                    console.error('object onerror triggered');
+                                    showError('PDF加载失败');
+                                };
+
+                                // object元素没有onload事件，使用onloadend
+                                object.onload = () => {
+                                    isLoaded = true;
+                                    clearTimeout(loadTimeout);
+                                    console.log('PDF加载成功:', url);
+                                };
+
+                                // 设置15秒超时
+                                loadTimeout = setTimeout(() => {
+                                    if (!isLoaded) {
+                                        console.warn('PDF加载超时:', url);
+                                        showError('PDF加载超时，请尝试下载查看');
+                                    }
+                                }, 15000);
+
+                                // 替换占位符
+                                placeholder.replaceWith(object);
+                            } catch (error) {
+                                console.error('PDF加载错误:', error);
+                                placeholder.innerHTML = '<div class="file-too-large">❌ 加载失败，请尝试下载查看</div><div style="margin-top:10px;"><a href="' + url + '" download style="color:var(--accent);">点击下载PDF</a></div>';
+                            }
+                        };
+
+                        previewEl = placeholder;
                     }
+                    // 视频文件处理：添加懒加载
+                    else if(['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+                        // 创建视频占位符
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'media-placeholder';
+                        placeholder.innerHTML = '<div class="media-placeholder-icon">🎬</div><div class="media-placeholder-text">点击加载视频</div>';
+
+                        // 点击加载视频
+                        placeholder.onclick = async () => {
+                            try {
+                                // 检查文件大小
+                                const maxSize = ${attachmentConfig.videoMaxSize} * 1024 * 1024;
+                                const response = await fetch(url, { method: 'HEAD' });
+                                const size = parseInt(response.headers.get('content-length'));
+
+                                if (size > maxSize) {
+                                    alert('视频文件过大（' + (size / 1024 / 1024).toFixed(2) + 'MB），建议下载查看');
+                                    return;
+                                }
+
+                                const video = document.createElement('video');
+                                video.controls = true;
+                                video.src = url;
+                                video.style.width = '100%';
+                                video.style.maxWidth = '100%';
+                                video.style.height = 'auto';
+                                video.style.display = 'block';
+                                placeholder.replaceWith(video);
+                            } catch (error) {
+                                alert('加载视频失败: ' + error.message);
+                            }
+                        };
+
+                        previewEl = placeholder;
+                    }
+                    // 音频文件处理：添加懒加载
+                    else if(['mp3', 'wav', 'm4a', 'aac'].includes(ext)) {
+                        // 创建音频占位符
+                        const placeholder = document.createElement('div');
+                        placeholder.className = 'media-placeholder';
+                        placeholder.innerHTML = '<div class="media-placeholder-icon">🎵</div><div class="media-placeholder-text">点击加载音频</div>';
+
+                        // 点击加载音频
+                        placeholder.onclick = async () => {
+                            try {
+                                // 检查文件大小
+                                const maxSize = ${attachmentConfig.audioMaxSize} * 1024 * 1024;
+                                const response = await fetch(url, { method: 'HEAD' });
+                                const size = parseInt(response.headers.get('content-length'));
+
+                                if (size > maxSize) {
+                                    alert('音频文件过大（' + (size / 1024 / 1024).toFixed(2) + 'MB），建议下载查看');
+                                    return;
+                                }
+
+                                const audio = document.createElement('audio');
+                                audio.controls = true;
+                                audio.src = url;
+                                audio.style.width = '100%';
+                                audio.style.maxWidth = '100%';
+                                audio.style.display = 'block';
+                                placeholder.replaceWith(audio);
+                            } catch (error) {
+                                alert('加载音频失败: ' + error.message);
+                            }
+                        };
+
+                        previewEl = placeholder;
+                    }
+
                     if(previewEl) {
                         const wrapper = document.createElement('div');
                         wrapper.className = 'attachment-preview';
                         wrapper.innerHTML = '<div class="attachment-info"><span class="attachment-name">📄 ' + fileName + '</span><a class="dl-link" href="' + url + '" download>下载原文</a></div>';
                         wrapper.appendChild(previewEl);
                         a.parentNode.replaceChild(wrapper, a);
+
+                        // 如果需要懒加载，设置Intersection Observer
+                        if (shouldLazyLoad && 'IntersectionObserver' in window) {
+                            const observer = new IntersectionObserver((entries) => {
+                                entries.forEach(entry => {
+                                    if (entry.isIntersecting) {
+                                        // 如果配置为自动加载，则点击占位符
+                                        if (autoLoad) {
+                                            const placeholder = entry.target.querySelector('.pdf-placeholder, .media-placeholder');
+                                            if (placeholder) {
+                                                placeholder.click();
+                                            }
+                                        }
+                                        observer.unobserve(entry.target);
+                                    }
+                                });
+                            }, { threshold: 0.1 });
+                            observer.observe(wrapper);
+                        } else if (autoLoad) {
+                            // 如果不支持Intersection Observer但配置为自动加载，直接点击
+                            const placeholder = wrapper.querySelector('.pdf-placeholder, .media-placeholder');
+                            if (placeholder) {
+                                setTimeout(() => placeholder.click(), 100);
+                            }
+                        }
                     } else {
                         if(url.startsWith('/uploads/') || url.startsWith('http')) {
                            a.style.color = '#58a6ff';
@@ -907,6 +1186,9 @@ const UIManager = {
 
         this._lastActiveId = newId;
         this.activeId = newId;
+
+        // 切换笔记时清除标记
+        this.clearMarker();
 
         const n = this.notes.find(x => x.id.toString() === this.activeId);
 
@@ -1335,6 +1617,503 @@ const UIManager = {
         }
     },
 
+    // 设置标记起始位置
+    setMarkerStart() {
+        if (!this.editor) {
+            this.updateStatus('error', '请先打开笔记');
+            return;
+        }
+
+        try {
+            // 清除之前的标记高亮
+            this.clearMarkerHighlights();
+
+            // 获取当前光标位置
+            const cursor = this.editor.getCursor();
+            if (cursor) {
+                this.markerStart = { ...cursor };
+                this.markerActive = true;
+
+                // 如果有之前的结束标记，清除它
+                if (this.markerEnd) {
+                    this.markerEnd = null;
+                }
+
+                // 显示标记信息
+                this.updateStatus('success', `📍 标记起: 行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`);
+
+                // 如果已经有标记结束位置（理论上不会，但保留逻辑），则直接选择区域
+                if (this.markerEnd) {
+                    this.selectMarkerRange();
+                }
+
+                // 高亮显示标记起始行
+                this.highlightMarkerLine(cursor.line, 'start');
+
+                // 更新按钮状态
+                this.updateMarkerButtonState('start');
+            }
+        } catch (error) {
+            console.error('设置标记起始位置失败:', error);
+            this.updateStatus('error', '设置标记起始位置失败');
+        }
+    },
+
+    // 设置标记结束位置
+    setMarkerEnd() {
+        if (!this.editor) {
+            this.updateStatus('error', '请先打开笔记');
+            return;
+        }
+
+        try {
+            // 获取当前光标位置
+            const cursor = this.editor.getCursor();
+            if (cursor) {
+                this.markerEnd = { ...cursor };
+
+                // 如果有标记起始位置，则选择区域
+                if (this.markerStart) {
+                    // 显示标记信息
+                    this.updateStatus('success', `🏁 标记终: 行 ${cursor.line + 1}, 列 ${cursor.ch + 1}`);
+                    this.selectMarkerRange();
+
+                    // 高亮显示标记结束行
+                    this.highlightMarkerLine(cursor.line, 'end');
+
+                    // 更新按钮状态
+                    this.updateMarkerButtonState('end');
+                } else {
+                    this.updateStatus('warning', '⚠️ 请先设置标记起始位置');
+                    this.markerEnd = null;
+                }
+            }
+        } catch (error) {
+            console.error('设置标记结束位置失败:', error);
+            this.updateStatus('error', '设置标记结束位置失败');
+        }
+    },
+
+    // 选择标记区域
+    selectMarkerRange() {
+        if (!this.markerStart || !this.markerEnd || !this.editor) {
+            return;
+        }
+
+        try {
+            // 先使用 CodeMirror 的原生 setSelection 方法
+            // 检查编辑器是否有原生方法
+            if (this.editor._editor && this.editor._editor.setSelection) {
+                const from = {
+                    line: this.markerStart.line,
+                    ch: this.markerStart.ch
+                };
+                const to = {
+                    line: this.markerEnd.line,
+                    ch: this.markerEnd.ch
+                };
+
+                // 使用原生 CodeMirror setSelection
+                this.editor._editor.setSelection(from, to);
+
+                // 滚动到选择区域
+                this.editor._editor.scrollIntoView(from, 100);
+
+                // 获取选中的文本
+                const selectedText = this.editor.getSelection();
+                const textLength = selectedText ? selectedText.length : 0;
+
+                // 显示选择信息
+                const lineCount = Math.abs(to.line - from.line) + 1;
+                this.updateStatus('success', `已选择 ${lineCount} 行, ${textLength} 个字符`);
+
+                // 高亮显示标记区域
+                this.highlightMarkerRange(from, to);
+            } else {
+                // 降级方案: 使用适配器的 setSelection (需要索引)
+                const content = this.editor.getValue();
+                const lines = content.split('\n');
+
+                // 计算 from 的索引
+                let fromIndex = 0;
+                for (let i = 0; i < this.markerStart.line; i++) {
+                    fromIndex += (lines[i] || '').length + 1; // +1 是换行符
+                }
+                fromIndex += this.markerStart.ch;
+
+                // 计算 to 的索引
+                let toIndex = 0;
+                for (let i = 0; i < this.markerEnd.line; i++) {
+                    toIndex += (lines[i] || '').length + 1;
+                }
+                toIndex += this.markerEnd.ch;
+
+                // 使用适配器的 setSelection
+                this.editor.setSelection(fromIndex, toIndex);
+
+                // 显示选择信息
+                const selectedText = this.editor.getSelection();
+                const textLength = selectedText ? selectedText.length : 0;
+                const lineCount = Math.abs(this.markerEnd.line - this.markerStart.line) + 1;
+                this.updateStatus('success', `已选择 ${lineCount} 行, ${textLength} 个字符`);
+            }
+        } catch (error) {
+            console.error('选择标记区域失败:', error);
+            this.updateStatus('error', '选择标记区域失败');
+        }
+    },
+
+    // 高亮显示标记行
+    highlightMarkerLine(line, type) {
+        if (!this.editor) return;
+
+        try {
+            // 添加临时标记类
+            this.editor.addLineClass(line, 'background', `marker-${type}`);
+
+            // 清除之前的定时器（如果存在）
+            if (this.markerTimeouts[`line-${line}-${type}`]) {
+                clearTimeout(this.markerTimeouts[`line-${line}-${type}`]);
+            }
+
+            // 标记起始行高亮持续显示（不自动清除）
+            // 标记结束行高亮持续显示（不自动清除）
+        } catch (error) {
+            console.error('高亮标记行失败:', error);
+        }
+    },
+
+    // 高亮显示标记区域
+    highlightMarkerRange(from, to) {
+        if (!this.editor) return;
+
+        try {
+            // 清除之前的区域高亮
+            const existingMarks = this.editor.getAllMarks ? this.editor.getAllMarks() : [];
+            existingMarks.forEach(mark => {
+                if (mark.className === 'marker-highlight') {
+                    mark.clear();
+                }
+            });
+
+            // 清除之前的定时器
+            if (this.markerTimeouts['range']) {
+                clearTimeout(this.markerTimeouts['range']);
+            }
+
+            // 使用编辑器的选择标记功能
+            const textMark = this.editor.markText(from, to, {
+                className: 'marker-highlight',
+                clearOnEnter: false
+            });
+
+            // 保存标记引用,不清除区域高亮(让用户手动清除或操作时清除)
+            this._currentRangeMark = textMark;
+        } catch (error) {
+            console.error('高亮标记区域失败:', error);
+        }
+    },
+
+    // 清除标记高亮
+    clearMarkerHighlights() {
+        if (!this.editor) return;
+
+        try {
+            // 清除行高亮
+            if (this.markerStart) {
+                this.editor.removeLineClass(this.markerStart.line, 'background', 'marker-start');
+            }
+            if (this.markerEnd) {
+                this.editor.removeLineClass(this.markerEnd.line, 'background', 'marker-end');
+            }
+
+            // 清除区域高亮
+            const marks = this.editor.getAllMarks ? this.editor.getAllMarks() : [];
+            marks.forEach(mark => {
+                if (mark.className === 'marker-highlight') {
+                    mark.clear();
+                }
+            });
+        } catch (error) {
+            console.error('清除标记高亮失败:', error);
+        }
+    },
+
+    // 更新标记按钮状态
+    updateMarkerButtonState(type) {
+        const startBtn = document.querySelector('button[onclick="ui.setMarkerStart()"]');
+        const endBtn = document.querySelector('button[onclick="ui.setMarkerEnd()"]');
+
+        if (!startBtn || !endBtn) return;
+
+        // 重置按钮样式
+        startBtn.style.background = '';
+        startBtn.style.borderColor = '';
+        endBtn.style.background = '';
+        endBtn.style.borderColor = '';
+
+        // 根据状态更新
+        if (type === 'start' || (this.markerStart && !this.markerEnd)) {
+            startBtn.style.background = 'rgba(34, 197, 94, 0.2)';
+            startBtn.style.borderColor = '#22c55e';
+        } else if (type === 'end' || (this.markerStart && this.markerEnd)) {
+            endBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+            endBtn.style.borderColor = '#ef4444';
+            startBtn.style.background = 'rgba(34, 197, 94, 0.2)';
+            startBtn.style.borderColor = '#22c55e';
+        }
+    },
+
+    // 清除标记
+    clearMarker() {
+        // 清除标记数据
+        this.markerStart = null;
+        this.markerEnd = null;
+        this.markerActive = false;
+
+        // 清除所有高亮
+        this.clearMarkerHighlights();
+
+        // 清除定时器
+        Object.values(this.markerTimeouts).forEach(timer => clearTimeout(timer));
+        this.markerTimeouts = {};
+
+        // 更新状态和按钮
+        this.updateStatus('idle', '标记已清除');
+        this.updateMarkerButtonState('clear');
+    },
+
+    // 复制标记区域
+    async copyMarkerRange() {
+        if (!this.markerStart || !this.markerEnd || !this.editor) {
+            this.updateStatus('warning', '请先设置标记区域');
+            return;
+        }
+
+        try {
+            // 选择标记区域
+            this.selectMarkerRange();
+
+            // 获取选中的文本
+            const selectedText = this.editor.getSelection();
+            if (!selectedText) {
+                this.updateStatus('warning', '没有选中的文本');
+                return;
+            }
+
+            // 使用现代 Clipboard API 复制
+            try {
+                await navigator.clipboard.writeText(selectedText);
+                this.updateStatus('success', `已复制 ${selectedText.length} 个字符`);
+            } catch (clipboardError) {
+                // 降级方案: 使用 execCommand
+                try {
+                    document.execCommand('copy');
+                    this.updateStatus('success', `已复制 ${selectedText.length} 个字符`);
+                } catch (execError) {
+                    console.error('复制失败:', execError);
+                    this.updateStatus('error', '复制失败,请手动复制');
+                }
+            }
+        } catch (error) {
+            console.error('复制标记区域失败:', error);
+            this.updateStatus('error', '复制标记区域失败');
+        }
+    },
+
+    // 剪切标记区域
+    cutMarkerRange() {
+        if (!this.markerStart || !this.markerEnd || !this.editor) {
+            this.updateStatus('warning', '请先设置标记区域');
+            return;
+        }
+
+        try {
+            // 选择标记区域
+            this.selectMarkerRange();
+
+            // 剪切选中的文本
+            this.execCommand('cut');
+            this.clearMarker();
+            this.updateStatus('success', '已剪切标记区域');
+        } catch (error) {
+            console.error('剪切标记区域失败:', error);
+            this.updateStatus('error', '剪切标记区域失败');
+        }
+    },
+
+    // 删除标记区域
+    deleteMarkerRange() {
+        if (!this.markerStart || !this.markerEnd || !this.editor) {
+            this.updateStatus('warning', '请先设置标记区域');
+            return;
+        }
+
+        try {
+            // 选择标记区域
+            this.selectMarkerRange();
+
+            // 删除选中的文本
+            this.editor.replaceSelection('');
+            this.clearMarker();
+            this.updateStatus('success', '已删除标记区域');
+        } catch (error) {
+            console.error('删除标记区域失败:', error);
+            this.updateStatus('error', '删除标记区域失败');
+        }
+    },
+
+    // 执行编辑器命令
+    execCommand(command) {
+        if (!this.editor) return;
+
+        try {
+            // CodeMirror方式
+            if (this.editor.execCommand) {
+                this.editor.execCommand(command);
+            }
+            // 浏览器原生方式
+            else {
+                document.execCommand(command);
+            }
+        } catch (error) {
+            console.error('执行命令失败:', error);
+        }
+    },
+
+    // 设置标记快捷键
+    setupMarkerShortcuts() {
+        if (!this.editor) return;
+
+        try {
+            // 获取编辑器的DOM元素
+            const editorElement = this.editor.getWrapperElement();
+            if (!editorElement) return;
+
+            // 移除旧的监听器（如果存在）
+            if (this._markerKeyHandler) {
+                editorElement.removeEventListener('keydown', this._markerKeyHandler);
+            }
+
+            // 创建键盘事件处理器
+            this._markerKeyHandler = (e) => {
+                // F1 显示快捷键
+                if (e.key === 'F1') {
+                    e.preventDefault();
+                    this.showShortcuts();
+                    return;
+                }
+
+                // 检测是否是 Mac 系统
+                const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+                const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+
+                // Ctrl+Z / Cmd+Z 撤销
+                if (modifierKey && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.undo();
+                    return;
+                }
+
+                // Ctrl+Y / Cmd+Shift+Z 重做（Windows用Y，Mac用Shift+Z）
+                if (modifierKey && (e.key.toLowerCase() === 'y' || (isMac && e.shiftKey && e.key.toLowerCase() === 'z'))) {
+                    e.preventDefault();
+                    this.redo();
+                    return;
+                }
+
+                // Ctrl+B / Cmd+B 切换侧边栏
+                if (modifierKey && e.key.toLowerCase() === 'b') {
+                    e.preventDefault();
+                    this.toggleSidebar();
+                    return;
+                }
+
+                // Alt+[ 设置标记起始位置（避免与输入法冲突）
+                if (e.altKey && e.key === '[') {
+                    e.preventDefault();
+                    this.setMarkerStart();
+                    return;
+                }
+
+                // Alt+] 设置标记结束位置（避免与输入法冲突）
+                if (e.altKey && e.key === ']') {
+                    e.preventDefault();
+                    this.setMarkerEnd();
+                    return;
+                }
+
+                // Cmd/Ctrl+Shift+C 复制标记区域
+                if (modifierKey && e.shiftKey && e.key === 'C') {
+                    e.preventDefault();
+                    this.copyMarkerRange();
+                    return;
+                }
+
+                // Cmd/Ctrl+Shift+X 剪切标记区域
+                if (modifierKey && e.shiftKey && e.key === 'X') {
+                    e.preventDefault();
+                    this.cutMarkerRange();
+                    return;
+                }
+
+                // Cmd/Ctrl+Shift+D 删除标记区域
+                if (modifierKey && e.shiftKey && e.key === 'D') {
+                    e.preventDefault();
+                    this.deleteMarkerRange();
+                    return;
+                }
+
+                // Escape 清除标记
+                if (e.key === 'Escape') {
+                    this.clearMarker();
+                    return;
+                }
+            };
+
+            // 添加键盘监听器
+            editorElement.addEventListener('keydown', this._markerKeyHandler);
+
+            console.log('[UI] 标记快捷键已设置 (Mac: Cmd+, Windows: Ctrl+)');
+        } catch (error) {
+            console.error('设置标记快捷键失败:', error);
+        }
+    },
+
+    // 清除标记快捷键
+    cleanupMarkerShortcuts() {
+        if (!this.editor || !this._markerKeyHandler) return;
+
+        try {
+            const editorElement = this.editor.getWrapperElement();
+            if (editorElement) {
+                editorElement.removeEventListener('keydown', this._markerKeyHandler);
+            }
+            this._markerKeyHandler = null;
+            console.log('[UI] 标记快捷键已清除');
+        } catch (error) {
+            console.error('清除标记快捷键失败:', error);
+        }
+    },
+
+    // 显示快捷键提示
+    showShortcuts() {
+        const modal = document.getElementById('shortcuts-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            console.log('[UI] 显示快捷键提示');
+        }
+    },
+
+    // 隐藏快捷键提示
+    hideShortcuts() {
+        const modal = document.getElementById('shortcuts-modal');
+        if (modal) {
+            modal.style.display = 'none';
+            console.log('[UI] 隐藏快捷键提示');
+        }
+    },
+
     // 加载用户信息
     _isLoadingUserInfo: false,
 
@@ -1395,6 +2174,15 @@ const UIManager = {
                 const filePercent = Math.min((fileSize / data.fileLimit) * 100, 100);
                 fileUsage.textContent = `${Math.round(fileSize)}MB/${Math.round(data.fileLimit)}MB`;
                 fileBar.style.width = `${filePercent}%`;
+            }
+
+            // 更新附件预览配置
+            if (data.attachmentPreviewConfig) {
+                this.attachmentPreviewConfig = {
+                    ...this.attachmentPreviewConfig,
+                    ...data.attachmentPreviewConfig
+                };
+                console.log('[UI] 附件预览配置已更新:', this.attachmentPreviewConfig);
             }
         } catch (e) {
             console.error('加载用户信息失败:', e);

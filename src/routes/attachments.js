@@ -427,11 +427,42 @@ router.get('/api/attachments/raw/:filename(*)', async (req, res) => {
     }
 
     try { await fs.access(filePath); } catch (err) { return res.status(404).send('Not found'); }
+
+    // 清除可能冲突的安全头
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+
+    // 设置适当的响应头以支持iframe嵌入
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // 允许同源iframe嵌入
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'"); // 允许同源嵌入
+
+    // 设置CORS头
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    console.log('[PDF] 发送文件:', filePath, 'X-Frame-Options:', res.getHeader('X-Frame-Options'));
+
     return res.sendFile(filePath);
-  } catch (err) { 
-    console.error('[attachments/raw] error', err); 
-    return res.status(500).send('Server error'); 
+  } catch (err) {
+    console.error('[attachments/raw] error', err);
+    return res.status(500).send('Server error');
   }
+});
+
+// 测试路由 - 检查响应头
+router.get('/api/attachments/test-headers', (req, res) => {
+  res.json({
+    message: '测试响应头',
+    headers: {
+      'X-Frame-Options': res.getHeader('X-Frame-Options'),
+      'Content-Security-Policy': res.getHeader('Content-Security-Policy'),
+    }
+  });
 });
 
 module.exports = router;

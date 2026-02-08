@@ -4,6 +4,8 @@ const { getUserFileSize } = require('../utils/helpers');
 const log = require('../utils/logger');
 const { broadcastNoteUpdate, broadcastNoteDelete, broadcastNotesUpdate } = require('./sse');
 const { broadcastNoteUpdate: wsBroadcastNoteUpdate, broadcastNoteDelete: wsBroadcastNoteDelete } = require('./ws');
+const { getSystemConfig } = require('../services/systemConfig');
+const config = require('../config');
 
 const router = express.Router();
 
@@ -24,10 +26,24 @@ router.get('/api/user-info', async (req, res) => {
     const fileSizeBytes = await getUserFileSize(req.user);
     const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(2);
 
-    const config = require('../config');
     const isAdmin = config.adminUsers.includes(req.user);
 
-    res.json({ ...user, noteUsage: noteSizeMB, fileUsage: fileSizeMB, isAdmin });
+    // 获取附件预览配置
+    const attachmentPreviewConfig = {
+      pdfMaxSize: parseInt(await getSystemConfig('pdfMaxSize')) || config.attachmentPreview.pdfMaxSize,
+      videoMaxSize: parseInt(await getSystemConfig('videoMaxSize')) || config.attachmentPreview.videoMaxSize,
+      audioMaxSize: parseInt(await getSystemConfig('audioMaxSize')) || config.attachmentPreview.audioMaxSize,
+      lazyLoad: (await getSystemConfig('attachmentLazyLoad')) !== 'false',
+      autoLoad: (await getSystemConfig('attachmentAutoLoad')) === 'true',
+    };
+
+    res.json({
+      ...user,
+      noteUsage: noteSizeMB,
+      fileUsage: fileSizeMB,
+      isAdmin,
+      attachmentPreviewConfig
+    });
   } catch (e) {
     res.status(500).json({ error: "系统内部错误" });
   }

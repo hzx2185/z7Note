@@ -110,11 +110,20 @@ const APIManager = {
         if (ui.editor.getCursorPos) {
             // CodeMirror 适配器
             insertIndex = ui.editor.getCursorPos();
+            // 获取选择结束位置，如果没有选择则等于插入位置
             selEnd = ui.editor.selectionEnd !== undefined ? ui.editor.selectionEnd : insertIndex;
+            // 确保 selEnd 不小于 insertIndex
+            if (selEnd < insertIndex) {
+                selEnd = insertIndex;
+            }
         } else if (ui.editor.selectionStart !== undefined) {
             // 普通 textarea
             insertIndex = ui.editor.selectionStart;
             selEnd = ui.editor.selectionEnd;
+            // 确保 selEnd 不小于 insertIndex
+            if (selEnd < insertIndex) {
+                selEnd = insertIndex;
+            }
         } else {
             // 文件末尾
             insertIndex = (ui.editor.getValue() || '').length;
@@ -163,11 +172,20 @@ const APIManager = {
         if (ui.editor.getCursorPos) {
             // CodeMirror 适配器
             insertIndex = ui.editor.getCursorPos();
+            // 获取选择结束位置，如果没有选择则等于插入位置
             selEnd = ui.editor.selectionEnd !== undefined ? ui.editor.selectionEnd : insertIndex;
+            // 确保 selEnd 不小于 insertIndex
+            if (selEnd < insertIndex) {
+                selEnd = insertIndex;
+            }
         } else if (ui.editor.selectionStart !== undefined) {
             // 普通 textarea
             insertIndex = ui.editor.selectionStart;
             selEnd = ui.editor.selectionEnd;
+            // 确保 selEnd 不小于 insertIndex
+            if (selEnd < insertIndex) {
+                selEnd = insertIndex;
+            }
         } else {
             // 文件末尾
             insertIndex = (ui.editor.getValue() || '').length;
@@ -1074,9 +1092,17 @@ const APIManager = {
             if (ui.editor.getCursorPos) {
                 // CodeMirror 适配器 - 直接使用 getCursorPos 获取光标索引
                 insertIndex = ui.editor.getCursorPos();
+                // 确保 insertIndex 不超出文本长度
+                const textLength = (ui.editor.getValue() || '').length;
+                if (insertIndex < 0) insertIndex = 0;
+                if (insertIndex > textLength) insertIndex = textLength;
             } else if (ui.editor.selectionStart !== undefined) {
                 // 普通 textarea
                 insertIndex = ui.editor.selectionStart;
+                // 确保 insertIndex 不超出文本长度
+                const textLength = (ui.editor.getValue() || '').length;
+                if (insertIndex < 0) insertIndex = 0;
+                if (insertIndex > textLength) insertIndex = textLength;
             } else {
                 // 文件末尾
                 insertIndex = (ui.editor.getValue() || '').length;
