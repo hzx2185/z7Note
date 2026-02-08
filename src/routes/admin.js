@@ -5,7 +5,7 @@ const fs = require('fs').promises;
 const { getConnection } = require('../db/connection');
 const { getUserFileSize } = require('../utils/helpers');
 const { createBackupArchive } = require('../services/backup');
-const { updateAllResources, getCDNBaseUrl, setCDNBaseUrl } = require('../services/cdnProxy');
+const { updateAllResources, getCDNBaseUrl, setCDNBaseUrl, getCDNStatus, clearCache } = require('../services/cdnProxy');
 const { getAllSystemConfig, setMultipleSystemConfig, deleteSystemConfig, initDefaultConfig } = require('../services/systemConfig');
 const { cleanupExpiredSessions } = require('../services/chunkUpload');
 const config = require('../config');
@@ -233,6 +233,27 @@ router.post('/api/admin/cdn/config', async (req, res) => {
     setCDNBaseUrl(baseUrl);
     log('INFO', '管理员修改 CDN 配置', { updatedBy: req.user, baseUrl });
     res.json({ status: "ok", baseUrl });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 获取 CDN 状态
+router.get('/api/admin/cdn/status', async (req, res) => {
+  try {
+    const status = await getCDNStatus();
+    res.json({ status: "ok", resources: status });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 清理 CDN 缓存
+router.post('/api/admin/cdn/clear', async (req, res) => {
+  try {
+    const result = await clearCache();
+    log('INFO', '管理员清理 CDN 缓存', { updatedBy: req.user, result });
+    res.json({ status: "ok", ...result });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

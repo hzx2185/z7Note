@@ -60,7 +60,7 @@ async function createTables() {
     expires INTEGER
   )`);
 
-  // 备份配置表
+  // 备份配置表（管理员）
   await db.exec(`CREATE TABLE IF NOT EXISTS backup_config (
     id INTEGER PRIMARY KEY,
     schedule TEXT,
@@ -72,6 +72,22 @@ async function createTables() {
     webdavUrl TEXT,
     webdavUser TEXT,
     webdavPassword TEXT
+  )`);
+
+  // 用户备份配置表
+  await db.exec(`CREATE TABLE IF NOT EXISTS user_backup_config (
+    username TEXT PRIMARY KEY,
+    enabled INTEGER DEFAULT 0,
+    schedule TEXT DEFAULT '0 20 * * *',
+    sendEmail INTEGER DEFAULT 1,
+    emailAddress TEXT,
+    webdavUrl TEXT,
+    webdavUsername TEXT,
+    webdavPassword TEXT,
+    includeAttachments INTEGER DEFAULT 1,
+    lastBackupTime INTEGER DEFAULT 0,
+    createdAt INTEGER DEFAULT (strftime('%s', 'now')),
+    updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
   )`);
 
   // 初始化默认备份配置（每天凌晨3点）
@@ -133,6 +149,7 @@ async function createTables() {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_expires_at ON shares(expiresAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_username ON upload_chunks(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_expires ON upload_chunks(expiresAt)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_backup_config_enabled ON user_backup_config(enabled)`);
 
   // 检查并添加新列
   await migrateSchema();

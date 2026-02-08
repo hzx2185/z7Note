@@ -106,20 +106,39 @@ function downloadFile(url, localPath) {
     const protocol = url.startsWith('https') ? https : http;
     const file = require('fs').createWriteStream(localPath);
 
+    // 设置超时
+    const timeout = setTimeout(() => {
+      file.destroy();
+      fs.unlink(localPath).catch(() => {});
+      reject(new Error('下载超时（30秒）'));
+    }, 30000); // 30秒超时
+
     protocol.get(url, (response) => {
       if (response.statusCode !== 200) {
-        reject(new Error(`下载失败: ${response.statusCode}`));
+        clearTimeout(timeout);
+        file.destroy();
+        fs.unlink(localPath).catch(() => {});
+        reject(new Error(`下载失败: HTTP ${response.statusCode}`));
         return;
       }
 
       response.pipe(file);
       file.on('finish', () => {
+        clearTimeout(timeout);
         file.close();
         resolve();
       });
+
+      file.on('error', (err) => {
+        clearTimeout(timeout);
+        fs.unlink(localPath).catch(() => {});
+        reject(err);
+      });
     }).on('error', (err) => {
+      clearTimeout(timeout);
+      file.destroy();
       fs.unlink(localPath).catch(() => {});
-      reject(err);
+      reject(new Error(`网络请求失败: ${err.message}`));
     });
   });
 }
@@ -185,6 +204,8 @@ function createProxyMiddleware() {
   return async (req, res, next) => {
     const fileName = req.params.file;
 
+    console.log(`[CDN Proxy] 收到请求: /cdn/${fileName}`);
+
     // 处理 source map 文件请求
     if (fileName.endsWith('.map')) {
       const baseFileName = fileName.replace('.map', '');
@@ -194,6 +215,8 @@ function createProxyMiddleware() {
         const mapUrl = typeof resource.url === 'function' ? resource.url() + '.map' : resource.url + '.map';
         const protocol = mapUrl.startsWith('https') ? https : http;
 
+        console.log(`[CDN Proxy] 处理 source map: ${mapUrl}`);
+
         protocol.get(mapUrl, (mapRes) => {
           if (mapRes.statusCode === 200) {
             res.setHeader('Content-Type', 'application/json');
@@ -202,9 +225,11 @@ function createProxyMiddleware() {
             res.setHeader('Expires', '0');
             mapRes.pipe(res);
           } else {
+            console.error(`[CDN Proxy] Source map 下载失败: ${mapRes.statusCode}`);
             res.status(404).send('Source map not found');
           }
-        }).on('error', () => {
+        }).on('error', (err) => {
+          console.error(`[CDN Proxy] Source map 请求错误:`, err);
           res.status(404).send('Source map not found');
         });
         return;
@@ -214,6 +239,7 @@ function createProxyMiddleware() {
     const resource = CDN_RESOURCES.find(r => r.localPath === fileName);
 
     if (!resource) {
+      console.log(`[CDN Proxy] 资源未找到: ${fileName}`);
       return next();
     }
 
@@ -238,17 +264,23 @@ function createProxyMiddleware() {
         });
       }
 
-      // 禁用缓存
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      res.setHeader('Content-Type', fileName.endsWith('.css') ? 'text/css' : 'application/javascript');
+      // 设置正确的 Content-Type
+      const contentType = fileName.endsWith('.css') ? 'text/css; charset=utf-8' : 'application/javascript; charset=utf-8';
+      res.setHeader('Content-Type', contentType);
 
-      // 发送文件
-      res.sendFile(localPath);
+      // 设置缓存策略（短期缓存，允许验证）
+      res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+
+      // 读取文件并手动发送，避免 res.sendFile 的问题
+      const fileContent = await fs.readFile(localPath);
+      res.setHeader('Content-Length', fileContent.length);
+      res.send(fileContent);
+
+      console.log(`[CDN Proxy] ${resource.name} 服务成功 (${(fileContent.length / 1024).toFixed(2)}KB)`);
     } catch (err) {
       console.error(`[CDN Proxy] 服务 ${resource.name} 失败:`, err);
-      res.status(500).send('CDN 资源加载失败');
+      console.error(`[CDN Proxy] 错误堆栈:`, err.stack);
+      res.status(500).json({ error: 'CDN 资源加载失败', file: fileName, message: err.message });
     }
   };
 }
@@ -276,6 +308,51 @@ function setCDNBaseUrl(url) {
   console.log('[CDN Proxy] CDN 基础 URL 已更新为:', CDN_BASE_URL);
 }
 
+// 获取 CDN 资源状态
+async function getCDNStatus() {
+  const status = [];
+  for (const resource of CDN_RESOURCES) {
+    const localPath = path.join(CACHE_DIR, resource.localPath);
+    try {
+      const stats = await fs.stat(localPath);
+      status.push({
+        name: resource.name,
+        file: resource.localPath,
+        size: stats.size,
+        lastModified: stats.mtime,
+        isValid: await isFileValid(localPath)
+      });
+    } catch (err) {
+      status.push({
+        name: resource.name,
+        file: resource.localPath,
+        error: '文件不存在'
+      });
+    }
+  }
+  return status;
+}
+
+// 清理缓存
+async function clearCache() {
+  try {
+    const files = await fs.readdir(CACHE_DIR);
+    let deletedCount = 0;
+
+    for (const file of files) {
+      const filePath = path.join(CACHE_DIR, file);
+      await fs.unlink(filePath);
+      deletedCount++;
+    }
+
+    console.log(`[CDN Proxy] 清理缓存完成: 删除 ${deletedCount} 个文件`);
+    return { success: true, deletedCount };
+  } catch (err) {
+    console.error(`[CDN Proxy] 清理缓存失败:`, err);
+    throw err;
+  }
+}
+
 module.exports = {
   initCacheDir,
   updateAllResources,
@@ -283,5 +360,7 @@ module.exports = {
   setupAutoUpdate,
   getCDNBaseUrl,
   setCDNBaseUrl,
+  getCDNStatus,
+  clearCache,
   CDN_RESOURCES
 };

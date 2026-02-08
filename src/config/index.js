@@ -76,6 +76,9 @@ const config = {
   // 管理员用户
   adminUsers: (process.env.ADMIN_USER || 'admin').split(',').map(u => u.trim()),
 
+  // 每日备份限制 (0=不限制, 1=每天1次)
+  dailyBackupLimit: parseInt(process.env.DAILY_BACKUP_LIMIT) || 1,
+
   // 限流配置（兼容旧配置）
   rateLimit: {
     windowMs: 60000,

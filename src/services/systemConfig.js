@@ -24,6 +24,7 @@ const DEFAULT_CONFIG = {
   audioMaxSize: { value: '20', description: '音频最大预览大小(MB)' },
   attachmentLazyLoad: { value: 'true', description: '是否启用附件懒加载' },
   attachmentAutoLoad: { value: 'false', description: '是否自动加载附件预览（点击加载）' },
+  dailyBackupLimit: { value: '1', description: '每日备份限制(0=不限制, 1=每天1次)' },
 };
 
 /**

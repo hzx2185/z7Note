@@ -100,7 +100,9 @@ const CodeMirrorAdapter = {
             autofocus: true,
             viewportMargin: 20,
             gutters: showLineNumbers ? ['CodeMirror-linenumbers', 'CodeMirror-activeline-gutter'] : ['CodeMirror-activeline-gutter'],
-            styleActiveLine: true
+            styleActiveLine: true,
+            // 使用 passive 事件监听器以提高性能
+            inputStyle: 'textarea'
         });
 
         // 防抖函数

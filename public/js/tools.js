@@ -673,115 +673,453 @@ async function loadBackupConfig() {
     try {
         console.log('[备份配置] 开始加载配置...');
         const res = await fetch('/api/user/backup/config');
-        if (!res.ok) throw new Error('加载配置失败');
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || '加载配置失败');
+        }
+
         const config = await res.json();
         console.log('[备份配置] 加载到的配置:', config);
 
         // 填充表单
-        if (document.getElementById('backup-enabled')) {
-            document.getElementById('backup-enabled').checked = config.enabled;
-            document.getElementById('backup-schedule').value = config.schedule || '0 20 * * *';
-            document.getElementById('backup-webdav-url').value = config.webdavUrl || '';
-            document.getElementById('backup-webdav-username').value = config.webdavUsername || '';
-            document.getElementById('backup-webdav-password').value = config.webdavPassword || '';
-            document.getElementById('backup-include-attachments').checked = config.includeAttachments;
-            document.getElementById('backup-send-email').checked = config.sendEmail;
-            document.getElementById('backup-email-address').value = config.emailAddress || '';
-            console.log('[备份配置] 表单已填充');
+        const modal = document.getElementById('backup-modal');
+        if (!modal) {
+            console.error('[备份配置] 找不到模态框元素');
+            return;
+        }
+
+        // 检查所有必需的表单元素
+        const elements = {
+            'backup-enabled': { type: 'checkbox', value: config.enabled },
+            'backup-schedule': { type: 'value', value: config.schedule || '0 20 * * *' },
+            'backup-webdav-url': { type: 'value', value: config.webdavUrl || '' },
+            'backup-webdav-username': { type: 'value', value: config.webdavUsername || '' },
+            'backup-webdav-password': { type: 'value', value: config.webdavPassword || '' },
+            'backup-include-attachments': { type: 'checkbox', value: config.includeAttachments },
+            'backup-send-email': { type: 'checkbox', value: config.sendEmail },
+            'backup-email-address': { type: 'value', value: config.emailAddress || '' }
+        };
+
+        let missingElements = [];
+        for (const [id, elementConfig] of Object.entries(elements)) {
+            const el = document.getElementById(id);
+            if (!el) {
+                missingElements.push(id);
+                continue;
+            }
+
+            if (elementConfig.type === 'checkbox') {
+                el.checked = Boolean(elementConfig.value);
+            } else {
+                el.value = elementConfig.value;
+            }
+        }
+
+        if (missingElements.length > 0) {
+            console.warn('[备份配置] 以下表单元素未找到:', missingElements.join(', '));
         } else {
-            console.error('[备份配置] 找不到表单元素');
+            console.log('[备份配置] 表单已填充');
+        }
+
+        // 显示最后备份时间（如果有）
+        const statusEl = document.getElementById('backup-status-text');
+        if (statusEl) {
+            if (config.lastBackupTime && config.lastBackupTime > 0) {
+                const lastBackupDate = new Date(config.lastBackupTime);
+                const formattedTime = lastBackupDate.toLocaleString('zh-CN');
+
+                // 计算距离现在的时间
+                const now = Date.now();
+                const diff = now - config.lastBackupTime;
+                const hours = Math.floor(diff / (1000 * 60 * 60));
+                const days = Math.floor(hours / 24);
+
+                let timeText = '';
+                if (days > 0) {
+                    timeText = `${days}天前`;
+                } else if (hours > 0) {
+                    timeText = `${hours}小时前`;
+                } else {
+                    timeText = '刚刚';
+                }
+
+                statusEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span>上次备份: <strong>${formattedTime}</strong></span>
+                    <span style="color:var(--accent);font-size:11px;">${timeText}</span>
+                </div>`;
+                statusEl.style.display = 'block';
+                statusEl.style.background = config.enabled ? 'rgba(34, 197, 94, 0.1)' : 'var(--side)';
+                statusEl.style.color = config.enabled ? 'var(--green)' : 'var(--gray)';
+            } else if (config.enabled) {
+                statusEl.innerHTML = '<span>暂未备份过数据</span>';
+                statusEl.style.display = 'block';
+                statusEl.style.background = 'rgba(234, 179, 8, 0.1)';
+                statusEl.style.color = 'var(--orange)';
+            } else {
+                statusEl.style.display = 'none';
+            }
         }
     } catch (e) {
         console.error('加载备份配置失败:', e);
-        ui.showToast('加载配置失败', false);
+        ui.showToast('加载配置失败: ' + e.message, false);
     }
 }
 
 // 保存备份配置
 async function saveBackupConfig(event) {
     event.preventDefault();
+
+    // 检查 ui 对象是否存在
+    if (!window.ui) {
+        console.error('[备份配置] ui 对象未定义');
+        alert('UI 对象未初始化，请刷新页面重试');
+        return;
+    }
+
     console.log('[备份配置] 开始保存配置...');
 
+    // 获取表单元素
+    const enabledEl = document.getElementById('backup-enabled');
+    const scheduleEl = document.getElementById('backup-schedule');
+    const webdavUrlEl = document.getElementById('backup-webdav-url');
+    const webdavUsernameEl = document.getElementById('backup-webdav-username');
+    const webdavPasswordEl = document.getElementById('backup-webdav-password');
+    const includeAttachmentsEl = document.getElementById('backup-include-attachments');
+    const sendEmailEl = document.getElementById('backup-send-email');
+    const emailAddressEl = document.getElementById('backup-email-address');
+
+    // 检查元素是否存在
+    console.log('[备份配置] 检查表单元素...');
+    console.log('[备份配置] enabledEl:', enabledEl);
+    console.log('[备份配置] scheduleEl:', scheduleEl);
+    console.log('[备份配置] webdavUrlEl:', webdavUrlEl);
+    console.log('[备份配置] webdavUsernameEl:', webdavUsernameEl);
+    console.log('[备份配置] webdavPasswordEl:', webdavPasswordEl);
+    console.log('[备份配置] includeAttachmentsEl:', includeAttachmentsEl);
+    console.log('[备份配置] sendEmailEl:', sendEmailEl);
+    console.log('[备份配置] emailAddressEl:', emailAddressEl);
+
+    if (!enabledEl || !scheduleEl || !webdavUrlEl || !webdavUsernameEl ||
+        !webdavPasswordEl || !includeAttachmentsEl || !sendEmailEl || !emailAddressEl) {
+        console.error('[备份配置] 表单元素未找到');
+        ui.showToast('表单元素未找到', false);
+        return;
+    }
+
     const config = {
-        enabled: document.getElementById('backup-enabled').checked,
-        schedule: document.getElementById('backup-schedule').value,
-        webdavUrl: document.getElementById('backup-webdav-url').value,
-        webdavUsername: document.getElementById('backup-webdav-username').value,
-        webdavPassword: document.getElementById('backup-webdav-password').value,
-        includeAttachments: document.getElementById('backup-include-attachments').checked,
-        sendEmail: document.getElementById('backup-send-email').checked,
-        emailAddress: document.getElementById('backup-email-address').value
+        enabled: enabledEl.checked,
+        schedule: scheduleEl.value,
+        webdavUrl: webdavUrlEl.value.trim(),
+        webdavUsername: webdavUsernameEl.value.trim(),
+        webdavPassword: webdavPasswordEl.value,
+        includeAttachments: includeAttachmentsEl.checked,
+        sendEmail: sendEmailEl.checked,
+        emailAddress: emailAddressEl.value.trim()
     };
     console.log('[备份配置] 要保存的配置:', config);
 
     // 验证必填字段
     if (config.enabled) {
-        if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
-            ui.showToast('请填写完整的 WebDAV 配置', false);
+        if (!config.webdavUrl) {
+            ui.showToast('请填写 WebDAV 地址', false);
+            webdavUrlEl.focus();
+            return;
+        }
+        if (!config.webdavUsername) {
+            ui.showToast('请填写 WebDAV 用户名', false);
+            webdavUsernameEl.focus();
+            return;
+        }
+        if (!config.webdavPassword) {
+            ui.showToast('请填写 WebDAV 密码', false);
+            webdavPasswordEl.focus();
+            return;
+        }
+
+        // 验证 WebDAV URL 格式
+        try {
+            new URL(config.webdavUrl);
+        } catch (e) {
+            ui.showToast('WebDAV 地址格式不正确', false);
+            webdavUrlEl.focus();
             return;
         }
     }
 
     if (config.sendEmail && !config.emailAddress) {
         ui.showToast('请填写邮箱地址', false);
+        emailAddressEl.focus();
         return;
     }
 
+    // 验证邮箱格式（如果填写了）
+    if (config.emailAddress) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(config.emailAddress)) {
+            ui.showToast('邮箱地址格式不正确', false);
+            emailAddressEl.focus();
+            return;
+        }
+    }
+
     try {
+        console.log('[备份配置] 发送请求到服务器...');
+        ui.updateStatus('working', '正在保存...');
+
         const res = await fetch('/api/user/backup/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
+        }).catch(err => {
+            console.error('[备份配置] 网络请求失败:', err);
+            throw new Error('网络请求失败，请检查网络连接');
         });
 
+        console.log('[备份配置] 响应状态:', res.status, res.statusText);
+
         if (!res.ok) {
-            const errorData = await res.json();
+            const errorData = await res.json().catch(() => ({}));
+            console.error('[备份配置] 服务器返回错误:', errorData);
             throw new Error(errorData.error || '保存失败');
         }
 
+        const result = await res.json();
+        console.log('[备份配置] 服务器响应:', result);
+
         console.log('[备份配置] 保存成功');
         ui.showToast('配置已保存');
-        document.getElementById('backup-modal').classList.remove('show');
+        ui.updateStatus('success', '配置已保存');
+
+        // 刷新配置显示
+        setTimeout(async () => {
+            await loadBackupConfig();
+        }, 100);
+
+        setTimeout(() => {
+            ui.updateStatus('idle', '就绪');
+            const modal = document.getElementById('backup-modal');
+            if (modal) modal.classList.remove('show');
+        }, 1500);
     } catch (e) {
-        console.error('保存备份配置失败:', e);
-        ui.showToast('保存失败: ' + e.message, false);
+        console.error('[备份配置] 保存失败，错误详情:', e);
+        console.error('[备份配置] 错误堆栈:', e.stack);
+        ui.updateStatus('error', '保存失败');
+        alert('保存失败: ' + e.message);
+        setTimeout(() => {
+            ui.updateStatus('idle', '就绪');
+        }, 2000);
+    }
+}
+
+// 测试 WebDAV 连接
+async function testWebDAVConnection() {
+    try {
+        const webdavUrl = document.getElementById('backup-webdav-url').value.trim();
+        const webdavUsername = document.getElementById('backup-webdav-username').value.trim();
+        const webdavPassword = document.getElementById('backup-webdav-password').value;
+
+        if (!webdavUrl || !webdavUsername || !webdavPassword) {
+            ui.showToast('请填写完整的 WebDAV 配置信息', false);
+            return;
+        }
+
+        // 验证 URL 格式
+        try {
+            new URL(webdavUrl);
+        } catch (e) {
+            ui.showToast('WebDAV URL 格式不正确', false);
+            return;
+        }
+
+        console.log('[WebDAV 测试] 开始测试连接...');
+        ui.updateStatus('working', '正在测试连接...');
+
+        const res = await fetch('/api/user/backup/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                webdavUrl,
+                webdavUsername,
+                webdavPassword
+            })
+        });
+
+        if (!res.ok) {
+            const error = await res.json().catch(() => ({ error: '测试失败' }));
+            console.error('[WebDAV 测试] 服务器返回错误:', error);
+            throw new Error(error.error || '测试失败');
+        }
+
+        const result = await res.json();
+        console.log('[WebDAV 测试] 测试结果:', result);
+
+        let message = 'WebDAV 连接成功！';
+        if (result.details && result.details.hasBackupDir) {
+            if (result.details.canCreateDirectory) {
+                message = 'WebDAV 连接成功，可以正常备份';
+            } else {
+                message = 'WebDAV 连接成功，但无法自动创建目录。请在 WebDAV 中手动创建 /z7note-backups 目录';
+            }
+        } else {
+            message = 'WebDAV 连接成功，但 /z7note-backups 目录不存在。请在 WebDAV 中手动创建该目录';
+        }
+
+        ui.updateStatus('success', '连接成功');
+        ui.showToast(message);
+
+        setTimeout(() => {
+            ui.updateStatus('idle', '就绪');
+        }, 3000);
+    } catch (e) {
+        console.error('[WebDAV 测试] 测试失败:', e);
+        ui.updateStatus('error', '连接失败');
+        alert('连接失败: ' + e.message);
+        setTimeout(() => {
+            ui.updateStatus('idle', '就绪');
+        }, 3000);
     }
 }
 
 // 立即备份
 async function backupNow() {
-    const config = {
-        webdavUrl: document.getElementById('backup-webdav-url').value,
-        webdavUsername: document.getElementById('backup-webdav-username').value,
-        webdavPassword: document.getElementById('backup-webdav-password').value,
-        includeAttachments: document.getElementById('backup-include-attachments').checked,
-        sendEmail: document.getElementById('backup-send-email').checked,
-        emailAddress: document.getElementById('backup-email-address').value
-    };
+    // 检查 ui 对象是否存在
+    if (!window.ui) {
+        console.error('[备份配置] ui 对象未定义');
+        alert('UI 对象未初始化，请刷新页面重试');
+        return;
+    }
 
-    if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
-        ui.showToast('请先配置 WebDAV 信息', false);
+    // 检查是否正在备份
+    const backupButton = document.querySelector('button[onclick="backupNow()"]');
+    if (backupButton && backupButton.disabled) {
+        alert('备份正在进行中，请稍候...');
         return;
     }
 
     try {
-        ui.showToast('正在备份...', true);
+        ui.updateStatus('working', '正在准备备份...');
+
+        // 禁用备份按钮
+        if (backupButton) {
+            backupButton.disabled = true;
+            backupButton.textContent = '备份中...';
+        }
+
+        // 从服务器获取保存的配置
+        const configRes = await fetch('/api/user/backup/config');
+        if (!configRes.ok) {
+            const errorData = await configRes.json();
+            throw new Error(errorData.error || '获取配置失败');
+        }
+        const savedConfig = await configRes.json();
+
+        // 验证 WebDAV 配置
+        if (!savedConfig.webdavUrl || !savedConfig.webdavUsername || !savedConfig.webdavPassword) {
+            ui.showToast('请先配置 WebDAV 信息', false);
+            ui.updateStatus('error', '配置缺失');
+            setTimeout(() => ui.updateStatus('idle', '就绪'), 2000);
+            return;
+        }
+
+        // 使用表单中的值（可能用户刚修改还未保存）作为覆盖
+        const formOverrides = {
+            webdavUrl: document.getElementById('backup-webdav-url').value,
+            webdavUsername: document.getElementById('backup-webdav-username').value,
+            webdavPassword: document.getElementById('backup-webdav-password').value,
+            includeAttachments: document.getElementById('backup-include-attachments').checked,
+            sendEmail: document.getElementById('backup-send-email').checked,
+            emailAddress: document.getElementById('backup-email-address').value
+        };
+
+        // 如果表单中有值，使用表单值；否则使用保存的值
+        const backupConfig = {
+            webdavUrl: formOverrides.webdavUrl || savedConfig.webdavUrl,
+            webdavUsername: formOverrides.webdavUsername || savedConfig.webdavUsername,
+            webdavPassword: formOverrides.webdavPassword || savedConfig.webdavPassword,
+            includeAttachments: formOverrides.includeAttachments !== undefined ? formOverrides.includeAttachments : savedConfig.includeAttachments,
+            sendEmail: formOverrides.sendEmail !== undefined ? formOverrides.sendEmail : savedConfig.sendEmail,
+            emailAddress: formOverrides.emailAddress || savedConfig.emailAddress
+        };
+
+        // 验证必填字段
+        if (!backupConfig.webdavUrl || !backupConfig.webdavUsername || !backupConfig.webdavPassword) {
+            ui.showToast('请先配置 WebDAV 信息', false);
+            ui.updateStatus('error', '配置缺失');
+            setTimeout(() => ui.updateStatus('idle', '就绪'), 2000);
+            return;
+        }
+
+        ui.updateStatus('working', '正在导出数据...');
 
         const res = await fetch('/api/user/backup/now', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
+            body: JSON.stringify(backupConfig)
         });
 
         if (!res.ok) {
-            const error = await res.json();
-            throw new Error(error.error || '备份失败');
+            const error = await res.json().catch(() => ({ error: '备份失败' }));
+            console.error('[备份配置] 服务器返回错误:', error);
+
+            // 提供更友好的错误提示
+            let errorMessage = error.error || '备份失败';
+            if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+                errorMessage += '。请检查 WebDAV 权限，或手动在 WebDAV 中创建 /z7note-backups 目录';
+            } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+                errorMessage += '。请检查 WebDAV 用户名和密码';
+            } else if (errorMessage.includes('今日已备份')) {
+                // 恢复按钮状态
+                if (backupButton) {
+                    backupButton.disabled = false;
+                    backupButton.textContent = '立即备份';
+                }
+            }
+
+            throw new Error(errorMessage);
         }
 
         const result = await res.json();
+        ui.updateStatus('success', '备份成功');
         ui.showToast(`备份成功！${result.fileCount} 个文件`);
+
+        // 恢复备份按钮
+        if (backupButton) {
+            backupButton.disabled = false;
+            backupButton.textContent = '立即备份';
+        }
+
+        // 刷新配置显示（备份时间可能已更新）
+        await loadBackupConfig();
+
+        setTimeout(() => {
+            ui.updateStatus('idle', '就绪');
+        }, 3000);
     } catch (e) {
         console.error('备份失败:', e);
-        ui.showToast(e.message || '备份失败', false);
+        ui.updateStatus('error', '备份失败');
+        alert(e.message || '备份失败');
+
+        // 恢复备份按钮
+        if (backupButton) {
+            backupButton.disabled = false;
+            backupButton.textContent = '立即备份';
+        }
+
+        setTimeout(() => {
+            ui.updateStatus('idle', '就绪');
+        }, 3000);
     }
 }
+
+// 导出函数到全局 window 对象，供 HTML 中的事件处理器使用
+window.saveBackupConfig = saveBackupConfig;
+window.backupNow = backupNow;
+window.loadBackupConfig = loadBackupConfig;
+window.testWebDAVConnection = testWebDAVConnection;
+
+// 调试：确认函数已导出
+console.log('[tools.js] 备份配置函数已导出到 window 对象');
+console.log('[tools.js] window.saveBackupConfig:', typeof window.saveBackupConfig);
+console.log('[tools.js] window.backupNow:', typeof window.backupNow);
+console.log('[tools.js] window.loadBackupConfig:', typeof window.loadBackupConfig);

@@ -37,6 +37,17 @@
 
     <!-- 非核心功能 - 按需加载 -->
     <script>
+        // 抑制 CodeMirror 的 passive event listener 警告
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+            const message = args[0];
+            if (typeof message === 'string' && message.includes('non-passive event listener')) {
+                // 忽略 CodeMirror 的 passive 警告
+                return;
+            }
+            originalWarn.apply(console, args);
+        };
+
         // 动态加载 heavy 库
         function loadScript(src, callback) {
             const script = document.createElement('script');
@@ -178,6 +189,7 @@
                     <button onclick="ui.exportData()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">导出</button>
                     <input type="file" id="importFile" style="display:none" onchange="ui.importData(event)">
                     <button onclick="document.getElementById('importFile').click()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">导入</button>
+                    <button onclick="tools.openBackupConfig()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">备份</button>
                 </div>
             </div>
 
@@ -188,7 +200,6 @@
                         用户: 加载中...
                     </a>
                     <div style="display:flex;gap:6px;align-items:center;">
-                        <a href="javascript:tools.openBackupConfig()" style="color: var(--accent); text-decoration: none; font-size: 11px;" title="备份配置">💾 备份</a>
                         <a href="javascript:ui.loadShares()" style="color: var(--accent); text-decoration: none; font-size: 11px;">分享</a>
                         <a id="admin-link" href="/admin" target="_blank" style="color: var(--green); text-decoration: none; font-size: 11px; display: none;">管理</a>
                         <a href="javascript:ui.logout()" style="color: var(--red); text-decoration: none; font-size: 11px;">退出</a>
@@ -411,78 +422,64 @@
 
     <!-- 备份配置模态框 -->
     <div id="backup-modal" class="modal">
-        <div class="modal-content" style="max-width:600px;">
-            <div class="modal-header">
-                <h2>💾 自动备份</h2>
-                <button class="modal-close" onclick="document.getElementById('backup-modal').classList.remove('show')">×</button>
+        <div class="modal-content" style="max-width:520px;max-height:85vh;overflow-y:auto;">
+            <div class="modal-header" style="padding:12px 16px;">
+                <h2 style="font-size:16px;margin:0;">💾 自动备份</h2>
+                <button class="modal-close" onclick="document.getElementById('backup-modal').classList.remove('show')" style="font-size:20px;">×</button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="padding:16px;">
+                <div id="backup-status-text" style="display:none;padding:8px 12px;background:var(--side);border-radius:4px;margin-bottom:12px;font-size:12px;color:var(--gray);"></div>
                 <form id="backup-config-form" onsubmit="saveBackupConfig(event)">
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;gap:8px;">
+                    <!-- 基本设置 -->
+                    <div style="margin-bottom:12px;">
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
                             <input type="checkbox" id="backup-enabled" style="width:auto;">
-                            <span>启用自动备份</span>
-                        </label>
+                            <span style="font-size:14px;">启用自动备份</span>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <select id="backup-schedule" style="flex:1;padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
+                                <option value="0 20 * * *">每天晚上8点</option>
+                                <option value="0 3 * * *">每天凌晨3点</option>
+                                <option value="0 3 * * 0">每周日凌晨3点</option>
+                                <option value="0 3 1 * *">每月1号凌晨3点</option>
+                                <option value="0 */6 * * *">每6小时</option>
+                                <option value="0 */12 * * *">每12小时</option>
+                            </select>
+                            <span style="font-size:11px;color:var(--gray);white-space:nowrap;">⏰ UTC+8</span>
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label>备份频率</label>
-                        <select id="backup-schedule" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-                            <option value="0 20 * * *">每天晚上8点</option>
-                            <option value="0 3 * * *">每天凌晨3点</option>
-                            <option value="0 3 * * 0">每周日凌晨3点</option>
-                            <option value="0 3 1 * *">每月1号凌晨3点</option>
-                            <option value="0 */6 * * *">每6小时</option>
-                            <option value="0 */12 * * *">每12小时</option>
-                        </select>
+                    <!-- WebDAV 配置 -->
+                    <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <h3 style="font-size:13px;margin:0;color:var(--accent);">WebDAV 配置</h3>
+                            <button type="button" onclick="testWebDAVConnection()" style="font-size:11px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer;">测试连接</button>
+                        </div>
+                        <div style="display:grid;gap:8px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                <input type="text" id="backup-webdav-username" placeholder="用户名" autocomplete="username" style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
+                                <input type="password" id="backup-webdav-password" placeholder="密码" autocomplete="current-password" style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
+                            </div>
+                            <input type="url" id="backup-webdav-url" placeholder="https://dav.example.com" autocomplete="url" style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
+                        </div>
                     </div>
 
-                    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
-                        <h3 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">WebDAV 配置</h3>
-                        <p style="font-size:12px;color:var(--gray);margin:0 0 12px 0;">备份文件将上传到您的 WebDAV 服务器</p>
-                    </div>
-
-                    <div class="form-group">
-                        <label>WebDAV 地址</label>
-                        <input type="url" id="backup-webdav-url" placeholder="https://dav.example.com" autocomplete="url" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-                    </div>
-
-                    <div class="form-group">
-                        <label>WebDAV 用户名</label>
-                        <input type="text" id="backup-webdav-username" placeholder="用户名" autocomplete="username" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-                    </div>
-
-                    <div class="form-group">
-                        <label>WebDAV 密码</label>
-                        <input type="password" id="backup-webdav-password" placeholder="密码" autocomplete="current-password" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-                    </div>
-
-                    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px;">
-                        <h3 style="margin:0 0 12px 0;font-size:14px;color:var(--accent);">备份选项</h3>
-                    </div>
-
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;gap:8px;">
+                    <!-- 备份选项 -->
+                    <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px;">
+                        <h3 style="font-size:13px;margin:0 0 8px 0;color:var(--accent);">备份选项</h3>
+                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
                             <input type="checkbox" id="backup-include-attachments" style="width:auto;" checked>
-                            <span>包含附件文件</span>
-                        </label>
+                            <span style="font-size:13px;">包含附件</span>
+                            <input type="checkbox" id="backup-send-email" style="width:auto;margin-left:16px;" checked>
+                            <span style="font-size:13px;">邮件通知</span>
+                        </div>
+                        <input type="email" id="backup-email-address" placeholder="your@email.com" autocomplete="email" style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
                     </div>
 
-                    <div class="form-group">
-                        <label style="display:flex;align-items:center;gap:8px;">
-                            <input type="checkbox" id="backup-send-email" style="width:auto;" checked>
-                            <span>发送邮件通知</span>
-                        </label>
-                    </div>
-
-                    <div class="form-group">
-                        <label>邮箱地址</label>
-                        <input type="email" id="backup-email-address" placeholder="your@email.com" autocomplete="email" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;">
-                    </div>
-
-                    <div style="display:flex;gap:8px;margin-top:20px;">
-                        <button type="submit" class="btn-green" style="flex:1;padding:10px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">保存配置</button>
-                        <button type="button" onclick="backupNow()" class="btn-blue" style="flex:1;padding:10px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">立即备份</button>
+                    <!-- 操作按钮 -->
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <button type="submit" class="btn-green" style="flex:1;padding:10px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;">保存配置</button>
+                        <button type="button" onclick="backupNow()" class="btn-blue" style="flex:1;padding:10px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:13px;">立即备份</button>
                     </div>
                 </form>
             </div>

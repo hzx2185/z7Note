@@ -75,36 +75,83 @@ async function exportUserData(username, includeAttachments = true) {
  */
 async function sendToWebDAV(username, webdavConfig, exportData) {
   try {
+    console.log(`[用户备份] ${username} 连接 WebDAV: ${webdavConfig.url}`);
+
     const client = createClient(webdavConfig.url, {
       username: webdavConfig.username,
       password: webdavConfig.password
     });
-    
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const folderPath = `/z7note-backups/${username}/${timestamp}/`;
-    
-    // 创建备份目录
-    await client.createDirectory(folderPath);
-    
-    // 上传 JSON 文件
-    await client.putFileContents(
-      folderPath + exportData.json.filename,
-      exportData.json.buffer
-    );
-    
-    console.log(`[用户备份] ${username} JSON 已上传: ${folderPath}${exportData.json.filename}`);
-    
-    // 上传附件
-    for (const attachment of exportData.attachments) {
-      await client.putFileContents(
-        folderPath + attachment.filename,
-        attachment.buffer
-      );
-      console.log(`[用户备份] ${username} 附件已上传: ${folderPath}${attachment.filename}`);
+
+    console.log(`[用户备份] ${username} 创建备份目录: ${folderPath}`);
+
+    // 创建备份目录（忽略已存在的错误）
+    try {
+      // 先尝试创建用户目录
+      const userDir = `/z7note-backups/${username}/`;
+      try {
+        await client.createDirectory(userDir);
+        console.log(`[用户备份] ${username} 用户目录创建成功`);
+      } catch (e) {
+        // 忽略 405（不支持创建目录）、409（已存在）等错误
+        if (e.message && (e.message.includes('405') || e.message.includes('409'))) {
+          console.log(`[用户备份] ${username} 用户目录已存在或不支持创建`);
+        } else {
+          console.error(`[用户备份] ${username} 用户目录创建失败:`, e.message);
+          throw e;
+        }
+      }
+
+      // 再尝试创建时间戳目录
+      try {
+        await client.createDirectory(folderPath);
+        console.log(`[用户备份] ${username} 目录创建成功`);
+      } catch (e) {
+        // 忽略 405（不支持创建目录）、409（已存在）等错误
+        if (e.message && (e.message.includes('405') || e.message.includes('409'))) {
+          console.log(`[用户备份] ${username} 目录已存在或不支持创建，将直接上传文件`);
+        } else {
+          console.error(`[用户备份] ${username} 目录创建失败:`, e.message);
+          throw e;
+        }
+      }
+    } catch (e) {
+      console.error(`[用户备份] ${username} 创建目录失败:`, e.message);
+      throw e;
     }
-    
+
+    // 上传 JSON 文件
+    console.log(`[用户备份] ${username} 开始上传 JSON 文件...`);
+    try {
+      await client.putFileContents(
+        folderPath + exportData.json.filename,
+        exportData.json.buffer
+      );
+      console.log(`[用户备份] ${username} JSON 已上传: ${folderPath}${exportData.json.filename}`);
+    } catch (e) {
+      console.error(`[用户备份] ${username} JSON 上传失败:`, e.message);
+      throw e;
+    }
+
+    // 上传附件
+    console.log(`[用户备份] ${username} 开始上传 ${exportData.attachments.length} 个附件...`);
+    for (const attachment of exportData.attachments) {
+      try {
+        await client.putFileContents(
+          folderPath + attachment.filename,
+          attachment.buffer
+        );
+        console.log(`[用户备份] ${username} 附件已上传: ${folderPath}${attachment.filename}`);
+      } catch (e) {
+        console.error(`[用户备份] ${username} 附件上传失败 (${attachment.filename}):`, e.message);
+        throw e;
+      }
+    }
+
     log('INFO', '用户备份成功', { username, path: folderPath, fileCount: exportData.attachments.length + 1 });
-    
+
     return { success: true, path: folderPath, fileCount: exportData.attachments.length + 1 };
   } catch (e) {
     console.error(`[用户备份] ${username} WebDAV 发送失败:`, e);
@@ -117,19 +164,22 @@ async function sendToWebDAV(username, webdavConfig, exportData) {
  * 执行用户备份
  */
 async function performUserBackup(username, backupConfig) {
+  const startTime = Date.now();
+  console.log(`[用户备份] ${username} 开始备份`);
+  log('INFO', '用户备份开始', { username, includeAttachments: backupConfig.includeAttachments });
+
   try {
-    console.log(`[用户备份] ${username} 开始备份`);
-    
     // 1. 导出用户数据
     const exportData = await exportUserData(username, backupConfig.includeAttachments);
-    
+    console.log(`[用户备份] ${username} 导出完成，笔记数: ${exportData.attachments.length + 1}`);
+
     // 2. 发送到 WebDAV
     const result = await sendToWebDAV(username, {
       url: backupConfig.webdavUrl,
       username: backupConfig.webdavUsername,
       password: backupConfig.webdavPassword
     }, exportData);
-    
+
     // 3. 发送邮件通知
     if (backupConfig.sendEmail && backupConfig.emailAddress) {
       try {
@@ -141,16 +191,28 @@ async function performUserBackup(username, backupConfig) {
         console.log(`[用户备份] ${username} 邮件通知已发送`);
       } catch (e) {
         console.error(`[用户备份] ${username} 邮件发送失败:`, e);
+        // 邮件发送失败不影响备份成功状态
+        log('WARN', '备份成功但邮件发送失败', { username, error: e.message });
       }
     }
-    
+
     // 4. 更新最后备份时间
     await updateUserBackupTime(username);
-    
-    console.log(`[用户备份] ${username} 备份完成`);
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[用户备份] ${username} 备份完成，耗时: ${duration}秒`);
+    log('INFO', '用户备份成功', {
+      username,
+      path: result.path,
+      fileCount: result.fileCount,
+      duration: `${duration}s`
+    });
+
     return { success: true, ...result };
   } catch (e) {
-    console.error(`[用户备份] ${username} 失败:`, e);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.error(`[用户备份] ${username} 失败，耗时: ${duration}秒:`, e);
+    log('ERROR', '用户备份失败', { username, error: e.message, duration: `${duration}s` });
     throw e;
   }
 }
@@ -160,32 +222,59 @@ async function performUserBackup(username, backupConfig) {
  */
 function setupUserBackupCron(username, backupConfig) {
   const cron = require('node-cron');
-  
+
   // 停止旧任务
   if (userBackupTasks.has(username)) {
-    userBackupTasks.get(username).stop();
+    const oldTask = userBackupTasks.get(username);
+    try {
+      if (oldTask && typeof oldTask.stop === 'function') {
+        oldTask.stop();
+      }
+    } catch (e) {
+      console.error(`[用户备份] 停止旧任务失败 ${username}:`, e);
+    }
     userBackupTasks.delete(username);
+    console.log(`[用户备份] ${username} 旧任务已停止`);
   }
-  
+
   // 如果未启用，不设置任务
   if (!backupConfig.enabled || !backupConfig.schedule || backupConfig.schedule === 'none') {
     console.log(`[用户备份] ${username} 定时任务未设置或已关闭`);
+    log('INFO', '用户备份任务未设置', { username, enabled: backupConfig.enabled });
     return;
   }
-  
-  // 创建新任务
-  const task = cron.schedule(backupConfig.schedule, async () => {
-    console.log(`[用户备份] ${username} 定时任务触发`);
-    try {
-      await performUserBackup(username, backupConfig);
-    } catch (e) {
-      console.error(`[用户备份] ${username} 定时任务执行失败:`, e);
+
+  // 验证 cron 表达式格式
+  try {
+    if (!cron.validate(backupConfig.schedule)) {
+      console.error(`[用户备份] ${username} 无效的 cron 表达式: ${backupConfig.schedule}`);
+      log('ERROR', '用户备份 cron 表达式无效', { username, schedule: backupConfig.schedule });
+      return;
     }
-  }, { scheduled: true, timezone: 'Asia/Shanghai' });
-  
-  userBackupTasks.set(username, task);
-  console.log(`[用户备份] ${username} 定时任务已设置: ${backupConfig.schedule}`);
-  log('INFO', '用户备份任务已设置', { username, schedule: backupConfig.schedule });
+  } catch (e) {
+    console.error(`[用户备份] ${username} 验证 cron 表达式失败:`, e);
+    return;
+  }
+
+  // 创建新任务
+  try {
+    const task = cron.schedule(backupConfig.schedule, async () => {
+      console.log(`[用户备份] ${username} 定时任务触发`);
+      try {
+        await performUserBackup(username, backupConfig);
+      } catch (e) {
+        console.error(`[用户备份] ${username} 定时任务执行失败:`, e);
+        log('ERROR', '用户备份任务执行失败', { username, error: e.message });
+      }
+    }, { scheduled: true, timezone: 'Asia/Shanghai' });
+
+    userBackupTasks.set(username, task);
+    console.log(`[用户备份] ${username} 定时任务已设置: ${backupConfig.schedule}`);
+    log('INFO', '用户备份任务已设置', { username, schedule: backupConfig.schedule });
+  } catch (e) {
+    console.error(`[用户备份] ${username} 创建定时任务失败:`, e);
+    log('ERROR', '用户备份任务创建失败', { username, error: e.message });
+  }
 }
 
 /**

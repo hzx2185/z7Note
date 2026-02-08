@@ -46,7 +46,7 @@ app.use((req, res, next) => {
     '/api/register', '/api/login', '/api/forgot-password', '/api/reset-password',
     '/api/send-bind-code', '/api/verify-bind-email',
     '/api/share/public-list', '/api/share/public/', '/api/share/info', '/api/share/attachment', '/api/share/blog-info',
-    '/s/', '/health',
+    '/s/', '/health', '/test-backup.html',
     '/favicon.ico', '/css/', '/js/', '/cdn/'
   ];
 

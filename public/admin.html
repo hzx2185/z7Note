@@ -362,6 +362,17 @@
                             < 10MB: 30次/分钟 | 10-50MB: 20次/分钟 | 50-100MB: 10次/分钟 | >100MB: 5次/分钟
                         </small>
                     </div>
+
+                    <div style="margin-bottom: 15px;">
+                        <label style="color:var(--gray); font-size:12px; display:block; margin-bottom:4px;">每日备份限制</label>
+                            <select id="sc-dailyBackupLimit">
+                            <option value="0" ${(config.dailyBackupLimit?.value || '1') === '0' ? 'selected' : ''}>不限制</option>
+                            <option value="1" ${(config.dailyBackupLimit?.value || '1') === '1' ? 'selected' : ''}>每天1次</option>
+                        </select>
+                        <small style="color:var(--gray); display:block; margin-top:4px;">
+                            限制用户每天可以手动备份的次数，0表示不限制
+                        </small>
+                    </div>
                 </div>
             `;
 
@@ -376,7 +387,8 @@
                     imageCompressionQuality: document.getElementById('sc-imageCompressionQuality').value,
                     imageCompressionMaxWidth: document.getElementById('sc-imageCompressionMaxWidth').value,
                     imageCompressionMaxHeight: document.getElementById('sc-imageCompressionMaxHeight').value,
-                    dynamicRateLimitEnabled: document.getElementById('sc-dynamicRateLimitEnabled').value
+                    dynamicRateLimitEnabled: document.getElementById('sc-dynamicRateLimitEnabled').value,
+                    dailyBackupLimit: document.getElementById('sc-dailyBackupLimit').value
                 };
 
                 const saveRes = await fetch('/api/admin/system/config', {
