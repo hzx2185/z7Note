@@ -67,16 +67,33 @@ body,html {
         transition: transform 0.3s ease;
         border-right: 1px solid var(--border);
         box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
-    
+
     #sidebar.show {
         transform: translateX(0);
     }
-    
+
     #sidebar.collapsed {
         width: 80%;
         max-width: 300px;
         transform: translateX(-100%);
+    }
+
+    /* 确保底部按钮在移动端可见且可点击 */
+    .sidebar-footer,
+    .sidebar-footer > div {
+        flex-shrink: 0;
+        position: relative;
+        z-index: 2002;
+    }
+
+    .sidebar-footer .tool-btn {
+        min-height: 36px !important;
+        font-size: 12px !important;
+        touch-action: manipulation;
     }
 }
 #main { flex:1;display:flex;flex-direction:column;overflow:hidden;position: relative; }
@@ -663,6 +680,10 @@ input[type="checkbox"].share-checkbox {
 
 .status-dot.error {
     background: var(--red);
+}
+
+.status-dot.warning {
+    background: var(--orange);
 }
 
 @keyframes blink {

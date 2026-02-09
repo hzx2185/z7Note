@@ -211,34 +211,7 @@ button:disabled {
     color: var(--red);
 }
 
-/* Toast 消息 */
-#toast {
-    position: fixed;
-    top: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: white;
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-size: 13px;
-    z-index: 3000;
-    display: none;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.6);
-    animation: slideDown 0.3s ease;
-}
-
-#toast.toast-success {
-    background: var(--green);
-}
-
-#toast.toast-error {
-    background: var(--red);
-}
-
-@keyframes slideDown {
-    from { opacity: 0; transform: translate(-50%, -20px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
-}
+/* Toast 元素已弃用，所有通知统一使用 updateStatus 显示在状态灯文字位置 */
 
 /* Overlay 遮罩层 */
 #overlay {
@@ -266,6 +239,103 @@ button:disabled {
 
 .modal.show {
     display: flex;
+}
+
+/* 自定义模态框覆盖层 - 用于登录页面 */
+#custom-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.5);
+}
+
+#custom-modal-overlay[style*="display: flex"] {
+    display: flex !important;
+}
+
+#custom-modal-overlay .modal-content {
+    width: min(400px, 90%);
+    max-width: 400px;
+    background: var(--bg);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#custom-modal-overlay .modal-header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--side);
+}
+
+#custom-modal-overlay .modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+#custom-modal-overlay .modal-header button {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+#custom-modal-overlay .modal-header button:hover {
+    background: rgba(0,0,0,0.1);
+}
+
+#custom-modal-overlay .modal-body {
+    padding: 20px;
+    color: var(--text);
+}
+
+#custom-modal-overlay .modal-body p {
+    margin: 0;
+    line-height: 1.6;
+}
+
+#custom-modal-overlay .modal-actions {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+    background: var(--side);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+#custom-modal-overlay .modal-actions button {
+    padding: 8px 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: opacity 0.2s;
+}
+
+#custom-modal-overlay .modal-actions button:hover {
+    opacity: 0.9;
 }
 
 .modal-content {
@@ -392,6 +462,29 @@ button:disabled {
     opacity: 0.5;
 }
 
+/* 验证码按钮样式 */
+.code-btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: opacity 0.2s;
+}
+
+.code-btn:hover {
+    opacity: 0.9;
+}
+
+.code-btn:disabled {
+    background: var(--border);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 .alt-btn {
     background: transparent;
     color: var(--accent);
@@ -421,6 +514,35 @@ button:disabled {
     text-align: center;
     margin-bottom: 10px;
     display: none;
+}
+
+/* Toast 提示样式 */
+#toast {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 9999;
+    display: none;
+    font-size: 14px;
+    font-weight: 500;
+    animation: toastSlideDown 0.3s ease-out;
+}
+
+@keyframes toastSlideDown {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
 }
 
 /* 登录页布局 - 居中 */

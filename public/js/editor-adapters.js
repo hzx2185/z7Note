@@ -308,7 +308,7 @@ const CodeMirrorAdapter = {
             const lineHandle = cm.getLineHandle(line);
             if (!lineHandle) return;
 
-            console.log('[行号点击] 行号:', line);
+            // 行号点击
 
             let start, end;
 
@@ -366,7 +366,7 @@ const CodeMirrorAdapter = {
                     cm.setSelection(start, end);
                     cm.focus();
 
-                    console.log('[两次点击选择] 选择范围:', startLine + 1, '到', endLine + 1);
+                    // 两次点击选择
                 }
 
                 // 重置计数

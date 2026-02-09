@@ -695,7 +695,7 @@ const APIManager = {
                         url: rawUrl,
                         error: error.message
                     });
-                    console.error('[Attachment] 检测附件失败:', name, error);
+                    // 附件检测失败，静默处理
                 }
             });
             
@@ -1137,7 +1137,6 @@ const APIManager = {
             }, 1000);
 
         } catch (e) {
-            console.error('上传失败:', e);
             alert(`上传失败: ${e.message}`);
             this.showUploadProgress(true, '上传失败', 0, e.message);
             setTimeout(() => {
@@ -1370,7 +1369,6 @@ const APIManager = {
         navigator.clipboard.writeText(shareUrl).then(() => {
             ui.showToast('链接已复制到剪贴板');
         }).catch(err => {
-            console.error('复制失败:', err);
             ui.showToast('复制失败，请手动复制');
         });
     },
@@ -1414,7 +1412,6 @@ const APIManager = {
             await navigator.clipboard.writeText(url).catch(() => {});
             ui.showToast("已生成分享链接并复制到剪贴板");
         } catch (e) {
-            console.error(e);
             ui.showToast("分享失败", false);
         }
     },
@@ -1430,7 +1427,7 @@ const APIManager = {
                 ui.showToast("链接已复制到剪贴板");
                 return;
             } catch (e) {
-                console.log('Clipboard API failed, trying fallback');
+                // Clipboard API 失败，尝试降级方案
             }
         }
         
@@ -1456,7 +1453,6 @@ const APIManager = {
         } catch (e) {
             // 方法3: 直接显示链接让用户手动复制
             ui.showToast(`复制失败，请手动复制：${url}`, false, 5000);
-            console.log('Share URL:', url);
         }
     },
 
@@ -1487,7 +1483,6 @@ const APIManager = {
             await navigator.clipboard.writeText(data.url).catch(() => {});
             ui.showToast(`已生成分类分享链接并复制到剪贴板\n包含该分类下的所有笔记，且会实时更新`);
         } catch (e) {
-            console.error(e);
             ui.showToast(e.message || "分享失败", false);
         }
     },
@@ -1654,11 +1649,10 @@ const APIManager = {
             if (!res.ok) {
                 throw new Error(data.error || '创建分享失败');
             }
-            
+
             // 尝试复制到剪贴板
             this.copyToClipboard(data.url, "已生成分享链接并复制到剪贴板");
         } catch (e) {
-            console.error(e);
             ui.showToast(e.message || "分享失败", false);
         }
     },
@@ -1672,7 +1666,7 @@ const APIManager = {
                 ui.showToast(successMessage);
                 return true;
             } catch (e) {
-                console.log('Clipboard API failed, trying fallback');
+                // Clipboard API failed, trying fallback
             }
         }
         
@@ -1718,7 +1712,6 @@ const APIManager = {
             const url = j.url;
             this.copyToClipboard(url, "已生成分享链接并复制到剪贴板");
         } catch (e) {
-            console.error(e);
             ui.showToast(e.message || "分享失败", false);
         }
     }

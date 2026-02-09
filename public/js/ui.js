@@ -67,6 +67,9 @@ const UIManager = {
             case 'error':
                 dot.classList.add('error');
                 break;
+            case 'warning':
+                dot.classList.add('warning');
+                break;
             default:
                 // 默认灰色
         }
@@ -95,20 +98,31 @@ const UIManager = {
         this.updatePreview();
     },
 
-    // 显示提示 - 使用 CSS 类优化性能
-    _toastTimer: null,
+    // 显示提示 - 统一使用 updateStatus 显示在状态文字位置
+    _statusRestoreTimer: null,
     showToast(msg, success = true) {
-        const t = document.getElementById('toast');
-        if (!t) return;
-        
-        t.textContent = msg;
-        t.className = success ? 'toast-success' : 'toast-error';
-        t.style.display = 'block';
-        
-        clearTimeout(this._toastTimer);
-        this._toastTimer = setTimeout(() => { 
-            t.style.display = 'none'; 
-        }, 1500);
+        // 清除之前的恢复定时器
+        if (this._statusRestoreTimer) {
+            clearTimeout(this._statusRestoreTimer);
+        }
+
+        // 所有提示都使用 updateStatus 显示在状态文字位置
+        let state = 'idle';
+        if (success === true) {
+            state = 'success';
+        } else if (success === false) {
+            state = 'error';
+        } else {
+            // 对于其他值（如 undefined 或其他），默认为成功状态
+            state = 'success';
+        }
+
+        this.updateStatus(state, msg);
+
+        // 3秒后恢复为"就绪"
+        this._statusRestoreTimer = setTimeout(() => {
+            this.updateStatus('idle', '就绪');
+        }, 3000);
     },
 
     // 切换侧边栏
@@ -349,7 +363,7 @@ const UIManager = {
                 }
             } catch (error) {
                 invalidAttachments.push(attachment);
-                console.error('[Attachment] 检测附件失败:', attachment.path, error);
+                // 附件检测失败，静默处理
             }
         });
 
@@ -595,7 +609,7 @@ const UIManager = {
                 // 监听来自父窗口的resize消息
                 window.addEventListener('message', (event) => {
                     if (event.data.type === 'resize') {
-                        console.log('[PDF iframe] 收到resize消息:', event.data);
+                        // 收到 iframe resize 消息
                         // 可以在这里添加额外的调整逻辑
                     }
                 });
@@ -660,13 +674,11 @@ const UIManager = {
                                     if (!isLoaded) {
                                         isLoaded = true;
                                         clearTimeout(loadTimeout);
-                                        console.error('PDF加载错误:', message);
                                         placeholder.innerHTML = '<div class="file-too-large">❌ ' + message + '</div><div style="margin-top:10px;"><a href="' + url + '" download style="color:var(--accent);">点击下载PDF</a></div>';
                                     }
                                 };
 
                                 object.onerror = () => {
-                                    console.error('object onerror triggered');
                                     showError('PDF加载失败');
                                 };
 
@@ -674,13 +686,13 @@ const UIManager = {
                                 object.onload = () => {
                                     isLoaded = true;
                                     clearTimeout(loadTimeout);
-                                    console.log('PDF加载成功:', url);
+                                    // PDF加载成功
                                 };
 
                                 // 设置15秒超时
                                 loadTimeout = setTimeout(() => {
                                     if (!isLoaded) {
-                                        console.warn('PDF加载超时:', url);
+                                        console.warn('PDF加载超时');
                                         showError('PDF加载超时，请尝试下载查看');
                                     }
                                 }, 15000);
@@ -688,7 +700,6 @@ const UIManager = {
                                 // 替换占位符
                                 placeholder.replaceWith(object);
                             } catch (error) {
-                                console.error('PDF加载错误:', error);
                                 placeholder.innerHTML = '<div class="file-too-large">❌ 加载失败，请尝试下载查看</div><div style="margin-top:10px;"><a href="' + url + '" download style="color:var(--accent);">点击下载PDF</a></div>';
                             }
                         };
@@ -1217,11 +1228,9 @@ const UIManager = {
                 this.render();
                 this.switch(note.id);
             } else {
-                console.error('[Create] 创建失败:', res.status);
                 this.showToast('创建失败，请检查网络连接');
             }
         } catch (e) {
-            console.error('[Create] 创建异常:', e);
             this.showToast('创建失败，请检查网络连接');
         }
     },
@@ -1279,13 +1288,15 @@ const UIManager = {
                     }
 
                     this.render(undefined, true);
-                    this.showToast('笔记已删除');
+                    // 延迟显示删除成功提示，避免被 switch 的状态覆盖
+                    setTimeout(() => {
+                        this.showToast('笔记已删除');
+                    }, 100);
                 }, 10);
             } else {
                 this.showToast('删除失败，请检查网络连接');
             }
         } catch (e) {
-            console.error('[Delete] 删除异常:', e);
             this.showToast('删除失败，请检查网络连接');
         }
     },
@@ -1448,12 +1459,10 @@ const UIManager = {
                     }, 1500);
                 });
             } else {
-                console.error('[BatchDelete] 删除失败:', res.status);
                 this.showToast('批量删除失败，请检查网络连接');
                 this.updateStatus('error', '删除失败');
             }
         } catch (e) {
-            console.error('[BatchDelete] 删除异常:', e);
             this.showToast('批量删除失败，请检查网络连接');
             this.updateStatus('error', '删除失败');
         }
@@ -1909,7 +1918,6 @@ const UIManager = {
                     document.execCommand('copy');
                     this.updateStatus('success', `已复制 ${selectedText.length} 个字符`);
                 } catch (execError) {
-                    console.error('复制失败:', execError);
                     this.updateStatus('error', '复制失败,请手动复制');
                 }
             }
@@ -1935,7 +1943,6 @@ const UIManager = {
             this.clearMarker();
             this.updateStatus('success', '已剪切标记区域');
         } catch (error) {
-            console.error('剪切标记区域失败:', error);
             this.updateStatus('error', '剪切标记区域失败');
         }
     },
@@ -1956,7 +1963,6 @@ const UIManager = {
             this.clearMarker();
             this.updateStatus('success', '已删除标记区域');
         } catch (error) {
-            console.error('删除标记区域失败:', error);
             this.updateStatus('error', '删除标记区域失败');
         }
     },
@@ -2195,13 +2201,104 @@ const UIManager = {
 
     // 退出登录
     async logout() {
-        if (!confirm('确定要退出登录吗？')) return;
+        const shouldLogout = confirm('确定要退出登录吗？');
+        if (!shouldLogout) return;
+
+        const clearCache = confirm('是否同时清除浏览器缓存？\n\n这将清除：\n- 本地存储数据（用户信息、设置等）\n- 会话存储数据\n- IndexedDB 数据库\n- Service Worker 缓存\n- Cache API 缓存\n\n建议定期清除缓存以保护隐私。');
+
         try {
+            // 断开 WebSocket 连接
+            if (window.wsManager && window.wsManager.disconnect) {
+                window.wsManager.disconnect();
+            }
+
             await fetch('/api/logout', { method: 'POST' });
-            window.location.href = '/login.html';
+
+            // 如果用户选择清除缓存
+            if (clearCache) {
+                console.log('[Logout] 清除浏览器缓存...');
+
+                // 清除本地存储数据
+                localStorage.clear();
+                console.log('[Logout] localStorage 已清除');
+
+                // 清除会话存储数据
+                sessionStorage.clear();
+                console.log('[Logout] sessionStorage 已清除');
+
+                // 清除可能的 IndexedDB 数据
+                if (window.indexedDB) {
+                    const databases = await indexedDB.databases();
+                    if (databases.length > 0) {
+                        console.log('[Logout] 清除 IndexedDB 数据库:', databases.map(d => d.name).filter(Boolean));
+                        for (const db of databases) {
+                            if (db.name) {
+                                indexedDB.deleteDatabase(db.name);
+                            }
+                        }
+                    }
+                }
+
+                // 清除 Service Worker 缓存
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    if (registrations.length > 0) {
+                        console.log('[Logout] 清除 Service Worker，数量:', registrations.length);
+                        for (const registration of registrations) {
+                            await registration.unregister();
+                        }
+                    }
+                }
+
+                // 清除 Cache API 缓存
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    if (cacheNames.length > 0) {
+                        console.log('[Logout] 清除 Cache API，缓存列表:', cacheNames);
+                        for (const cacheName of cacheNames) {
+                            await caches.delete(cacheName);
+                        }
+                    }
+                }
+
+                console.log('[Logout] 浏览器缓存清除完成');
+            } else {
+                // 即使用户不选择清除缓存，也要清除关键的敏感数据
+                console.log('[Logout] 清除敏感数据');
+                localStorage.removeItem('z7note_username');
+                localStorage.removeItem('username');
+                localStorage.removeItem('p-theme');
+                localStorage.removeItem('theme');
+            }
+
+            // 延迟跳转，让日志有时间输出
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
         } catch (e) {
-            console.error('退出失败:', e);
-            window.location.href = '/login.html';
+            console.error('[Logout] 退出失败:', e);
+
+            // 即使服务器请求失败，也要断开 WebSocket 连接
+            if (window.wsManager && window.wsManager.disconnect) {
+                window.wsManager.disconnect();
+            }
+
+            // 清除关键的敏感数据
+            localStorage.removeItem('z7note_username');
+            localStorage.removeItem('username');
+            localStorage.removeItem('p-theme');
+            localStorage.removeItem('theme');
+
+            // 如果用户选择清除缓存
+            if (clearCache) {
+                console.log('[Logout] 清除全部缓存（错误处理）');
+                localStorage.clear();
+                sessionStorage.clear();
+            }
+
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
         }
     },
 
@@ -2400,7 +2497,6 @@ const UIManager = {
                 btn.disabled = false;
             }
         } catch (e) {
-            console.error('发送验证码失败:', e);
             this.showToast('发送失败');
             btn.disabled = false;
         }
@@ -2432,7 +2528,6 @@ const UIManager = {
                 this.showToast(data.error || '绑定失败');
             }
         } catch (e) {
-            console.error('绑定邮箱失败:', e);
             this.showToast('绑定失败');
         }
     }

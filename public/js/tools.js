@@ -25,34 +25,27 @@ const ToolsManager = {
             } catch (e) {
                 ui.showToast("复制失败", false);
             }
-        } else if (type === 'cut') {
+        }         else if (type === 'cut') {
             try {
-                console.log('[剪切] 开始剪切操作');
                 const text = ui.editor.getSelection ? ui.editor.getSelection() : ui.editor.value || '';
-                console.log('[剪切] 选中的文本:', text);
 
                 if (text) {
                     // 先复制到剪贴板
                     await navigator.clipboard.writeText(text);
-                    console.log('[剪切] 已复制到剪贴板');
 
                     // 删除选中的文本 - 使用 CodeMirror 原生方法
                     if (ui.editor._editor && ui.editor._editor.replaceSelection) {
                         // 使用 CodeMirror 原生实例
-                        console.log('[剪切] 使用 CodeMirror 原生 replaceSelection');
                         ui.editor._editor.replaceSelection('');
                     } else if (ui.editor.replaceSelection) {
                         // 使用适配器方法
-                        console.log('[剪切] 使用适配器 replaceSelection');
                         ui.editor.replaceSelection('');
                     } else if (ui.editor.selectionStart !== undefined) {
                         // 普通 textarea
-                        console.log('[剪切] 使用 textarea 方法');
                         const fullText = ui.editor.getValue ? ui.editor.getValue() : ui.editor.value || '';
                         const start = ui.editor.selectionStart || 0;
                         const end = ui.editor.selectionEnd || 0;
                         const newContent = fullText.substring(0, start) + fullText.substring(end);
-                        console.log('[剪切] 删除位置:', start, '到', end);
                         if (ui.editor.setValue) {
                             ui.editor.setValue(newContent);
                         } else {
@@ -68,10 +61,8 @@ const ToolsManager = {
                     ui.editor.focus();
                     ui.save();
                     ui.updatePreview();
-                    console.log('[剪切] 剪切完成');
                     ui.showToast("已剪切");
                 } else {
-                    console.log('[剪切] 未选择内容');
                     ui.showToast("未选择内容", false);
                 }
             } catch (e) {
