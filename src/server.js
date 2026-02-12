@@ -58,6 +58,7 @@ app.use((req, res, next) => {
     '/s/', '/health', '/test-backup.html',
     '/favicon.ico', '/css/', '/js/', '/cdn/',
     '/caldav/', '/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
+    '/api/lunar',  // 农历API公开访问
     '/calendar.html'  // 日历页面
   ];
 
@@ -88,6 +89,7 @@ const todosRoutes = require('./routes/todos');
 const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
 const lunarRoutes = require('./routes/lunar');
+const calendarSubscriptionsRoutes = require('./routes/calendarSubscriptions');
 
 // 分享路由必须在静态文件之前注册，否则 /s/ 会被当作静态目录处理
 app.use(sharesRoutes);
@@ -131,7 +133,8 @@ app.use(adminAuth, adminRoutes);
 app.use(userRoutes);
 app.use(todosRoutes);
 app.use('/api/events', eventsRoutes);
-app.use('/api/lunar', auth, lunarRoutes);
+app.use('/api/lunar', lunarRoutes);
+app.use('/api/calendar-subscriptions', calendarSubscriptionsRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {

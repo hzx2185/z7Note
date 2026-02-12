@@ -280,6 +280,13 @@ const CalendarApp = (function() {
 
       // 加载月份数据
       dataLoader.loadMonthData(year, month);
+
+      // 加载农历日期
+      if (isNarrow) {
+        this.loadWeekLunarDates();
+      } else {
+        this.loadLunarDates(year, month);
+      }
     },
 
     renderFullMonthView(year, month) {
@@ -323,6 +330,37 @@ const CalendarApp = (function() {
 
       for (let i = 1; i <= totalDays; i++) {
         const dateStr = utils.formatDate(new Date(year, month, i));
+        const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
+
+        if (lunarEl) {
+          try {
+            const lunarData = await api.getLunarDate(dateStr);
+            if (lunarData && lunarData.lunarDayCn) {
+              lunarEl.textContent = lunarData.lunarDayCn;
+              // 如果是节日,显示节日名称
+              if (lunarData.festival) {
+                lunarEl.textContent = lunarData.festival;
+                lunarEl.classList.add('day-festival');
+              }
+            }
+          } catch (error) {
+            console.error('加载农历日期失败:', error);
+          }
+        }
+      }
+    },
+
+    async loadWeekLunarDates() {
+      // 获取选中日期所在周的日期
+      const selectedDayOfWeek = state.selectedDate.getDay();
+      const weekStart = new Date(state.selectedDate);
+      weekStart.setDate(state.selectedDate.getDate() - selectedDayOfWeek);
+
+      // 加载一周的农历数据
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(weekStart);
+        date.setDate(weekStart.getDate() + i);
+        const dateStr = utils.formatDate(date);
         const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
 
         if (lunarEl) {
@@ -972,6 +1010,11 @@ const CalendarApp = (function() {
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            alert('请先登录后再导出日历');
+            window.location.href = '/login.html';
+            return;
+          }
           throw new Error('导出失败');
         }
 
@@ -1027,6 +1070,177 @@ const CalendarApp = (function() {
       } finally {
         // 清空文件输入
         e.target.value = '';
+      }
+    },
+
+    openSubscriptionModal: () => {
+      document.getElementById('subscription-modal').classList.add('show');
+      handlers.loadSubscriptions();
+    },
+
+    openSubscriptionForm: (subscription = null) => {
+      const modal = document.getElementById('subscription-form-modal');
+      const title = document.getElementById('subscription-form-title');
+      const form = document.getElementById('subscription-form');
+
+      title.textContent = subscription ? '编辑订阅' : '添加订阅';
+
+      if (subscription) {
+        form.dataset.subscriptionId = subscription.id;
+        form.name.value = subscription.name;
+        form.url.value = subscription.url;
+        form.color.value = subscription.color;
+      } else {
+        delete form.dataset.subscriptionId;
+        form.reset();
+        form.color.value = '#6366f1';
+      }
+
+      modal.classList.add('show');
+    },
+
+    closeSubscriptionModals: () => {
+      document.getElementById('subscription-modal').classList.remove('show');
+      document.getElementById('subscription-form-modal').classList.remove('show');
+    },
+
+    async loadSubscriptions() {
+      try {
+        const response = await fetch('/api/calendar-subscriptions', {
+          credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error('获取订阅失败');
+
+        const subscriptions = await response.json();
+        handlers.renderSubscriptions(subscriptions);
+      } catch (error) {
+        console.error('加载订阅失败:', error);
+        alert('加载订阅失败');
+      }
+    },
+
+    renderSubscriptions(subscriptions) {
+      const container = document.getElementById('subscription-list');
+
+      if (!subscriptions || subscriptions.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无订阅</div>';
+        return;
+      }
+
+      container.innerHTML = subscriptions.map(sub => `
+        <div class="subscription-item" style="display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; background: var(--bg);">
+          <div style="width: 20px; height: 20px; border-radius: 4px; background: ${sub.color}; flex-shrink: 0;"></div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 13px; color: var(--text);">${sub.name}</div>
+            <div style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sub.url}</div>
+          </div>
+          <div style="display: flex; gap: 4px; flex-shrink: 0;">
+            <button type="button" onclick="handlers.syncSubscription('${sub.id}')" style="padding: 4px 8px; font-size: 11px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer;">同步</button>
+            <button type="button" onclick="handlers.editSubscription('${sub.id}')" style="padding: 4px 8px; font-size: 11px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">编辑</button>
+            <button type="button" onclick="handlers.deleteSubscription('${sub.id}')" style="padding: 4px 8px; font-size: 11px; background: #fee2e2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer;">删除</button>
+          </div>
+        </div>
+      `).join('');
+    },
+
+    async handleSubscriptionSubmit(e) {
+      e.preventDefault();
+      const form = e.target;
+      const formData = new FormData(form);
+
+      const subscriptionId = form.dataset.subscriptionId;
+      const data = {
+        name: formData.get('name'),
+        url: formData.get('url'),
+        color: formData.get('color')
+      };
+
+      try {
+        const url = subscriptionId
+          ? `/api/calendar-subscriptions/${subscriptionId}`
+          : '/api/calendar-subscriptions';
+        const method = subscriptionId ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) throw new Error('保存失败');
+
+        alert('保存成功');
+        handlers.closeSubscriptionModals();
+        handlers.loadSubscriptions();
+      } catch (error) {
+        console.error('保存订阅失败:', error);
+        alert('保存失败');
+      }
+    },
+
+    async syncSubscription(id) {
+      try {
+        const response = await fetch(`/api/calendar-subscriptions/${id}/sync`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error('同步失败');
+
+        const result = await response.json();
+        alert(`同步成功!共导入 ${result.imported} 个事件`);
+
+        // 重新加载日历数据
+        render.calendar();
+        dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+      } catch (error) {
+        console.error('同步订阅失败:', error);
+        alert('同步失败');
+      }
+    },
+
+    async editSubscription(id) {
+      try {
+        const response = await fetch(`/api/calendar-subscriptions`, {
+          credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error('获取订阅失败');
+
+        const subscriptions = await response.json();
+        const subscription = subscriptions.find(s => s.id === id);
+
+        if (subscription) {
+          handlers.openSubscriptionForm(subscription);
+        }
+      } catch (error) {
+        console.error('获取订阅失败:', error);
+        alert('获取订阅失败');
+      }
+    },
+
+    async deleteSubscription(id) {
+      if (!confirm('确定要删除这个订阅吗？这将同时删除该订阅的所有事件。')) return;
+
+      try {
+        const response = await fetch(`/api/calendar-subscriptions/${id}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error('删除失败');
+
+        alert('删除成功');
+        handlers.loadSubscriptions();
+
+        // 重新加载日历数据
+        render.calendar();
+        dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+      } catch (error) {
+        console.error('删除订阅失败:', error);
+        alert('删除失败');
       }
     }
   };
@@ -1095,6 +1309,7 @@ const CalendarApp = (function() {
     const newEventBtn = document.getElementById('new-event-btn');
     const exportBtn = document.getElementById('export-btn');
     const importBtn = document.getElementById('import-btn');
+    const subscriptionBtn = document.getElementById('subscription-btn');
     const icsFileInput = document.getElementById('ics-file-input');
 
     if (prevMonthBtn) prevMonthBtn.addEventListener('click', handlers.prevMonth);
@@ -1103,6 +1318,7 @@ const CalendarApp = (function() {
     if (todoAddBtn) todoAddBtn.addEventListener('click', handlers.openTodoModal);
     if (eventAddBtn) eventAddBtn.addEventListener('click', handlers.openEventModal);
     if (newEventBtn) newEventBtn.addEventListener('click', handlers.openEventModal);
+    if (subscriptionBtn) subscriptionBtn.addEventListener('click', handlers.openSubscriptionModal);
     if (exportBtn) exportBtn.addEventListener('click', handlers.exportCalendar);
     if (importBtn) importBtn.addEventListener('click', () => icsFileInput.click());
     if (icsFileInput) icsFileInput.addEventListener('change', handlers.importCalendar);
@@ -1132,6 +1348,16 @@ const CalendarApp = (function() {
       elements.eventForm.addEventListener('submit', (e) => handlers.handleEventSubmit(e));
     }
 
+    // 绑定订阅表单
+    const subscriptionForm = document.getElementById('subscription-form');
+    if (subscriptionForm) {
+      subscriptionForm.addEventListener('submit', (e) => handlers.handleSubscriptionSubmit(e));
+    }
+    const addSubscriptionBtn = document.getElementById('add-subscription-btn');
+    if (addSubscriptionBtn) {
+      addSubscriptionBtn.addEventListener('click', () => handlers.openSubscriptionForm());
+    }
+
     // 模态框关闭事件 - 点击遮罩层关闭
     if (elements.todoModal) {
       elements.todoModal.addEventListener('click', (e) => {
@@ -1152,6 +1378,25 @@ const CalendarApp = (function() {
     document.querySelectorAll('.todo-modal-cancel, .event-modal-cancel').forEach(btn => {
       btn.addEventListener('click', handlers.closeModals);
     });
+
+    // 订阅模态框关闭
+    document.querySelectorAll('.subscription-modal-close, .subscription-form-modal-close, .subscription-form-cancel').forEach(btn => {
+      btn.addEventListener('click', handlers.closeSubscriptionModals);
+    });
+
+    const subscriptionModal = document.getElementById('subscription-modal');
+    if (subscriptionModal) {
+      subscriptionModal.addEventListener('click', (e) => {
+        if (e.target === subscriptionModal) handlers.closeSubscriptionModals();
+      });
+    }
+
+    const subscriptionFormModal = document.getElementById('subscription-form-modal');
+    if (subscriptionFormModal) {
+      subscriptionFormModal.addEventListener('click', (e) => {
+        if (e.target === subscriptionFormModal) handlers.closeSubscriptionModals();
+      });
+    }
 
     // ESC键关闭模态框
     document.addEventListener('keydown', (e) => {

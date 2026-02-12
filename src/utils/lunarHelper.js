@@ -18,7 +18,7 @@ function solarToLunar(solarDate) {
     year: lunar.getYear(),
     month: lunar.getMonth(),
     day: lunar.getDay(),
-    isLeapMonth: lunar.isLeap(),
+    isLeapMonth: false,
     yearCn: lunar.getYearInChinese(),
     monthCn: lunar.getMonthInChinese(),
     dayCn: lunar.getDayInChinese(),
