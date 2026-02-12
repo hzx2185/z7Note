@@ -153,17 +153,20 @@ async function createTables() {
 
   // 检查并添加新列
   await migrateSchema();
+
+  // 运行迁移脚本
+  await runMigrations();
 }
 
 async function migrateSchema() {
   const tableInfo = await db.all("PRAGMA table_info(users)");
   const columns = tableInfo.map(c => c.name);
-  
+
   if (!columns.includes('noteLimit')) {
     await db.exec(`ALTER TABLE users ADD COLUMN noteLimit INTEGER DEFAULT ${config.defaultNoteLimit}`);
     await db.exec(`ALTER TABLE users ADD COLUMN fileLimit INTEGER DEFAULT ${config.defaultFileLimit}`);
   }
-  
+
   if (!columns.includes('blogTitle')) {
     await db.exec(`ALTER TABLE users ADD COLUMN blogTitle TEXT`);
     await db.exec(`ALTER TABLE users ADD COLUMN blogSubtitle TEXT`);
@@ -172,9 +175,45 @@ async function migrateSchema() {
     await db.exec(`ALTER TABLE users ADD COLUMN blogShowFooter INTEGER DEFAULT 1`);
     await db.exec(`ALTER TABLE users ADD COLUMN customCSS TEXT`);
   }
-  
+
   if (!columns.includes('editorType')) {
     await db.exec(`ALTER TABLE users ADD COLUMN editorType TEXT DEFAULT 'codemirror'`);
+  }
+}
+
+async function runMigrations() {
+  const migrationsPath = require('path').join(__dirname, '../migrations');
+  const fs = require('fs');
+
+  // 创建迁移记录表
+  await db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    description TEXT,
+    appliedAt INTEGER DEFAULT (strftime('%s', 'now'))
+  )`);
+
+  // 读取迁移文件
+  const migrationFiles = fs.readdirSync(migrationsPath).filter(f => f.endsWith('.js'));
+
+  for (const file of migrationFiles) {
+    const migrationPath = require('path').join(migrationsPath, file);
+    const migration = require(migrationPath);
+
+    // 跳过旧格式的迁移文件（没有version和migrate属性的）
+    if (!migration.version || !migration.migrate) {
+      console.log(`[Migration] Skipping old format migration: ${file}`);
+      continue;
+    }
+
+    // 检查是否已运行
+    const existing = await db.get('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
+
+    if (!existing) {
+      console.log(`[Migration] Running migration ${migration.version}: ${migration.description}`);
+      await migration.migrate(db);
+      await db.run('INSERT INTO schema_migrations (version, description) VALUES (?, ?)', [migration.version, migration.description]);
+      console.log(`[Migration] Migration ${migration.version} completed`);
+    }
   }
 }
 

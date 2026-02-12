@@ -19,7 +19,7 @@ COPY . .
 FROM node:20-alpine
 
 # 安装运行时依赖
-RUN apk add --no-cache sqlite
+RUN apk add --no-cache sqlite tzdata
 
 WORKDIR /app
 

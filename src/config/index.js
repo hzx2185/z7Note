@@ -94,6 +94,12 @@ const config = {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || ''
   },
+
+  // CalDAV配置
+  caldav: {
+    enabled: process.env.CALDAV_ENABLED !== 'false', // 默认启用
+    basePath: process.env.CALDAV_BASE || '/caldav'
+  },
   
   // 路径配置
   paths: {

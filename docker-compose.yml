@@ -17,6 +17,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      - TZ=Asia/Shanghai
     logging:
       driver: "json-file"
       options:
