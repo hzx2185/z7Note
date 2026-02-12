@@ -2,6 +2,8 @@
  * 重复事件工具函数
  */
 
+const { generateLunarRecurringEvents } = require('./lunarHelper');
+
 /**
  * 生成重复事件
  * @param {Object} masterEvent - 主事件
@@ -16,6 +18,11 @@ function generateRecurringEvents(masterEvent, startDate, endDate) {
   if (!recurrence) return events;
 
   const recurrenceType = recurrence.type; // 'daily', 'weekly', 'monthly', 'yearly'
+  // 如果是农历重复事件,使用农历生成逻辑
+  if (recurrence.type && recurrence.type.startsWith('lunar_')) {
+    return generateLunarRecurringEvents(masterEvent, startDate, endDate);
+  }
+
   const interval = recurrence.interval || 1; // 重复间隔
   const daysOfWeek = recurrence.daysOfWeek || []; // 周几重复(仅weekly)
   const dayOfMonth = recurrence.dayOfMonth; // 每月的第几天(仅monthly)
