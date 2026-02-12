@@ -820,6 +820,17 @@ const CalendarApp = (function() {
       }
       data.allDay = data.allDay === 'true';
 
+      // 处理重复事件
+      if (data.recurrence) {
+        data.recurrence = JSON.stringify({ type: data.recurrence });
+        if (data.recurrenceEnd) {
+          data.recurrenceEnd = Math.floor(new Date(data.recurrenceEnd).getTime() / 1000);
+        }
+      } else {
+        data.recurrence = null;
+        data.recurrenceEnd = null;
+      }
+
       try {
         if (eventId) {
           // 编辑模式
@@ -907,6 +918,71 @@ const CalendarApp = (function() {
 
       // 显示模态框
       this.openEventModal();
+    },
+
+    async exportCalendar() {
+      try {
+        const response = await fetch('/api/events/export', {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error('导出失败');
+        }
+
+        const icsContent = await response.text();
+        const blob = new Blob([icsContent], { type: 'text/calendar' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `z7note-calendar-${new Date().toISOString().split('T')[0]}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        alert('日历导出成功!');
+      } catch (error) {
+        console.error('导出日历失败:', error);
+        alert('导出失败,请重试');
+      }
+    },
+
+    async importCalendar(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const icsContent = await file.text();
+        const response = await fetch('/api/events/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ icsContent })
+        });
+
+        if (!response.ok) {
+          throw new Error('导入失败');
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          alert(`导入成功!共导入 ${result.imported} 个事件${result.skipped > 0 ? `,跳过 ${result.skipped} 个已存在的事件` : ''}`);
+
+          // 重新加载日历数据
+          render.calendar();
+          dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+        }
+      } catch (error) {
+        console.error('导入日历失败:', error);
+        alert('导入失败,请检查文件格式');
+      } finally {
+        // 清空文件输入
+        e.target.value = '';
+      }
     }
   };
 
@@ -972,6 +1048,9 @@ const CalendarApp = (function() {
     const todoAddBtn = document.getElementById('todo-add-btn');
     const eventAddBtn = document.getElementById('event-add-btn');
     const newEventBtn = document.getElementById('new-event-btn');
+    const exportBtn = document.getElementById('export-btn');
+    const importBtn = document.getElementById('import-btn');
+    const icsFileInput = document.getElementById('ics-file-input');
 
     if (prevMonthBtn) prevMonthBtn.addEventListener('click', handlers.prevMonth);
     if (nextMonthBtn) nextMonthBtn.addEventListener('click', handlers.nextMonth);
@@ -979,6 +1058,18 @@ const CalendarApp = (function() {
     if (todoAddBtn) todoAddBtn.addEventListener('click', handlers.openTodoModal);
     if (eventAddBtn) eventAddBtn.addEventListener('click', handlers.openEventModal);
     if (newEventBtn) newEventBtn.addEventListener('click', handlers.openEventModal);
+    if (exportBtn) exportBtn.addEventListener('click', handlers.exportCalendar);
+    if (importBtn) importBtn.addEventListener('click', () => icsFileInput.click());
+    if (icsFileInput) icsFileInput.addEventListener('change', handlers.importCalendar);
+
+    // 监听重复选项变化
+    const recurrenceSelect = document.getElementById('recurrence-select');
+    const recurrenceEndGroup = document.getElementById('recurrence-end-group');
+    if (recurrenceSelect && recurrenceEndGroup) {
+      recurrenceSelect.addEventListener('change', (e) => {
+        recurrenceEndGroup.style.display = e.target.value ? 'block' : 'none';
+      });
+    }
 
     console.log('[CalendarApp] 导航按钮已绑定');
 

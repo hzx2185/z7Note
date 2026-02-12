@@ -1170,6 +1170,8 @@
         <button class="secondary" id="today-btn">今天</button>
       </div>
       <div class="calendar-nav calendar-nav-right">
+        <button class="secondary" id="export-btn">导出</button>
+        <button class="secondary" id="import-btn">导入</button>
         <button class="add-btn" id="new-event-btn">新建</button>
       </div>
     </div>
@@ -1299,6 +1301,20 @@
             <input type="color" class="form-input" name="color" value="#2563eb" style="height: 40px;">
           </div>
         </div>
+        <div class="form-group">
+          <label class="form-label">重复</label>
+          <select class="form-select" name="recurrence" id="recurrence-select">
+            <option value="">不重复</option>
+            <option value="daily">每天</option>
+            <option value="weekly">每周</option>
+            <option value="monthly">每月</option>
+            <option value="yearly">每年</option>
+          </select>
+        </div>
+        <div class="form-group" id="recurrence-end-group" style="display: none;">
+          <label class="form-label">重复结束日期</label>
+          <input type="date" class="form-input" name="recurrenceEnd" id="recurrence-end">
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary event-modal-cancel">取消</button>
           <button type="submit" class="btn btn-primary">保存</button>
@@ -1307,6 +1323,9 @@
     </div>
   </div>
 
-  <script src="/js/calendar.js?v=34"></script>
+  <!-- 隐藏的文件输入框 -->
+  <input type="file" id="ics-file-input" accept=".ics" style="display: none;">
+
+  <script src="/js/calendar.js?v=35"></script>
 </body>
 </html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Modal Test</title>
+  <style>
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      width: 400px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <button id="open-btn">打开模态框</button>
+
+  <div class="modal-overlay" id="test-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">测试模态框</h3>
+        <button class="modal-close">×</button>
+      </div>
+      <p>这是模态框内容</p>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById('test-modal');
+    const openBtn = document.getElementById('open-btn');
+    const closeBtn = modal.querySelector('.modal-close');
+
+    console.log('modal:', modal);
+    console.log('modal.style.display:', modal.style.display);
+
+    openBtn.addEventListener('click', () => {
+      console.log('Opening modal...');
+      console.log('Before:', modal.style.display);
+      modal.classList.add('show');
+      console.log('After:', modal.style.display);
+    });
+
+    closeBtn.addEventListener('click', () => {
+      modal.classList.remove('show');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.remove('show');
+      }
+    });
+  </script>
+</body>
+</html>
