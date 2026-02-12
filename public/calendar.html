@@ -301,6 +301,24 @@
       font-size: 14px;
     }
 
+    .day-header {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    .day-lunar {
+      font-size: 10px;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    .day-lunar.day-festival {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
     .month-day.today .month-day-number {
       color: var(--accent);
     }
@@ -1328,6 +1346,6 @@
   <!-- 隐藏的文件输入框 -->
   <input type="file" id="ics-file-input" accept=".ics" style="display: none;">
 
-  <script src="/js/calendar.js?v=36"></script>
+  <script src="/js/calendar.js?v=37"></script>
 </body>
 </html>

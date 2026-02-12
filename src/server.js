@@ -87,6 +87,7 @@ const userBackupRoutes = require('./routes/userBackup');
 const todosRoutes = require('./routes/todos');
 const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
+const lunarRoutes = require('./routes/lunar');
 
 // 分享路由必须在静态文件之前注册，否则 /s/ 会被当作静态目录处理
 app.use(sharesRoutes);
@@ -130,6 +131,7 @@ app.use(adminAuth, adminRoutes);
 app.use(userRoutes);
 app.use(todosRoutes);
 app.use('/api/events', eventsRoutes);
+app.use('/api/lunar', auth, lunarRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {

@@ -232,6 +232,18 @@ const CalendarApp = (function() {
         method: 'PUT',
         body: JSON.stringify(data)
       });
+    },
+
+    async getLunarDate(dateStr) {
+      try {
+        const response = await fetch(`/api/lunar/${dateStr}`, {
+          credentials: 'include'
+        });
+        return response.ok ? await response.json() : null;
+      } catch (error) {
+        console.error('获取农历日期失败:', error);
+        return null;
+      }
     }
   };
 
@@ -299,6 +311,36 @@ const CalendarApp = (function() {
         const dateStr = utils.formatDate(new Date(year, month + 1, i));
         this.createMonthDayCell(i, dateStr, true);
       }
+
+      // 加载农历日期
+      this.loadLunarDates(year, month);
+    },
+
+    async loadLunarDates(year, month) {
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const totalDays = lastDay.getDate();
+
+      for (let i = 1; i <= totalDays; i++) {
+        const dateStr = utils.formatDate(new Date(year, month, i));
+        const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
+
+        if (lunarEl) {
+          try {
+            const lunarData = await api.getLunarDate(dateStr);
+            if (lunarData && lunarData.lunarDayCn) {
+              lunarEl.textContent = lunarData.lunarDayCn;
+              // 如果是节日,显示节日名称
+              if (lunarData.festival) {
+                lunarEl.textContent = lunarData.festival;
+                lunarEl.classList.add('day-festival');
+              }
+            }
+          } catch (error) {
+            console.error('加载农历日期失败:', error);
+          }
+        }
+      }
     },
 
     renderNarrowWeekView() {
@@ -328,7 +370,10 @@ const CalendarApp = (function() {
       if (isSelected) cell.classList.add('selected');
 
       cell.innerHTML = `
-        <span class="month-day-number">${day}</span>
+        <div class="day-header">
+          <span class="month-day-number">${day}</span>
+          <span class="day-lunar" id="day-lunar-${dateStr}"></span>
+        </div>
         <div class="day-summary" id="day-summary-${dateStr}"></div>
         <div class="day-content" id="day-content-${dateStr}"></div>
       `;

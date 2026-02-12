@@ -5,6 +5,101 @@ const { exportToICS, importFromICS } = require('../utils/icsExport');
 
 const router = express.Router();
 
+// 导出日历为ICS格式 (必须在 /:id 之前)
+router.get('/export', async (req, res) => {
+  try {
+    const events = await getConnection().all(
+      'SELECT * FROM events WHERE username = ? ORDER BY startTime ASC',
+      [req.user]
+    );
+
+    const icsContent = exportToICS(events);
+
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=z7note-calendar-${new Date().toISOString().split('T')[0]}.ics`);
+    res.send(icsContent);
+
+    log('INFO', '导出日历', { username: req.user, eventCount: events.length });
+  } catch (e) {
+    log('ERROR', '导出日历失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '导出失败' });
+  }
+});
+
+// 从ICS格式导入日历 (必须在 /:id 之前)
+router.post('/import', async (req, res) => {
+  try {
+    const { icsContent } = req.body;
+
+    if (!icsContent) {
+      return res.status(400).json({ error: 'ICS内容不能为空' });
+    }
+
+    const importedEvents = importFromICS(icsContent);
+
+    if (importedEvents.length === 0) {
+      return res.status(400).json({ error: '未找到有效的事件' });
+    }
+
+    let importedCount = 0;
+    const skippedCount = [];
+
+    for (const event of importedEvents) {
+      try {
+        // 检查事件是否已存在
+        const existing = await getConnection().get(
+          'SELECT id FROM events WHERE id = ? AND username = ?',
+          [event.id, req.user]
+        );
+
+        if (existing) {
+          skippedCount.push(event.title);
+          continue;
+        }
+
+        // 创建事件
+        const id = event.id || Date.now().toString(36) + Math.random().toString(36).slice(2);
+        await getConnection().run(
+          `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            req.user,
+            event.title || '未命名事件',
+            event.description || '',
+            event.startTime || Math.floor(Date.now() / 1000),
+            event.endTime || null,
+            event.allDay ? 1 : 0,
+            event.color || '#2563eb',
+            Math.floor(Date.now() / 1000),
+            Math.floor(Date.now() / 1000)
+          ]
+        );
+
+        importedCount++;
+      } catch (err) {
+        log('ERROR', '导入单个事件失败', { username: req.user, event, error: err.message });
+      }
+    }
+
+    log('INFO', '导入日历', {
+      username: req.user,
+      imported: importedCount,
+      skipped: skippedCount.length
+    });
+
+    res.json({
+      success: true,
+      imported: importedCount,
+      skipped: skippedCount.length,
+      skippedEvents: skippedCount
+    });
+  } catch (e) {
+    log('ERROR', '导入日历失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '导入失败' });
+  }
+});
+
 // 获取事件列表
 router.get('/', async (req, res) => {
   try {
@@ -247,101 +342,6 @@ router.get('/calendar/day/:date', async (req, res) => {
   } catch (e) {
     log('ERROR', '获取日历数据失败', { username: req.user, date: req.params.date, error: e.message, stack: e.stack });
     res.status(500).json({ error: '获取失败', message: e.message });
-  }
-});
-
-// 导出日历为ICS格式
-router.get('/export', async (req, res) => {
-  try {
-    const events = await getConnection().all(
-      'SELECT * FROM events WHERE username = ? ORDER BY startTime ASC',
-      [req.user]
-    );
-
-    const icsContent = exportToICS(events);
-
-    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=z7note-calendar-${new Date().toISOString().split('T')[0]}.ics`);
-    res.send(icsContent);
-
-    log('INFO', '导出日历', { username: req.user, eventCount: events.length });
-  } catch (e) {
-    log('ERROR', '导出日历失败', { username: req.user, error: e.message });
-    res.status(500).json({ error: '导出失败' });
-  }
-});
-
-// 从ICS格式导入日历
-router.post('/import', async (req, res) => {
-  try {
-    const { icsContent } = req.body;
-
-    if (!icsContent) {
-      return res.status(400).json({ error: 'ICS内容不能为空' });
-    }
-
-    const importedEvents = importFromICS(icsContent);
-
-    if (importedEvents.length === 0) {
-      return res.status(400).json({ error: '未找到有效的事件' });
-    }
-
-    let importedCount = 0;
-    const skippedCount = [];
-
-    for (const event of importedEvents) {
-      try {
-        // 检查事件是否已存在
-        const existing = await getConnection().get(
-          'SELECT id FROM events WHERE id = ? AND username = ?',
-          [event.id, req.user]
-        );
-
-        if (existing) {
-          skippedCount.push(event.title);
-          continue;
-        }
-
-        // 创建事件
-        const id = event.id || Date.now().toString(36) + Math.random().toString(36).slice(2);
-        await getConnection().run(
-          `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            id,
-            req.user,
-            event.title || '未命名事件',
-            event.description || '',
-            event.startTime || Math.floor(Date.now() / 1000),
-            event.endTime || null,
-            event.allDay ? 1 : 0,
-            event.color || '#2563eb',
-            Math.floor(Date.now() / 1000),
-            Math.floor(Date.now() / 1000)
-          ]
-        );
-
-        importedCount++;
-      } catch (err) {
-        log('ERROR', '导入单个事件失败', { username: req.user, event, error: err.message });
-      }
-    }
-
-    log('INFO', '导入日历', {
-      username: req.user,
-      imported: importedCount,
-      skipped: skippedCount.length
-    });
-
-    res.json({
-      success: true,
-      imported: importedCount,
-      skipped: skippedCount.length,
-      skippedEvents: skippedCount
-    });
-  } catch (e) {
-    log('ERROR', '导入日历失败', { username: req.user, error: e.message });
-    res.status(500).json({ error: '导入失败' });
   }
 });
 
