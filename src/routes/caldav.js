@@ -123,7 +123,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
         <D:displayname>${item.title}</D:displayname>
         <D:getetag>"${item.updatedAt}"</D:getetag>
         <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
-        <D:resourcetype/>
+        <D:resourcetype><C:calendar-resource/></D:resourcetype>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -235,29 +235,73 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
             ]);
           }
 
+          // 过滤掉数据库中不存在的事件，确保只返回实际存在的事件
+          const existingEventIds = new Set(events.map(e => e.id));
+          const existingTodoIds = new Set(todos.map(t => t.id));
+          const existingIds = new Set([...existingEventIds, ...existingTodoIds]);
+
           log('INFO', 'calendar-multiget 响应', {
             eventsCount: events.length,
             todosCount: todos.length,
-            requestedIds: ids.length
+            requestedIds: ids.length,
+            existingIdsCount: existingIds.size
           });
 
-          // 生成完整的iCal日历文件
-          const icalContent = ICalGenerator.generateCalendar(events, todos, username);
+          // calendar-multiget 应该返回每个请求的href的单独响应
+          let responses = '';
 
-          // calendar-multiget 返回单个response,包含完整的日历数据
-          const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+          // 为每个请求的item生成单独的响应
+          for (const id of ids) {
+            const href = `/caldav/${username}/${id}.ics`;
+            
+            // 检查该ID是否在数据库中存在
+            if (existingIds.has(id)) {
+              // 找到对应的事件或待办事项
+              const item = [...events, ...todos].find(i => i.id === id);
+              if (item) {
+                const isEvent = !!item.startTime;
+                const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent ? [item] : [], username);
+                log('INFO', 'REPORT 返回ICS内容', {
+                  username,
+                  itemId: id,
+                  itemTitle: item.title,
+                  icalContent: icalContent
+                });
+                responses += `
   <D:response>
-    <D:href>/caldav/${username}/</D:href>
+    <D:href>${href}</D:href>
     <D:propstat>
       <D:prop>
+        <D:getetag>"${item.updatedAt}"</D:getetag>
         <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
-        <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
         <C:calendar-data><![CDATA[${icalContent}]]></C:calendar-data>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
-  </D:response>
+  </D:response>`;
+              }
+            } else {
+              // Item不存在，返回404
+              // 使用一个特殊的ETag来表示"已删除"状态，帮助客户端清除缓存
+              const deletedEtag = `"deleted-${Date.now()}"`;
+              responses += `
+  <D:response>
+    <D:href>${href}</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:getetag>${deletedEtag}</D:getetag>
+        <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
+        <C:calendar-data><![CDATA[END:VCALENDAR]]></C:calendar-data>
+      </D:prop>
+      <D:status>HTTP/1.1 404 Not Found</D:status>
+    </D:propstat>
+  </D:response>`;
+            }
+          }
+
+          const xml = `<?xml version="1.0" encoding="utf-8" ?>
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+${responses}
 </D:multistatus>`;
 
           res.setHeader('Content-Type', 'application/xml; charset=utf-8');
@@ -265,35 +309,10 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
           return;
         }
 
-        // 处理基于href的REPORT请求
-        const hrefRegex = /<[a-zA-Z0-9_:]*href>([^<]+)<\/[a-zA-Z0-9_:]*href>/g;
-        const hrefs = [];
-        let match;
-        while ((match = hrefRegex.exec(body)) !== null) {
-          hrefs.push(match[1]);
-        }
-
-        const ids = hrefs.map(href => href.match(/\/([^\/]+)\.ics$/)?.[1]).filter(Boolean);
-        log('INFO', 'REPORT 解析结果', {
-          hrefsCount: hrefs.length,
-          ids: ids,
-          firstFewHrefs: hrefs.slice(0, 5)
-        });
-
-        if (ids.length === 0) {
-            res.status(207).send(`<?xml version="1.0" encoding="utf-8" ?><D:multistatus xmlns:D="DAV:"/>`);
-            return;
-        }
-
-        const placeholders = ids.map(() => '?').join(',');
-        const [events, todos] = await Promise.all([
-          getConnection().all(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders})`, [username, ...ids]),
-          getConnection().all(`SELECT * FROM todos WHERE username = ? AND id IN (${placeholders})`, [username, ...ids])
-        ]);
-        
-        const xml = await generateMultiStatusResponseWithData(username, events, todos);
-        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-        res.status(207).send(xml);
+        // 非calendar-multiget请求暂不支持,返回空响应
+        log('WARN', 'REPORT 不支持的请求类型', { username, bodyPreview: body.substring(0, 200) });
+        res.status(207).send(`<?xml version="1.0" encoding="utf-8" ?><D:multistatus xmlns:D="DAV:"/>`);
+        return;
       } catch (error) {
         log('ERROR', 'CalDAV REPORT 内部失败', { error: error.message, stack: error.stack });
         res.status(500).send();
@@ -307,7 +326,6 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
 
 // GET /:username/:filename.ics - 获取单个日历项
 router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
-    // This logic seems fine, keeping as is
     try {
         const { username, filename } = req.params;
         if (username !== req.user) return res.status(403).send();
@@ -316,6 +334,12 @@ router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
         if (item) {
             const isEvent = !!item.startTime;
             const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent ? [item] : [], username);
+            log('INFO', 'CalDAV GET 返回ICS内容', {
+                username,
+                filename,
+                itemTitle: item.title,
+                icalContent: icalContent
+            });
             res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
             res.setHeader('ETag', `"${item.updatedAt}"`);
             res.send(icalContent);
@@ -338,31 +362,59 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
         let icalData = '';
         req.on('data', chunk => icalData += chunk);
         req.on('end', async () => {
+          let parsed;
           try {
-            const parsed = ICalParser.parse(icalData);
+            log('INFO', 'CalDAV PUT 收到原始ICS数据', {
+              username,
+              filename,
+              icalData
+            });
+            parsed = ICalParser.parse(icalData);
             log('INFO', 'CalDAV PUT 解析结果', {
                 username,
                 filename,
-                events: parsed.events?.length || 0,
-                todos: parsed.todos?.length || 0
+                events: parsed?.events?.length || 0,
+                todos: parsed?.todos?.length || 0
             });
             log('INFO', 'CalDAV PUT 解析结果', {
-                events: parsed.events?.length || 0,
-                todos: parsed.todos?.length || 0,
-                eventIds: parsed.events?.map(e => e.id),
-                todoIds: parsed.todos?.map(t => t.id)
+                events: parsed?.events?.length || 0,
+                todos: parsed?.todos?.length || 0,
+                eventIds: parsed?.events?.map(e => e.id) || [],
+                todoIds: parsed?.todos?.map(t => t.id) || []
             });
-            if (parsed.events && parsed.events.length > 0) {
+            if (parsed && parsed.events && parsed.events.length > 0) {
+              log('INFO', 'CalDAV PUT 准备保存事件', {
+                eventCount: parsed.events.length,
+                events: parsed.events.map(ev => ({
+                  id: ev.id,
+                  title: ev.title,
+                  startTime: ev.startTime,
+                  endTime: ev.endTime,
+                  allDay: ev.allDay,
+                  startTimeDate: ev.startTime ? new Date(ev.startTime * 1000).toISOString() : null,
+                  endTimeDate: ev.endTime ? new Date(ev.endTime * 1000).toISOString() : null,
+                  recurrence: ev.recurrence,
+                  recurrenceEnd: ev.recurrenceEnd
+                }))
+              });
               for (const event of parsed.events) {
-                const existing = await getConnection().get('SELECT id FROM events WHERE id = ? AND username = ?', [event.id, username]);
-                if (existing) {
-                  await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, noteId=?, updatedAt=? WHERE id=? AND username=?', [event.title, event.description || '', event.startTime, event.endTime, event.allDay ? 1:0, event.color || '#2563eb', event.noteId || null, Math.floor(Date.now()/1000), event.id, username]);
-                } else {
-                  await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, noteId, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)', [event.id, username, event.title, event.description || '', event.startTime, event.endTime, event.allDay ? 1:0, event.color || '#2563eb', event.noteId || null, Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)]);
+                try {
+                  const existing = await getConnection().get('SELECT id FROM events WHERE id = ? AND username = ?', [event.id, username]);
+                  log('INFO', 'CalDAV PUT 检查事件是否存在', { eventId: event.id, exists: !!existing });
+                  if (existing) {
+                    log('INFO', 'CalDAV PUT 更新事件', { eventId: event.id, title: event.title, recurrence: event.recurrence });
+                    await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, noteId=?, recurrence=?, recurrenceEnd=?, timezone=?, updatedAt=? WHERE id=? AND username=?', [event.title, event.description || '', event.startTime, event.endTime, event.allDay ? 1:0, event.color || '#2563eb', event.noteId || null, event.recurrence ? JSON.stringify(event.recurrence) : null, event.recurrenceEnd || null, event.timezone || null, Math.floor(Date.now()/1000), event.id, username]);
+                  } else {
+                    log('INFO', 'CalDAV PUT 插入事件', { eventId: event.id, title: event.title, recurrence: event.recurrence });
+                    await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, noteId, recurrence, recurrenceEnd, timezone, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [event.id, username, event.title, event.description || '', event.startTime, event.endTime, event.allDay ? 1:0, event.color || '#2563eb', event.noteId || null, event.recurrence ? JSON.stringify(event.recurrence) : null, event.recurrenceEnd || null, event.timezone || null, Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)]);
+                  }
+                  log('INFO', 'CalDAV PUT 事件保存成功', { eventId: event.id, title: event.title });
+                } catch (dbError) {
+                  log('ERROR', 'CalDAV PUT 数据库操作失败', { eventId: event.id, error: dbError.message, stack: dbError.stack });
                 }
               }
             }
-            if (parsed.todos && parsed.todos.length > 0) {
+            if (parsed && parsed.todos && parsed.todos.length > 0) {
               for (const todo of parsed.todos) {
                   const existing = await getConnection().get('SELECT id FROM todos WHERE id = ? AND username = ?', [todo.id, username]);
                   if (existing) {
@@ -375,6 +427,17 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
             res.setHeader('ETag', `"${Date.now()}"`);
             res.status(201).send();
           } catch (e) {
+            log('ERROR', 'CalDAV PUT 保存失败', {
+              error: e.message,
+              stack: e.stack,
+              parsedEvents: parsed?.events?.map(ev => ({
+                id: ev.id,
+                title: ev.title,
+                startTime: ev.startTime,
+                endTime: ev.endTime,
+                allDay: ev.allDay
+              })) || []
+            });
             res.status(400).send();
           }
         });
@@ -414,20 +477,18 @@ router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) 
     }
 });
 
-// DELETE /:username/ - 捕获删除日历的请求(用于调试)
+// DELETE /:username/ - 阻止删除整个日历目录
 router.delete('/:username/', basicAuthMiddleware, async (req, res) => {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-        log('INFO', 'CalDAV DELETE 日历目录', {
-            username: req.params.username,
-            fullPath: req.path,
-            bodyLength: body.length,
-            bodyPreview: body.substring(0, 500),
-            note: '此路径不删除单个事件,可能是macOS的同步行为'
-        });
-        res.status(204).send();
+    const { username } = req.params;
+    log('WARN', 'CalDAV 尝试删除日历目录(已阻止)', {
+        username,
+        fullPath: req.path,
+        userAgent: req.headers['user-agent'],
+        reason: '不允许删除整个日历目录，只允许删除单个事件'
     });
+
+    // 返回403 Forbidden，阻止删除整个日历
+    res.status(403).send('Cannot delete entire calendar. Use DELETE /:username/:id.ics to delete individual items.');
 });
 
 // Helper function to generate response for REPORT

@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>提醒设置 - z7Note</title>
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --bg: #ffffff;
+      --bg-secondary: #f8fafc;
+      --text: #1e293b;
+      --text-secondary: #64748b;
+      --border: #e2e8f0;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --bg-secondary: #1e293b;
+        --text: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --border: #334155;
+        --success: #22c55e;
+        --danger: #f87171;
+        --warning: #fbbf24;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* 顶部导航 */
+    .top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .nav-btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .header {
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-icon {
+      font-size: 20px;
+    }
+
+    .card-description {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus,
+    .form-select:focus {
+      border-color: var(--accent);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+
+    .checkbox-group:hover {
+      border-color: var(--accent);
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      margin-top: 2px;
+      accent-color: var(--accent);
+    }
+
+    .checkbox-label {
+      cursor: pointer;
+      font-size: 14px;
+      flex: 1;
+    }
+
+    .checkbox-label-title {
+      font-weight: 500;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .checkbox-label-desc {
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .form-row .form-group {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 600px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-row-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .form-row-2 .form-group {
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 600px) {
+      .form-row-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-secondary);
+      border-color: var(--accent);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      border-radius: 10px;
+      color: white;
+      font-weight: 500;
+      z-index: 10000;
+      transform: translateX(400px);
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .notification.show {
+      transform: translateX(0);
+    }
+
+    .notification.success {
+      background: var(--success);
+    }
+
+    .notification.error {
+      background: var(--danger);
+    }
+
+    .notification.warning {
+      background: var(--warning);
+    }
+
+    .history-section {
+      margin-top: 30px;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .history-list {
+      max-height: 500px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .history-item {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.2s;
+    }
+
+    .history-item:hover {
+      background: var(--bg);
+    }
+
+    .history-item:last-child {
+      border-bottom: none;
+    }
+
+    .history-item-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .history-item-title {
+      font-weight: 500;
+      font-size: 14px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .history-item-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .history-item-error {
+      color: var(--danger);
+      font-size: 12px;
+      margin-top: 4px;
+      word-break: break-all;
+    }
+
+    .history-item-status {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+
+    .history-item-status.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+
+    .history-item-status.failed {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+    }
+
+    .history-item-status.pending {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state-text {
+      font-size: 16px;
+    }
+
+    /* 快捷时间预设 */
+    .time-presets {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .time-preset {
+      padding: 4px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .time-preset:hover {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .time-preset.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    /* 状态徽章 */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-method {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .badge-email {
+      background: rgba(37, 99, 235, 0.1);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .badge-browser {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border-color: var(--success);
+    }
+
+    .badge-caldav {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+      border-color: var(--warning);
+    }
+  </style>
+</head>
+<body>
+  <nav class="top-nav">
+    <div class="nav-left">
+      <span class="nav-title">提醒设置</span>
+    </div>
+    <button class="nav-btn" onclick="window.location.href='/calendar.html'">返回日历</button>
+  </nav>
+
+  <div class="container">
+    <div class="header">
+      <h1>🔔 提醒设置</h1>
+      <p>配置您的事件和待办事项提醒方式</p>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>加载中...</p>
+    </div>
+
+    <form id="reminder-settings-form">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><span class="card-icon">⚙️</span>提醒开关</h2>
+        </div>
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="event-reminder-enabled" name="event_reminder_enabled">
+            <label for="event-reminder-enabled" class="checkbox-label">
+              <span class="checkbox-label-title">启用事件提醒</span>
+              <span class="checkbox-label-desc">在事件开始前收到提醒通知</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="todo-reminder-enabled" name="todo_reminder_enabled">
+            <label for="todo-reminder-enabled" class="checkbox-label">
+              <span class="checkbox-label-title">启用待办事项提醒</span>
+              <span class="checkbox-label-desc">在待办事项截止前收到提醒通知</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><span class="card-icon">⏰</span>提醒时间</h2>
+        </div>
+        <p class="card-description" style="margin-bottom: 16px;">
+          设置在事件/待办开始前多久收到提醒
+        </p>
+        <div class="form-group">
+          <label class="form-label">提前时间</label>
+          <div class="form-row">
+            <div>
+              <input type="number" class="form-input" name="reminder_advance_days" min="0" max="30" value="0" placeholder="0">
+              <small style="color: var(--text-secondary); font-size: 12px;">天</small>
+            </div>
+            <div>
+              <input type="number" class="form-input" name="reminder_advance_hours" min="0" max="23" value="1" placeholder="1">
+              <small style="color: var(--text-secondary); font-size: 12px;">小时</small>
+            </div>
+            <div>
+              <input type="number" class="form-input" name="reminder_advance_minutes" min="0" max="59" value="0" placeholder="0">
+              <small style="color: var(--text-secondary); font-size: 12px;">分钟</small>
+            </div>
+          </div>
+          <div class="time-presets">
+            <span class="time-preset" data-days="0" data-hours="0" data-minutes="5">5分钟</span>
+            <span class="time-preset" data-days="0" data-hours="0" data-minutes="15">15分钟</span>
+            <span class="time-preset" data-days="0" data-hours="1" data-minutes="0">1小时</span>
+            <span class="time-preset" data-days="0" data-hours="2" data-minutes="0">2小时</span>
+            <span class="time-preset" data-days="1" data-hours="0" data-minutes="0">1天</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><span class="card-icon">📧</span>提醒方式</h2>
+        </div>
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="email-reminder-enabled" name="email_reminder_enabled">
+            <label for="email-reminder-enabled" class="checkbox-label">
+              <span class="checkbox-label-title">📧 邮件提醒</span>
+              <span class="checkbox-label-desc">发送到您注册时使用的邮箱地址</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="browser-reminder-enabled" name="browser_reminder_enabled">
+            <label for="browser-reminder-enabled" class="checkbox-label">
+              <span class="checkbox-label-title">🔔 浏览器通知</span>
+              <span class="checkbox-label-desc">在浏览器中显示推送通知（需要授权）</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="caldav-reminder-enabled" name="caldav_reminder_enabled">
+            <label for="caldav-reminder-enabled" class="checkbox-label">
+              <span class="checkbox-label-title">📅 日历应用提醒</span>
+              <span class="checkbox-label-desc">通过CalDAV同步到其他日历应用（需要配置CalDAV）</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><span class="card-icon">🌙</span>免打扰时间</h2>
+        </div>
+        <p class="card-description" style="margin-bottom: 16px;">
+          在此时间段内不会发送提醒通知
+        </p>
+        <div class="form-group">
+          <div class="form-row-2">
+            <div>
+              <label class="form-label">开始时间</label>
+              <input type="time" class="form-input" name="quiet_start_time" value="22:00">
+            </div>
+            <div>
+              <label class="form-label">结束时间</label>
+              <input type="time" class="form-input" name="quiet_end_time" value="08:00">
+            </div>
+          </div>
+          <div class="time-presets">
+            <span class="time-preset" data-start="22:00" data-end="08:00" data-is-quiet="true">22:00 - 08:00</span>
+            <span class="time-preset" data-start="23:00" data-end="07:00" data-is-quiet="true">23:00 - 07:00</span>
+            <span class="time-preset" data-start="00:00" data-end="06:00" data-is-quiet="true">00:00 - 06:00</span>
+            <span class="time-preset" data-start="" data-end="" data-is-quiet="false">关闭免打扰</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="btn btn-primary">💾 保存设置</button>
+        <button type="button" class="btn btn-secondary" onclick="window.location.href='/calendar.html'">返回日历</button>
+      </div>
+    </form>
+
+    <div class="history-section">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title"><span class="card-icon">📋</span>提醒历史</h2>
+          <div>
+            <button type="button" class="btn btn-secondary" onclick="loadHistory()">刷新</button>
+            <button type="button" class="btn btn-danger" onclick="clearHistory()">清除历史</button>
+          </div>
+        </div>
+        <div class="history-list" id="history-list">
+          <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <div class="empty-state-text">暂无提醒历史</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notification" id="notification"></div>
+
+  <script src="/js/reminder-settings.js?v=2"></script>
+</body>
+</html>

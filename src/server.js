@@ -23,6 +23,7 @@ const { initDefaultConfig } = require('./services/systemConfig');
 const { cleanupExpiredSessions, initChunksDir } = require('./services/chunkUpload');
 const { cleanupAllLimiters } = require('./utils/dynamicRateLimiter');
 const { setupUserBackupCron, getUserBackupConfig } = require('./services/userExport');
+const { checkAndSendPendingReminders } = require('./services/reminderService');
 
 const app = express();
 app.set('trust proxy', 1); // 信任反向代理，用于正确识别 https
@@ -30,10 +31,10 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 
 // 中间件配置
-// JSON body 解析器（跳过分片上传路由）
+// JSON body 解析器（跳过分片上传路由和 CalDAV 路由）
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/upload/chunk')) {
-    // 跳过 JSON 解析，让后面的 raw 中间件处理
+  if (req.path.startsWith('/api/upload/chunk') || req.path.startsWith('/caldav')) {
+    // 跳过 JSON 解析，让后面的 raw 中间件或 CalDAV 路由自己处理
     next();
   } else {
     express.json({ limit: '50mb' })(req, res, next);
@@ -59,7 +60,7 @@ app.use((req, res, next) => {
     '/favicon.ico', '/css/', '/js/', '/cdn/',
     '/caldav/', '/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/api/lunar',  // 农历API公开访问
-    '/calendar.html'  // 日历页面
+    '/calendar.html', '/reminder-settings.html'  // 日历和提醒设置页面
   ];
 
   const isPublic = publicPaths.some(path => req.path.startsWith(path));
@@ -90,6 +91,7 @@ const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
 const lunarRoutes = require('./routes/lunar');
 const calendarSubscriptionsRoutes = require('./routes/calendarSubscriptions');
+const remindersRoutes = require('./routes/reminders');
 
 // 分享路由必须在静态文件之前注册，否则 /s/ 会被当作静态目录处理
 app.use(sharesRoutes);
@@ -126,6 +128,13 @@ app.get('/calendar.html', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'calendar.html'));
 });
 
+app.get('/reminder-settings.html', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(path.join(PUBLIC_DIR, 'reminder-settings.html'));
+});
+
 app.use(authRoutes);
 app.use(notesRoutes);
 app.use(attachmentsRoutes);
@@ -135,6 +144,7 @@ app.use(todosRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/lunar', lunarRoutes);
 app.use('/api/calendar-subscriptions', calendarSubscriptionsRoutes);
+app.use('/api/reminders', remindersRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {
@@ -235,6 +245,16 @@ let server;
     // 设置 CDN 自动更新任务
     setupAutoUpdate();
 
+    // 设置提醒定时任务 - 每分钟检查一次
+    nodeCron.schedule('* * * * *', async () => {
+      try {
+        await checkAndSendPendingReminders();
+      } catch (e) {
+        console.error('[定时任务] 提醒检查失败:', e);
+      }
+    });
+    console.log('[定时任务] 提醒服务已启动 (每分钟检查一次)');
+
     // 设置定时清理过期上传会话（每小时）
     nodeCron.schedule('0 * * * *', async () => {
       try {
@@ -250,6 +270,7 @@ let server;
       console.log(`系统配额 - 笔记: ${config.defaultNoteLimit}MB, 附件: ${config.defaultFileLimit}MB`);
       console.log(`CDN 代理已启用，缓存目录: ${config.paths.data}/cdn-cache`);
       console.log(`最大文件大小: ${config.maxFileSize}MB`);
+      console.log(`提醒服务已启用，支持邮件、浏览器和CalDAV提醒`);
     });
 
     // 初始化WebSocket服务器

@@ -127,8 +127,8 @@ function handleMessage(ws, data) {
   }
 }
 
-// 广播消息给所有客户端
-function broadcast(type, data) {
+// 广播消息给所有客户端或指定用户
+function broadcast(type, data, options = {}) {
   if (!wss) {
     log('WARN', 'WebSocket服务器未初始化，无法广播消息');
     return;
@@ -137,16 +137,23 @@ function broadcast(type, data) {
   const message = JSON.stringify({ type, ...data });
   let sentCount = 0;
   let totalClients = 0;
+  const { username: targetUsername } = options;
 
   wss.clients.forEach((client) => {
     totalClients++;
+
+    // 如果指定了用户名，只发送给该用户
+    if (targetUsername && client.username !== targetUsername) {
+      return;
+    }
+
     if (client.readyState === WebSocket.OPEN) {
       client.send(message);
       sentCount++;
     }
   });
 
-  log('INFO', 'WebSocket广播完成', { type, totalClients, sentCount });
+  log('INFO', 'WebSocket广播完成', { type, targetUsername, totalClients, sentCount });
 }
 
 // 广播笔记更新

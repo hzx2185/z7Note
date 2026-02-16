@@ -15,32 +15,41 @@ class ICalGenerator {
     lines.push('BEGIN:VEVENT');
 
     // UID（唯一标识符）
-    lines.push(`UID:${event.id}@z7note`);
+      // UID（唯一标识符）- 直接使用event.id，不添加后缀
+      // 注意：event.id应该包含完整的UID（如果客户端发送了完整UID）
+      lines.push(`UID:${event.id}`);
 
     // DTSTAMP（创建时间）
     const created = event.createdAt || event.updatedAt || Date.now();
     const createdDate = new Date(created * 1000);
     lines.push(`DTSTAMP:${this.formatDateTime(createdDate)}`);
 
-    // DTSTART（开始时间）
-    const startDate = new Date(event.startTime * 1000);
-    if (event.allDay) {
-      lines.push(`DTSTART;VALUE=DATE:${this.formatDate(startDate)}`);
-    } else {
-      lines.push(`DTSTART:${this.formatDateTime(startDate)}`);
-    }
-
-    // DTEND（结束时间）
-    if (event.endTime) {
-      const endDate = new Date(event.endTime * 1000);
+      // DTSTART（开始时间）
+      const startDate = new Date(event.startTime * 1000);
       if (event.allDay) {
-        // 全天事件的结束时间需要加一天
-        endDate.setDate(endDate.getDate() + 1);
-        lines.push(`DTEND;VALUE=DATE:${this.formatDate(endDate)}`);
+        lines.push(`DTSTART;VALUE=DATE:${this.formatDate(startDate)}`);
+      } else if (event.timezone) {
+        // 如果有时区信息，输出带TZID的本地时间
+        lines.push(`DTSTART;TZID=${event.timezone}:${this.formatDateTimeWithTimezone(startDate, event.timezone)}`);
       } else {
-        lines.push(`DTEND:${this.formatDateTime(endDate)}`);
+        lines.push(`DTSTART:${this.formatDateTime(startDate)}`);
       }
-    }
+      
+      // DTEND（结束时间）
+      if (event.endTime) {
+        const endDate = new Date(event.endTime * 1000);
+        if (event.allDay) {
+          // 全天事件的结束时间需要加一天
+          endDate.setUTCDate(endDate.getUTCDate() + 1);
+          lines.push(`DTEND;VALUE=DATE:${this.formatDate(endDate)}`);
+        } else if (event.timezone) {
+          // 如果有时区信息，输出带TZID的本地时间
+          lines.push(`DTEND;TZID=${event.timezone}:${this.formatDateTimeWithTimezone(endDate, event.timezone)}`);
+        } else {
+          lines.push(`DTEND:${this.formatDateTime(endDate)}`);
+        }
+      }
+      
 
     // SUMMARY（标题）
     if (event.title) {
@@ -215,6 +224,63 @@ class ICalGenerator {
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
     const seconds = String(date.getUTCSeconds()).padStart(2, '0');
     return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+  }
+
+  /**
+   * 格式化日期时间（带时区，YYYYMMDDTHHMMSS）
+   * 将UTC时间转换为指定时区的本地时间
+   */
+  static formatDateTimeWithTimezone(date, timezone) {
+    // 获取时区偏移
+    const offset = this.getTimezoneOffset(timezone);
+    if (offset === null) {
+      // 如果无法识别时区，返回UTC时间
+      return this.formatDateTime(date);
+    }
+    
+    // 将UTC时间转换为本地时间
+    const localTime = new Date(date.getTime() + (offset * 60 * 60 * 1000));
+    
+    const year = localTime.getUTCFullYear();
+    const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(localTime.getUTCDate()).padStart(2, '0');
+    const hours = String(localTime.getUTCHours()).padStart(2, '0');
+    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+  }
+
+  /**
+   * 获取时区偏移（小时）
+   * @param {string} timezone - 时区ID，如 'Asia/Shanghai'
+   * @returns {number|null} - 相对于UTC的偏移小时数，东时区为正
+   */
+  static getTimezoneOffset(timezone) {
+    // 常见时区映射表
+    const timezoneMap = {
+      'Asia/Shanghai': 8,
+      'Asia/Chongqing': 8,
+      'Asia/Hong_Kong': 8,
+      'Asia/Taipei': 8,
+      'Asia/Singapore': 8,
+      'Asia/Tokyo': 9,
+      'Asia/Seoul': 9,
+      'Asia/Dubai': 4,
+      'Asia/Kolkata': 5.5,
+      'Europe/London': 0,
+      'Europe/Paris': 1,
+      'Europe/Berlin': 1,
+      'Europe/Moscow': 3,
+      'America/New_York': -5,
+      'America/Chicago': -6,
+      'America/Denver': -7,
+      'America/Los_Angeles': -8,
+      'America/Sao_Paulo': -3,
+      'Australia/Sydney': 10,
+      'Pacific/Auckland': 12
+    };
+    
+    return timezoneMap[timezone] !== undefined ? timezoneMap[timezone] : null;
   }
 
   /**

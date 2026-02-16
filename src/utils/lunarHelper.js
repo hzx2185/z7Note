@@ -18,7 +18,7 @@ function solarToLunar(solarDate) {
     year: lunar.getYear(),
     month: lunar.getMonth(),
     day: lunar.getDay(),
-    isLeapMonth: false,
+    isLeapMonth: false, // lunar-javascript库将闰月作为单独月份处理,不需要判断
     yearCn: lunar.getYearInChinese(),
     monthCn: lunar.getMonthInChinese(),
     dayCn: lunar.getDayInChinese(),
@@ -31,13 +31,13 @@ function solarToLunar(solarDate) {
  * @param {number} year - 农历年
  * @param {number} month - 农历月
  * @param {number} day - 农历日
- * @param {boolean} isLeapMonth - 是否闰月
+ * @param {boolean} isLeapMonth - 是否闰月(暂不支持)
  * @returns {Date} 公历日期
  */
 function lunarToSolar(year, month, day, isLeapMonth = false) {
-  const lunar = Lunar.fromYmd(year, month, day, isLeapMonth);
+  const lunar = Lunar.fromYmd(year, month, day);
   const solar = lunar.getSolar();
-  return solar.toDate();
+  return new Date(solar.toYmd());
 }
 
 /**
@@ -49,15 +49,9 @@ function getNextLunarDate(solarDate) {
   const lunarInfo = solarToLunar(solarDate);
   const nextYear = lunarInfo.year + 1;
 
-  // 如果是闰月,需要特殊处理
-  if (lunarInfo.isLeapMonth) {
-    // 闰月不是每年都有,如果下一年没有该闰月,使用同月
-    const nextLunar = Lunar.fromYmd(nextYear, lunarInfo.month, lunarInfo.day, false);
-    return nextLunar.getSolar().toDate();
-  }
-
   const nextLunar = Lunar.fromYmd(nextYear, lunarInfo.month, lunarInfo.day);
-  return nextLunar.getSolar().toDate();
+  const nextSolar = nextLunar.getSolar();
+  return new Date(nextSolar.toYmd());
 }
 
 /**
@@ -68,25 +62,19 @@ function getNextLunarDate(solarDate) {
 function getNextLunarMonthDate(solarDate) {
   const lunarInfo = solarToLunar(solarDate);
 
-  // 如果是闰月,下个月就是下个农历月的初一
-  if (lunarInfo.isLeapMonth) {
-    const nextLunar = Lunar.fromYmd(lunarInfo.year, lunarInfo.month + 1, lunarInfo.day, false);
-    return nextLunar.getSolar().toDate();
+  // 计算下一个农历月
+  let nextMonth = lunarInfo.month + 1;
+  let nextYear = lunarInfo.year;
+
+  // 如果超过12月,进入下一年
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
   }
 
-  // 检查下个月是否有闰月
-  const currentLunar = Lunar.fromYmd(lunarInfo.year, lunarInfo.month, 1);
-  const nextMonthLunar = currentLunar.nextMonth();
-
-  // 如果下个月有闰月,且当前月不是闰月,需要跳过闰月
-  if (nextMonthLunar.isLeap()) {
-    const afterLeapLunar = nextMonthLunar.nextMonth();
-    const targetLunar = Lunar.fromYmd(afterLeapLunar.getYear(), afterLeapLunar.getMonth(), lunarInfo.day);
-    return targetLunar.getSolar().toDate();
-  }
-
-  const targetLunar = Lunar.fromYmd(nextMonthLunar.getYear(), nextMonthLunar.getMonth(), lunarInfo.day);
-  return targetLunar.getSolar().toDate();
+  const targetLunar = Lunar.fromYmd(nextYear, nextMonth, lunarInfo.day);
+  const targetSolar = targetLunar.getSolar();
+  return new Date(targetSolar.toYmd());
 }
 
 /**
@@ -98,15 +86,25 @@ function getNextLunarMonthDate(solarDate) {
  */
 function generateLunarRecurringEvents(masterEvent, startDate, endDate) {
   const events = [];
-  const { recurrence, recurrenceEnd, startTime } = masterEvent;
+  let recurrence = masterEvent.recurrence;
+
+  if (typeof recurrence === 'string') {
+    try {
+      recurrence = JSON.parse(recurrence);
+    } catch (e) {
+      return events;
+    }
+  }
 
   if (!recurrence || !recurrence.type || !recurrence.type.startsWith('lunar_')) {
     return events;
   }
 
   const recurrenceType = recurrence.type; // 'lunar_yearly', 'lunar_monthly'
-  const startSolarDate = new Date(startTime * 1000);
-  const endRecurrenceDate = recurrenceEnd ? new Date(recurrenceEnd * 1000) : new Date(endDate * 1000);
+  const startSolarDate = new Date(masterEvent.startTime * 1000);
+  const endRecurrenceDate = masterEvent.recurrenceEnd 
+    ? new Date(masterEvent.recurrenceEnd * 1000) 
+    : new Date(endDate * 1000);
   endRecurrenceDate.setHours(23, 59, 59, 999);
 
   let currentDate = new Date(startSolarDate);
