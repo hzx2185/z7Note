@@ -1,5 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { authenticator } = require('otplib');
 const { getConnection } = require('../db/connection');
 const config = require('../config');
 const { sanitizeInput, validateUsername, validateEmail, validatePassword } = require('../utils/validators');
@@ -48,6 +50,7 @@ router.post('/api/register', async (req, res) => {
 
 // 登录
 router.post('/api/login', async (req, res) => {
+  console.log('[Login] Request received');
   const { user, pass } = req.body;
   try {
     if (!user || !pass) {
@@ -57,19 +60,124 @@ router.post('/api/login', async (req, res) => {
     const sanitizedUser = sanitizeInput(user, 50);
     const row = await getConnection().get('SELECT * FROM users WHERE username = ? OR email = ?', 
       [sanitizedUser, sanitizedUser]);
+
     if (row && await bcrypt.compare(sanitizeInput(pass, 100), row.password)) {
-      res.cookie(config.cookieName, row.username, { 
-        maxAge: config.cookieMaxAge, 
-        httpOnly: true, 
-        path: '/', 
-        sameSite: 'lax' 
-      });
-      return res.json({ status: "ok" });
+      // 密码正确，检查是否需要2FA
+      if (row.tfa_enabled) {
+        // 需要2FA，生成临时令牌
+        console.log('[Login] 2FA enabled, generating temp token with expiresIn:', config.jwt.expiresIn);
+        const tempToken = jwt.sign({ username: row.username }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
+        console.log('[Login] Temp token generated');
+        return res.json({ status: "tfa_required", tempToken });
+      } else {
+        // 不需要2FA，正常登录
+        res.cookie(config.cookieName, row.username, { 
+          maxAge: config.cookieMaxAge, 
+          httpOnly: true, 
+          path: '/', 
+          sameSite: 'lax' 
+        });
+        return res.json({ status: "ok" });
+      }
     }
     res.status(403).json({ error: "账号或密码错误" });
   } catch (e) {
     console.error('登录失败:', e);
     res.status(500).json({ error: "服务器内部错误" });
+  }
+});
+
+// 验证2FA并完成登录
+router.post('/api/verify-tfa', async (req, res) => {
+  console.log('[Verify TFA] Request received');
+  console.log('[Verify TFA] tempToken length:', req.body.tempToken?.length || 0);
+  console.log('[Verify TFA] tfaToken:', req.body.tfaToken);
+  
+  const { tempToken, tfaToken } = req.body;
+  if (!tempToken || !tfaToken) {
+    console.log('[Verify TFA] Missing tempToken or tfaToken');
+    return res.status(400).json({ error: '缺少临时令牌或2FA验证码' });
+  }
+
+  try {
+    // 验证临时令牌
+    console.log('[Verify TFA] Verifying JWT token...');
+    console.log('[Verify TFA] JWT secret length:', config.jwt.secret.length);
+    
+    const decoded = jwt.verify(tempToken, config.jwt.secret);
+    const username = decoded.username;
+    console.log('[Verify TFA] JWT valid, username:', username);
+    console.log('[Verify TFA] Token exp (timestamp):', decoded.exp);
+    console.log('[Verify TFA] Current time (timestamp):', Math.floor(Date.now() / 1000));
+
+    // 获取用户2FA密钥和备用代码
+    const db = getConnection();
+    const user = await db.get('SELECT tfa_secret, tfa_backup_codes FROM users WHERE username = ? AND tfa_enabled = 1', [username]);
+
+    if (!user || !user.tfa_secret) {
+      return res.status(401).json({ error: '无法验证2FA，请重新登录' });
+    }
+
+    let isValid = false;
+    let usedBackupCode = false;
+
+    // 首先尝试验证为备用代码
+    if (user.tfa_backup_codes) {
+      try {
+        const backupCodes = JSON.parse(user.tfa_backup_codes);
+        const codeIndex = backupCodes.indexOf(tfaToken.toUpperCase());
+        if (codeIndex !== -1) {
+          // 找到备用代码，从列表中移除已使用的代码
+          backupCodes.splice(codeIndex, 1);
+          await db.run(
+            'UPDATE users SET tfa_backup_codes = ? WHERE username = ?',
+            [JSON.stringify(backupCodes), username]
+          );
+          isValid = true;
+          usedBackupCode = true;
+        }
+      } catch (e) {
+        console.error('解析备用代码失败:', e);
+      }
+    }
+
+    // 如果不是备用代码，尝试验证为普通验证码
+    if (!isValid) {
+      const window = 2;
+      for (let i = -window; i <= window; i++) {
+        const delta = authenticator.verify({
+          token: tfaToken,
+          secret: user.tfa_secret,
+          window: [i, i]
+        });
+        if (delta !== null) {
+          isValid = true;
+          break;
+        }
+      }
+    }
+
+    if (isValid) {
+      // 验证成功，设置最终cookie并完成登录
+      res.cookie(config.cookieName, username, { 
+        maxAge: config.cookieMaxAge, 
+        httpOnly: true, 
+        path: '/', 
+        sameSite: 'lax' 
+      });
+      return res.json({ status: "ok", usedBackupCode });
+    } else {
+      return res.status(401).json({ error: '2FA验证码无效' });
+    }
+  } catch (e) {
+    if (e instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ error: '会话已过期，请重新登录' });
+    }
+    if (e instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ error: '无效的会话，请重新登录' });
+    }
+    console.error('2FA验证失败:', e);
+    return res.status(500).json({ error: '服务器内部错误' });
   }
 });
 
@@ -151,6 +259,44 @@ router.post('/api/reset-password', async (req, res) => {
   await getConnection().run('UPDATE users SET password = ? WHERE email = ?', [hashedPassword, email]);
   await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
   res.json({ status: "ok" });
+});
+
+// 已登录用户修改密码
+router.post('/api/change-password', async (req, res) => {
+  try {
+    const { oldPass, newPass } = req.body;
+    
+    if (!oldPass || !newPass) {
+      return res.status(400).json({ error: "旧密码和新密码不能为空" });
+    }
+    
+    if (newPass.length < 6) {
+      return res.status(400).json({ error: "新密码至少需要6个字符" });
+    }
+    
+    // 获取当前用户
+    const user = await getConnection().get('SELECT * FROM users WHERE username = ?', [req.user]);
+    
+    if (!user) {
+      return res.status(404).json({ error: "用户不存在" });
+    }
+    
+    // 验证旧密码
+    const isOldPassValid = await bcrypt.compare(sanitizeInput(oldPass, 100), user.password);
+    if (!isOldPassValid) {
+      return res.status(400).json({ error: "旧密码错误" });
+    }
+    
+    // 更新新密码
+    const hashedNewPassword = await bcrypt.hash(newPass, 10);
+    await getConnection().run('UPDATE users SET password = ? WHERE username = ?', [hashedNewPassword, req.user]);
+    
+    log('INFO', '用户密码修改成功', { username: req.user });
+    res.json({ status: "ok" });
+  } catch (e) {
+    log('ERROR', '密码修改失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: "密码修改失败，请稍后重试" });
+  }
 });
 
 module.exports = router;

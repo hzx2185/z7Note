@@ -2530,6 +2530,422 @@ const UIManager = {
         } catch (e) {
             this.showToast('绑定失败');
         }
+    },
+
+    // 打开改密模态框
+    showChangePasswordModal() {
+        const modal = document.getElementById('change-password-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            document.getElementById('old-password-input').value = '';
+            document.getElementById('new-password-input').value = '';
+            document.getElementById('confirm-password-input').value = '';
+            document.getElementById('change-password-error').style.display = 'none';
+            document.getElementById('change-password-btn').disabled = false;
+            document.getElementById('change-password-btn').textContent = '确认修改';
+            
+            // 设置隐藏的用户名字段
+            const userDisplay = document.getElementById('user-display');
+            const usernameInput = document.getElementById('username-input');
+            if (userDisplay && usernameInput) {
+                const text = userDisplay.textContent;
+                const username = text.replace('用户: ', '');
+                usernameInput.value = username;
+            }
+        }
+    },
+
+    // 关闭改密模态框
+    closeChangePasswordModal() {
+        const modal = document.getElementById('change-password-modal');
+        if (modal) modal.style.display = 'none';
+    },
+
+    // 修改密码
+    async changePassword() {
+        const oldPass = document.getElementById('old-password-input').value.trim();
+        const newPass = document.getElementById('new-password-input').value.trim();
+        const confirmPass = document.getElementById('confirm-password-input').value.trim();
+        const errorEl = document.getElementById('change-password-error');
+        const btn = document.getElementById('change-password-btn');
+        
+        // 验证输入
+        if (!oldPass || !newPass || !confirmPass) {
+            errorEl.textContent = '请填写所有字段';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        if (newPass.length < 6) {
+            errorEl.textContent = '新密码至少需要6个字符';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        if (newPass !== confirmPass) {
+            errorEl.textContent = '两次输入的新密码不一致';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        errorEl.style.display = 'none';
+        btn.disabled = true;
+        btn.textContent = '修改中...';
+        
+        try {
+            const res = await fetch('/api/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ oldPass, newPass })
+            });
+            
+            if (res.ok) {
+                this.showToast('密码修改成功');
+                this.closeChangePasswordModal();
+            } else {
+                const data = await res.json();
+                errorEl.textContent = data.error || '修改失败';
+                errorEl.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '确认修改';
+            }
+        } catch (e) {
+            errorEl.textContent = '修改失败，请稍后重试';
+            errorEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = '确认修改';
+        }
+    },
+    // 显示 2FA 设置模态框
+    async show2FASettings() {
+        const modal = document.getElementById('2fa-modal');
+        const content = document.getElementById('2fa-content');
+        
+        if (!modal || !content) return;
+        
+        modal.style.display = 'flex';
+        content.innerHTML = '<div style="text-align:center;padding:20px;">加载中...</div>';
+        
+        try {
+            // 获取当前 2FA 状态
+            const res = await fetch('/api/2fa/status');
+            if (res.ok) {
+                const data = await res.json();
+                this.render2FAContent(data);
+            } else if (res.status === 404) {
+                // API 不存在,显示未实现提示
+                content.innerHTML = `
+                    <div style="text-align:center;">
+                        <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+                        <div style="font-size:16px;font-weight:bold;margin-bottom:8px;">功能未实现</div>
+                        <div style="font-size:12px;color:var(--gray);margin-bottom:20px;">
+                            两步验证功能需要后端支持<br>
+                            请联系管理员启用此功能
+                        </div>
+                        <button onclick="window.ui.close2FAModal()" style="background:var(--accent);color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">
+                            关闭
+                        </button>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);">加载失败</div>';
+            }
+        } catch (e) {
+            console.error('加载 2FA 状态失败:', e);
+            content.innerHTML = `
+                <div style="text-align:center;">
+                    <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+                    <div style="font-size:16px;font-weight:bold;margin-bottom:8px;">网络错误</div>
+                    <div style="font-size:12px;color:var(--gray);margin-bottom:20px;">
+                        无法连接到服务器<br>
+                        请检查网络连接
+                    </div>
+                    <button onclick="window.ui.close2FAModal()" style="background:var(--accent);color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">
+                        关闭
+                    </button>
+                </div>
+            `;
+        }
+    },
+    
+    // 渲染 2FA 内容
+    render2FAContent(data) {
+        const content = document.getElementById('2fa-content');
+        if (!content) return;
+        
+        if (data.enabled) {
+            // 2FA 已启用
+            let backupCodesHtml = '';
+            if (data.backupCodes && data.backupCodes.length > 0) {
+                backupCodesHtml = `
+                    <div style="background:var(--bg);padding:10px;border-radius:6px;margin-bottom:10px;text-align:left;">
+                        <div style="font-size:10px;font-weight:bold;margin-bottom:6px;">剩余备用代码 (${data.backupCodes.length})</div>
+                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px;">
+                            ${data.backupCodes.map(c => `<div style="background:var(--border);padding:4px 6px;border-radius:4px;font-family:monospace;font-size:10px;text-align:center;">${c}</div>`).join('')}
+                        </div>
+                        <div style="margin-top:8px;display:flex;gap:6px;">
+                            <button onclick="window.ui.copyBackupCodes()" style="background:var(--accent);color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:10px;flex:1;">
+                                复制
+                            </button>
+                            <button onclick="window.ui.refreshBackupCodes()" style="background:var(--accent);color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:10px;flex:1;">
+                                重新生成
+                            </button>
+                        </div>
+                    </div>
+                `;
+                this.currentBackupCodes = data.backupCodes;
+            } else {
+                backupCodesHtml = `
+                    <div style="background:var(--bg);padding:10px;border-radius:6px;margin-bottom:10px;">
+                        <div style="font-size:10px;color:var(--gray);margin-bottom:6px;">备用代码</div>
+                        <div style="font-size:10px;">无</div>
+                        <button onclick="window.ui.refreshBackupCodes()" style="background:var(--accent);color:white;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:10px;margin-top:6px;width:100%;">
+                            生成备用代码
+                        </button>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = `
+                <div style="text-align:center;">
+                    <div style="font-size:24px;margin-bottom:4px;">✅</div>
+                    <div style="font-size:12px;font-weight:bold;margin-bottom:2px;">两步验证已启用</div>
+                    <div style="font-size:10px;color:var(--gray);margin-bottom:8px;">账户已受保护</div>
+                    ${backupCodesHtml}
+                    <button onclick="window.ui.disable2FA()" style="background:var(--red);color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:bold;width:100%;font-size:11px;">
+                        禁用两步验证
+                    </button>
+                </div>
+            `;
+        } else {
+            // 2FA 未启用
+            content.innerHTML = `
+                <div style="text-align:center;">
+                    <div style="font-size:24px;margin-bottom:4px;">🔐</div>
+                    <div style="font-size:12px;font-weight:bold;margin-bottom:2px;">启用两步验证</div>
+                    <div id="2fa-qrcode" style="background:var(--bg);padding:6px;border-radius:4px;margin-bottom:4px;">
+                        加载中...
+                    </div>
+                    <div style="font-size:9px;color:var(--gray);margin-bottom:4px;">
+                        密钥: <span id="2fa-secret" style="font-family:monospace;">-</span>
+                    </div>
+                    <div style="margin-bottom:4px;">
+                        <input type="text" id="2fa-code" placeholder="输入6位验证码" maxlength="6" 
+                               style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);
+                                      color:var(--text);border-radius:4px;outline:none;text-align:center;
+                                      font-size:14px;letter-spacing:2px;">
+                    </div>
+                    <button onclick="window.ui.enable2FA()" style="background:var(--accent);color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-weight:bold;width:100%;font-size:11px;">
+                        启用两步验证
+                    </button>
+                </div>
+            `;
+            
+            // 生成 QR 码
+            this.generate2FAQRCode();
+        }
+    },
+    
+    // 生成 2FA QR 码
+    async generate2FAQRCode() {
+        try {
+            const res = await fetch('/api/2fa/setup', { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                
+                const qrContainer = document.getElementById('2fa-qrcode');
+                const secretSpan = document.getElementById('2fa-secret');
+                
+                if (qrContainer && data.qrCode) {
+                    qrContainer.innerHTML = `<img src="${data.qrCode}" alt="2FA QR Code" style="width:120px;height:120px;">`;
+                }
+                
+                if (secretSpan && data.secret) {
+                    secretSpan.textContent = data.secret;
+                }
+            }
+        } catch (e) {
+            console.error('生成 2FA QR 码失败:', e);
+        }
+    },
+    
+    // 启用 2FA
+    async enable2FA() {
+        const code = document.getElementById('2fa-code')?.value.trim();
+        
+        if (!code || code.length !== 6) {
+            this.showToast('请输入6位验证码', false);
+            return;
+        }
+        
+        try {
+            const res = await fetch('/api/2fa/enable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: code })
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                this.showToast('两步验证已启用');
+                
+                // 先显示成功状态和备用代码
+                const content = document.getElementById('2fa-content');
+                if (content) {
+                    let backupCodesHtml = '';
+                    if (data.backupCodes && data.backupCodes.length > 0) {
+                        backupCodesHtml = `
+                            <div style="background:var(--bg);padding:12px;border-radius:6px;margin-bottom:16px;text-align:left;">
+                                <div style="font-size:12px;font-weight:bold;margin-bottom:8px;color:var(--accent);">⚠️ 请保存以下备用代码</div>
+                                <div style="font-size:10px;color:var(--gray);margin-bottom:8px;">
+                                    如果您丢失了手机或无法获取验证码，可以使用这些备用代码登录。每个代码只能使用一次。
+                                </div>
+                                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">
+                                    ${data.backupCodes.map(c => `<div style="background:var(--border);padding:6px 8px;border-radius:4px;font-family:monospace;font-size:12px;text-align:center;">${c}</div>`).join('')}
+                                </div>
+                                <div style="margin-top:10px;">
+                                    <button onclick="window.ui.copyBackupCodes()" style="background:var(--accent);color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:11px;">
+                                        复制备用代码
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    content.innerHTML = `
+                        <div style="text-align:center;">
+                            <div style="font-size:48px;margin-bottom:8px;">✅</div>
+                            <div style="font-size:16px;font-weight:bold;margin-bottom:4px;">两步验证已成功启用！</div>
+                            <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">您的账户现在已受保护</div>
+                            ${backupCodesHtml}
+                            <button onclick="window.ui.close2FAModal()" style="background:var(--accent);color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">
+                                确定
+                            </button>
+                        </div>
+                    `;
+                    
+                    // 存储备用代码以便复制
+                    this.currentBackupCodes = data.backupCodes;
+                }
+                
+                // 更新状态显示
+                this.update2FAStatus(true);
+            } else {
+                const data = await res.json();
+                this.showToast(data.message || data.error || '启用失败', false);
+            }
+        } catch (e) {
+            console.error('启用 2FA 失败:', e);
+            this.showToast('启用失败', false);
+        }
+    },
+    
+    // 复制备用代码
+    async copyBackupCodes() {
+        if (this.currentBackupCodes && this.currentBackupCodes.length > 0) {
+            try {
+                await navigator.clipboard.writeText(this.currentBackupCodes.join('\n'));
+                this.showToast('备用代码已复制到剪贴板');
+            } catch (e) {
+                console.error('复制失败:', e);
+                this.showToast('复制失败', false);
+            }
+        }
+    },
+    
+    // 禁用 2FA
+    async disable2FA() {
+        if (!confirm('确定要禁用两步验证吗？这将降低账户安全性。')) {
+            return;
+        }
+        
+        try {
+            const res = await fetch('/api/2fa/disable', {
+                method: 'POST'
+            });
+            
+            if (res.ok) {
+                this.showToast('两步验证已禁用');
+                this.close2FAModal();
+                this.update2FAStatus(false);
+            } else {
+                const data = await res.json();
+                this.showToast(data.error || '禁用失败', false);
+            }
+        } catch (e) {
+            console.error('禁用 2FA 失败:', e);
+            this.showToast('禁用失败', false);
+        }
+    },
+    
+    // 重新生成备用代码
+    async refreshBackupCodes() {
+        if (!confirm('确定要重新生成备用代码吗？这将使所有旧的备用代码失效。')) {
+            return;
+        }
+        
+        try {
+            const res = await fetch('/api/2fa/refresh-backup-codes', {
+                method: 'POST'
+            });
+            
+            if (res.ok) {
+                const data = await res.json();
+                this.currentBackupCodes = data.backupCodes;
+                
+                // 显示新生成的备用代码
+                const content = document.getElementById('2fa-content');
+                if (content) {
+                    content.innerHTML = `
+                        <div style="text-align:center;">
+                            <div style="font-size:48px;margin-bottom:8px;">✅</div>
+                            <div style="font-size:16px;font-weight:bold;margin-bottom:4px;">备用代码已重新生成！</div>
+                            <div style="font-size:12px;color:var(--gray);margin-bottom:12px;">请保存新的备用代码</div>
+                            <div style="background:var(--bg);padding:12px;border-radius:6px;margin-bottom:16px;text-align:left;">
+                                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">
+                                    ${data.backupCodes.map(c => `<div style="background:var(--border);padding:6px 8px;border-radius:4px;font-family:monospace;font-size:12px;text-align:center;">${c}</div>`).join('')}
+                                </div>
+                                <div style="margin-top:10px;">
+                                    <button onclick="window.ui.copyBackupCodes()" style="background:var(--accent);color:white;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:11px;">
+                                        复制备用代码
+                                    </button>
+                                </div>
+                            </div>
+                            <button onclick="window.ui.show2FASettings()" style="background:var(--accent);color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;width:100%;">
+                                返回
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                this.showToast('备用代码已重新生成');
+            } else {
+                const data = await res.json();
+                this.showToast(data.message || data.error || '重新生成失败', false);
+            }
+        } catch (e) {
+            console.error('重新生成备用代码失败:', e);
+            this.showToast('重新生成失败', false);
+        }
+    },
+    
+    // 关闭 2FA 模态框
+    close2FAModal() {
+        const modal = document.getElementById('2fa-modal');
+        if (modal) modal.style.display = 'none';
+    },
+    
+    // 更新 2FA 状态显示
+    update2FAStatus(enabled) {
+        const statusDiv = document.getElementById('2fa-status');
+        const statusText = document.getElementById('2fa-status-text');
+        
+        if (statusDiv && statusText) {
+            statusDiv.style.display = 'block';
+            statusText.textContent = enabled ? '已启用 ✅' : '未启用';
+            statusText.style.color = enabled ? 'var(--green)' : 'var(--gray)';
+        }
     }
 };
 

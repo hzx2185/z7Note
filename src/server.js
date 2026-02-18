@@ -53,7 +53,7 @@ app.use('/api/upload/chunk', express.raw({ type: '*/*', limit: '50mb' }));
 app.use((req, res, next) => {
   const publicPaths = [
     '/login.html', '/share.html', '/user.html',
-    '/api/register', '/api/login', '/api/forgot-password', '/api/reset-password',
+    '/api/register', '/api/login', '/api/forgot-password', '/api/reset-password', '/api/verify-tfa',
     '/api/send-bind-code', '/api/verify-bind-email',
     '/api/share/public-list', '/api/share/public/', '/api/share/info', '/api/share/attachment', '/api/share/blog-info',
     '/s/', '/health', '/test-backup.html',
@@ -89,9 +89,11 @@ const userBackupRoutes = require('./routes/userBackup');
 const todosRoutes = require('./routes/todos');
 const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
+const timelineRoutes = require('./routes/timeline');
 const lunarRoutes = require('./routes/lunar');
 const calendarSubscriptionsRoutes = require('./routes/calendarSubscriptions');
 const remindersRoutes = require('./routes/reminders');
+const tfaRoutes = require('./routes/2fa');
 
 // 分享路由必须在静态文件之前注册，否则 /s/ 会被当作静态目录处理
 app.use(sharesRoutes);
@@ -133,6 +135,12 @@ app.get('/reminder-settings.html', (req, res) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.sendFile(path.join(PUBLIC_DIR, 'reminder-settings.html'));
+  });
+  app.get('/timeline.html', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(path.join(PUBLIC_DIR, 'timeline.html'));
 });
 
 app.use(authRoutes);
@@ -142,9 +150,11 @@ app.use(adminAuth, adminRoutes);
 app.use(userRoutes);
 app.use(todosRoutes);
 app.use('/api/events', eventsRoutes);
+app.use('/api/timeline', timelineRoutes);
 app.use('/api/lunar', lunarRoutes);
 app.use('/api/calendar-subscriptions', calendarSubscriptionsRoutes);
 app.use('/api/reminders', remindersRoutes);
+app.use('/api/2fa', tfaRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {

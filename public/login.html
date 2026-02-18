@@ -56,10 +56,18 @@
             <button type="submit">重置并登录</button>
             <button type="button" class="alt-btn" onclick="toggleForgot(false)">返回登录</button>
         </form>
+
+        <form id="tfa-form" style="display:none;" onsubmit="handleTFA(event)">
+            <h2>两步验证</h2>
+            <div id="tfa-error" class="error-msg"></div>
+            <input type="text" id="tfa-token" name="tfa-token" placeholder="6位验证码或8位备用代码" autocomplete="one-time-code" required inputmode="text" maxlength="8">
+            <button id="tfa-submit-btn" type="submit">验证</button>
+        </form>
     </div>
 
     <script>
         let isLoginMode = true;
+        let tempToken = null; // 用于存储2FA临时令牌
 
         // 主题切换功能
         function initTheme() {
@@ -135,6 +143,16 @@
             toast.style.display = 'block';
             setTimeout(() => { toast.style.display = 'none'; }, duration);
         }
+        
+        function showError(id, msg) {
+            const errEl = document.getElementById(id);
+            errEl.innerText = msg;
+            errEl.style.display = 'block';
+        }
+
+        function hideError(id) {
+            document.getElementById(id).style.display = 'none';
+        }
 
         function toggleMode() {
             isLoginMode = !isLoginMode;
@@ -147,29 +165,20 @@
             document.getElementById('auth-form').style.display = show ? 'none' : 'block';
             document.getElementById('forgot-password-area').style.display = show ? 'block' : 'none';
         }
-
-        function showError(msg) {
-            const errEl = document.getElementById('auth-error');
-            errEl.innerText = msg;
-            errEl.style.display = 'block';
+        
+        function showTFAForm() {
+            document.getElementById('auth-form').style.display = 'none';
+            document.getElementById('forgot-password-area').style.display = 'none';
+            document.getElementById('tfa-form').style.display = 'block';
         }
 
         // 用户名合法性校验逻辑
         function validateUsernameInput(user) {
-            // 限制：不能包含 @ 符号（防止是邮箱）
-            if (user.includes('@')) {
-                return "用户名不能包含@符号（不能是邮箱）";
-            }
-            // 限制：只能是字母、数字、下划线
+            if (user.includes('@')) return "用户名不能包含@符号（不能是邮箱）";
             const regex = /^[a-zA-Z0-9_]+$/;
-            if (!regex.test(user)) {
-                return "用户名只能包含字母、数字或下划线";
-            }
-            // 限制：长度 3-15 位
-            if (user.length < 3 || user.length > 15) {
-                return "用户名长度需在 3-15 位之间";
-            }
-            return null; // 通过校验
+            if (!regex.test(user)) return "用户名只能包含字母、数字或下划线";
+            if (user.length < 3 || user.length > 15) return "用户名长度需在 3-15 位之间";
+            return null;
         }
 
         // 处理登录与注册请求
@@ -180,22 +189,21 @@
             const url = isLoginMode ? '/api/login' : '/api/register';
             const btn = document.getElementById('submit-btn');
 
-            // 注册模式下的前端拦截校验
             if (!isLoginMode) {
                 const checkError = validateUsernameInput(user);
                 if (checkError) {
-                    showError(checkError);
+                    showError('auth-error', checkError);
                     return;
                 }
                 if (pass.length < 6) {
-                    showError("密码长度至少为 6 位");
+                    showError('auth-error', "密码长度至少为 6 位");
                     return;
                 }
             }
 
             btn.disabled = true;
             btn.innerText = "正在验证...";
-            document.getElementById('auth-error').style.display = 'none';
+            hideError('auth-error');
 
             try {
                 const response = await fetch(url, {
@@ -204,21 +212,78 @@
                     body: JSON.stringify({ user, pass })
                 });
 
+                console.log('[Login] Response received, status:', response.status);
                 const data = await response.json();
+                console.log('[Login] Response data:', data);
+                
                 if (response.ok) {
-                    // 保存用户名到localStorage，用于WebSocket连接
-                    localStorage.setItem('z7note_username', user);
-                    showToast(isLoginMode ? "登录成功" : "注册成功");
-                    setTimeout(() => { window.location.href = '/'; }, 800);
+                    if (data.status === 'tfa_required') {
+                        console.log('[Login] 2FA required, tempToken received');
+                        tempToken = data.tempToken;
+                        showTFAForm();
+                    } else { // 登录成功或注册成功
+                        localStorage.setItem('z7note_username', user);
+                        showToast(isLoginMode ? "登录成功" : "注册成功");
+                        setTimeout(() => { window.location.href = '/'; }, 800);
+                    }
                 } else {
-                    showError(data.error || '操作失败');
+                    showError('auth-error', data.error || '操作失败');
                     btn.disabled = false;
                     btn.innerText = isLoginMode ? '立即登录' : '注册并登录';
                 }
             } catch (err) {
-                showError('连接服务器失败，请稍后再试');
+                showError('auth-error', '连接服务器失败，请稍后再试');
                 btn.disabled = false;
                 btn.innerText = isLoginMode ? '立即登录' : '注册并登录';
+            }
+        }
+        
+        // 处理2FA验证
+        async function handleTFA(e) {
+            e.preventDefault();
+            const tfaToken = document.getElementById('tfa-token').value.trim();
+            const btn = document.getElementById('tfa-submit-btn');
+
+            console.log('[Login] handleTFA called');
+            console.log('[Login] tempToken length:', tempToken?.length || 0);
+            console.log('[Login] tfaToken:', tfaToken);
+
+            if (!tfaToken || (tfaToken.length !== 6 && tfaToken.length !== 8)) {
+                showError('tfa-error', '请输入6位验证码或8位备用代码');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = "正在验证...";
+            hideError('tfa-error');
+
+            try {
+                console.log('[Login] Sending verify-tfa request...');
+                const response = await fetch('/api/verify-tfa', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tempToken, tfaToken })
+                });
+
+                console.log('[Login] Response status:', response.status);
+                const data = await response.json();
+                console.log('[Login] Response data:', data);
+                
+                if (response.ok && data.status === 'ok') {
+                    showToast("验证成功，正在登录...");
+                    setTimeout(() => { window.location.href = '/'; }, 800);
+                } else {
+                    const errorMsg = data.error || '验证失败';
+                    console.error('[Login] Error:', errorMsg);
+                    showError('tfa-error', errorMsg);
+                    btn.disabled = false;
+                    btn.innerText = '验证';
+                }
+            } catch (err) {
+                console.error('[Login] Exception:', err);
+                showError('tfa-error', '连接服务器失败，请稍后再试');
+                btn.disabled = false;
+                btn.innerText = '验证';
             }
         }
 

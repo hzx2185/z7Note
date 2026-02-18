@@ -100,6 +100,12 @@ const config = {
     enabled: process.env.CALDAV_ENABLED !== 'false', // 默认启用
     basePath: process.env.CALDAV_BASE || '/caldav'
   },
+
+  // JWT 配置 (用于2FA临时令牌)
+  jwt: {
+    secret: process.env.JWT_SECRET || 'default_secret_for_2fa_please_change_me_in_production',
+    expiresIn: '2h'
+  },
   
   // 路径配置
   paths: {
