@@ -432,24 +432,26 @@
                 <button class="modal-close" onclick="ui.closeChangePasswordModal()">×</button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="username-input">
-                <div style="margin-bottom:10px;">
-                    <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">旧密码</label>
-                    <input type="password" id="old-password-input" placeholder="输入旧密码" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
-                </div>
-                <div style="margin-bottom:10px;">
-                    <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">新密码</label>
-                    <input type="password" id="new-password-input" placeholder="输入新密码（至少6位）" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
-                </div>
-                <div style="margin-bottom:10px;">
-                    <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">确认新密码</label>
-                    <input type="password" id="confirm-password-input" placeholder="再次输入新密码" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
-                </div>
-                <div id="change-password-error" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;"></div>
-                <div class="modal-actions">
-                    <button class="btn" onclick="ui.closeChangePasswordModal()">取消</button>
-                    <button id="change-password-btn" class="btn btn-green" onclick="ui.changePassword()">确认修改</button>
-                </div>
+                <form id="change-password-form" onsubmit="return false;">
+                    <input type="hidden" id="username-input">
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">旧密码</label>
+                        <input type="password" id="old-password-input" placeholder="输入旧密码" autocomplete="current-password" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">新密码</label>
+                        <input type="password" id="new-password-input" placeholder="输入新密码（至少6位）" autocomplete="new-password" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">确认新密码</label>
+                        <input type="password" id="confirm-password-input" placeholder="再次输入新密码" autocomplete="new-password" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
+                    </div>
+                    <div id="change-password-error" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;"></div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn" onclick="ui.closeChangePasswordModal()">取消</button>
+                        <button type="submit" id="change-password-btn" class="btn btn-green" onclick="ui.changePassword()">确认修改</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
