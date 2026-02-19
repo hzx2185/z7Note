@@ -1,6 +1,6 @@
 /**
  * z7Note Calendar Application
- * 重构版本 - 模块化架构
+ * 重构版本 - 支持搜索、标签过滤、滚动加载
  */
 
 const CalendarApp = (function() {
@@ -12,7 +12,22 @@ const CalendarApp = (function() {
     currentMonthEvents: [],
     currentMonthNotes: [],
     isLoading: false,
-    lunarCache: new Map() // 农历数据缓存
+    lunarCache: new Map(),
+    
+    // 新增：侧边栏状态
+    sidebar: {
+      currentTab: 'all', // all, event, todo, note
+      searchQuery: '',
+      // 滚动加载相关
+      loadedDays: 0, // 已加载的天数（前后各多少天）
+      isLoadingMore: false,
+      hasMoreBefore: true,
+      hasMoreAfter: true,
+      // 数据缓存 - 按日期分组
+      dataByDate: new Map(), // key: 'YYYY-MM-DD', value: { todos: [], events: [], notes: [] }
+      // 渲染顺序
+      renderedDates: [] // 已渲染的日期列表
+    }
   };
 
   // ==================== DOM 元素缓存 ====================
@@ -21,9 +36,9 @@ const CalendarApp = (function() {
     monthViewGrid: document.getElementById('month-view-grid'),
     currentMonth: document.getElementById('current-month'),
     sidebarDate: document.getElementById('sidebar-date'),
-    todoList: document.getElementById('todo-list'),
-    eventList: document.getElementById('event-list'),
-    noteList: document.getElementById('note-list'),
+    sidebarContent: document.getElementById('sidebar-content'),
+    sidebarSearch: document.getElementById('sidebar-search'),
+    sidebarTabs: document.querySelectorAll('.sidebar-tab'),
     todoModal: document.getElementById('todo-modal'),
     eventModal: document.getElementById('event-modal'),
     todoForm: document.getElementById('todo-form'),
@@ -42,12 +57,32 @@ const CalendarApp = (function() {
       return `${year}-${month}-${day}`;
     },
 
+    formatUTCDate(date) {
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    },
+
     formatDisplayDate(date) {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       const day = date.getDate();
       const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
       return `${year}年${month}月${day}日 星期${weekDays[date.getDay()]}`;
+    },
+
+    formatShortDate(date) {
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+      return `${month}月${day}日 周${weekDays[date.getDay()]}`;
+    },
+
+    formatSidebarDate(date) {
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      return `${month}月${day}日`;
     },
 
     formatTime(timestamp) {
@@ -79,19 +114,28 @@ const CalendarApp = (function() {
       return classes[priority] || 'medium';
     },
 
-    getWeekDates(date) {
-      const current = new Date(date);
-      const dayOfWeek = current.getDay();
-      const startOfWeek = new Date(current);
-      startOfWeek.setDate(current.getDate() - dayOfWeek);
-
-      const weekDates = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(startOfWeek);
-        d.setDate(startOfWeek.getDate() + i);
-        weekDates.push(d);
+    // 获取日期范围内的所有日期
+    getDateRange(startDate, days) {
+      const dates = [];
+      for (let i = 0; i < days; i++) {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + i);
+        dates.push(date);
       }
-      return weekDates;
+      return dates;
+    },
+
+    // 防抖函数
+    debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
     }
   };
 
@@ -125,7 +169,6 @@ const CalendarApp = (function() {
           credentials: 'include'
         });
         if (!response.ok) {
-          // 如果404，返回空数据而不是抛出错误
           if (response.status === 404) {
             return { todos: [], events: [], notes: [] };
           }
@@ -133,7 +176,25 @@ const CalendarApp = (function() {
         }
         return await response.json();
       } catch (error) {
-        // 返回空数据而不是抛出错误
+        return { todos: [], events: [], notes: [] };
+      }
+    },
+
+    // 获取多天数据
+    async getRangeData(startDate, endDate) {
+      try {
+        const startTs = Math.floor(startDate.getTime() / 1000);
+        const endTs = Math.floor(endDate.getTime() / 1000);
+
+        const [todos, events, notes] = await Promise.all([
+          this.getMonthTodos(startTs, endTs),
+          this.getMonthEvents(startTs, endTs),
+          this.getMonthNotes(startTs, endTs)
+        ]);
+
+        return { todos, events, notes };
+      } catch (error) {
+        console.error('获取范围数据失败:', error);
         return { todos: [], events: [], notes: [] };
       }
     },
@@ -169,14 +230,11 @@ const CalendarApp = (function() {
         });
         const allFiles = response.ok ? await response.json() : [];
 
-        // 将秒时间戳转换为毫秒时间戳进行比较
         const startDateMs = startDate * 1000;
         const endDateMs = endDate * 1000;
 
-        // 过滤出在指定时间范围内的文件
         const filteredFiles = allFiles.filter(file => {
           if (file.updatedAt) {
-            // file.updatedAt 已经是毫秒时间戳
             return file.updatedAt >= startDateMs && file.updatedAt <= endDateMs;
           }
           return false;
@@ -248,225 +306,584 @@ const CalendarApp = (function() {
     }
   };
 
+  // ==================== 侧边栏渲染 ====================
+  const sidebarRenderer = {
+    // 初始化侧边栏
+    init() {
+      // 绑定标签切换事件
+      elements.sidebarTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          this.switchTab(tab.dataset.tab);
+        });
+      });
+
+      // 绑定搜索事件
+      if (elements.sidebarSearch) {
+        elements.sidebarSearch.addEventListener('input', utils.debounce((e) => {
+          state.sidebar.searchQuery = e.target.value.toLowerCase();
+          this.render();
+        }, 300));
+      }
+
+      // 绑定滚动加载事件
+      if (elements.sidebarContent) {
+        elements.sidebarContent.addEventListener('scroll', utils.debounce(() => {
+          this.handleScroll();
+        }, 100));
+      }
+
+      // 初始加载
+      this.loadInitialData();
+    },
+
+    // 切换标签
+    switchTab(tab) {
+      state.sidebar.currentTab = tab;
+      elements.sidebarTabs.forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+      this.render();
+    },
+
+    // 加载初始数据（只加载选中日期当天）
+    async loadInitialData() {
+      const selectedDate = state.selectedDate;
+      const dateStr = utils.formatDate(selectedDate);
+      
+      state.sidebar.loadedDays = 0;
+      state.sidebar.hasMoreBefore = true;
+      state.sidebar.hasMoreAfter = true;
+
+      await this.loadDayData(dateStr);
+      this.render();
+    },
+
+    // 加载单天数据
+    async loadDayData(dateStr) {
+      try {
+        console.log('[sidebar] 加载单天数据:', dateStr);
+        const data = await api.getDayData(dateStr);
+        console.log('[sidebar] 收到单天数据:', {
+          todos: data.todos.length,
+          events: data.events.length,
+          notes: data.notes.length
+        });
+
+        if (!state.sidebar.dataByDate.has(dateStr)) {
+          state.sidebar.dataByDate.set(dateStr, { todos: [], events: [], notes: [] });
+        }
+
+        const dayData = state.sidebar.dataByDate.get(dateStr);
+        dayData.todos = data.todos;
+        dayData.events = data.events;
+        dayData.notes = data.notes;
+
+        console.log('[sidebar] 数据已设置:', dayData);
+      } catch (error) {
+        console.error('加载单天数据失败:', error);
+      }
+    },
+
+    // 加载日期范围数据 - 兼容旧代码
+    async loadDateRange(startDate, endDate) {
+      try {
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+          const dateStr = utils.formatDate(currentDate);
+          await this.loadDayData(dateStr);
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } catch (error) {
+        console.error('加载日期范围数据失败:', error);
+      }
+    },
+
+    // 处理滚动加载
+    async handleScroll() {
+      if (state.sidebar.isLoadingMore) return;
+
+      const container = elements.sidebarContent;
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      // 检测是否滚动到顶部附近 - 加载更早的数据
+      if (scrollTop < 100 && state.sidebar.hasMoreBefore) {
+        await this.loadMoreData('before');
+      }
+      // 检测是否滚动到底部附近 - 加载更晚的数据
+      else if (scrollHeight - scrollTop - clientHeight < 100 && state.sidebar.hasMoreAfter) {
+        await this.loadMoreData('after');
+      }
+    },
+
+    // 加载更多数据
+    async loadMoreData(direction) {
+      if (state.sidebar.isLoadingMore) return;
+      
+      state.sidebar.isLoadingMore = true;
+      this.showLoadingIndicator(direction);
+
+      try {
+        const selectedDate = state.selectedDate;
+
+        let targetDate;
+        if (direction === 'before') {
+          // 找到当前最早日期的前一天
+          const dates = Array.from(state.sidebar.dataByDate.keys()).sort();
+          if (dates.length > 0) {
+            const earliestDate = new Date(dates[0]);
+            targetDate = new Date(earliestDate);
+            targetDate.setDate(earliestDate.getDate() - 1);
+          } else {
+            targetDate = new Date(selectedDate);
+            targetDate.setDate(selectedDate.getDate() - 1);
+          }
+          state.sidebar.loadedDays++;
+        } else {
+          // 找到当前最晚日期的后一天
+          const dates = Array.from(state.sidebar.dataByDate.keys()).sort();
+          if (dates.length > 0) {
+            const latestDate = new Date(dates[dates.length - 1]);
+            targetDate = new Date(latestDate);
+            targetDate.setDate(latestDate.getDate() + 1);
+          } else {
+            targetDate = new Date(selectedDate);
+            targetDate.setDate(selectedDate.getDate() + 1);
+          }
+          state.sidebar.loadedDays++;
+        }
+
+        const dateStr = utils.formatDate(targetDate);
+        await this.loadDayData(dateStr);
+        
+        // 检查是否还有更多数据（限制最多加载前后各90天）
+        if (state.sidebar.loadedDays >= 90) {
+          if (direction === 'before') {
+            state.sidebar.hasMoreBefore = false;
+          } else {
+            state.sidebar.hasMoreAfter = false;
+          }
+        }
+
+        this.render();
+      } catch (error) {
+        console.error('加载更多数据失败:', error);
+      } finally {
+        state.sidebar.isLoadingMore = false;
+        this.hideLoadingIndicator(direction);
+      }
+    },
+
+    // 显示加载指示器
+    showLoadingIndicator(direction) {
+      const indicator = document.createElement('div');
+      indicator.className = 'load-more-indicator loading';
+      indicator.id = `loading-${direction}`;
+      indicator.textContent = direction === 'before' ? '↑ 加载中...' : '↓ 加载中...';
+      
+      const container = elements.sidebarContent;
+      if (direction === 'before') {
+        container.insertBefore(indicator, container.firstChild);
+      } else {
+        container.appendChild(indicator);
+      }
+    },
+
+    // 隐藏加载指示器
+    hideLoadingIndicator(direction) {
+      const indicator = document.getElementById(`loading-${direction}`);
+      if (indicator) {
+        indicator.remove();
+      }
+    },
+
+    // 渲染侧边栏内容
+    render() {
+      const container = elements.sidebarContent;
+      if (!container) return;
+
+      container.innerHTML = '';
+
+      // 获取所有日期并排序
+      const dates = Array.from(state.sidebar.dataByDate.keys()).sort();
+      
+      // 确定渲染范围
+      const selectedDateStr = utils.formatDate(state.selectedDate);
+      const selectedIndex = dates.indexOf(selectedDateStr);
+      
+      let renderDates = dates;
+      if (selectedIndex >= 0) {
+        // 渲染选中日期前后各loadedDays天
+        const startIndex = Math.max(0, selectedIndex - state.sidebar.loadedDays);
+        const endIndex = Math.min(dates.length, selectedIndex + state.sidebar.loadedDays + 1);
+        renderDates = dates.slice(startIndex, endIndex);
+      }
+
+      // 按日期分组渲染
+      renderDates.forEach(dateStr => {
+        const dayData = state.sidebar.dataByDate.get(dateStr);
+        if (!dayData) return;
+
+        // 过滤数据
+        const filteredData = this.filterData(dayData);
+        
+        // 根据当前标签检查是否有数据需要显示
+        let hasData = false;
+        if (state.sidebar.currentTab === 'all') {
+          hasData = filteredData.todos.length > 0 || 
+                   filteredData.events.length > 0 || 
+                   filteredData.notes.length > 0;
+        } else if (state.sidebar.currentTab === 'event') {
+          hasData = filteredData.events.length > 0;
+        } else if (state.sidebar.currentTab === 'todo') {
+          hasData = filteredData.todos.length > 0;
+        } else if (state.sidebar.currentTab === 'note') {
+          hasData = filteredData.notes.length > 0;
+        }
+
+        // 创建日期分组
+        const dateGroup = document.createElement('div');
+        dateGroup.className = 'date-group';
+        dateGroup.dataset.date = dateStr;
+
+        // 日期标题
+        const dateHeader = document.createElement('div');
+        dateHeader.className = 'date-group-header';
+        const date = new Date(dateStr);
+        const isToday = utils.isSameDay(date, new Date());
+        const isSelected = utils.isSameDay(date, state.selectedDate);
+        
+        if (isToday) {
+          dateHeader.textContent = '今天';
+          dateHeader.style.color = 'var(--accent)';
+        } else if (isSelected) {
+          dateHeader.textContent = utils.formatSidebarDate(date);
+          dateHeader.style.color = 'var(--accent)';
+        } else {
+          dateHeader.textContent = utils.formatSidebarDate(date);
+        }
+        dateGroup.appendChild(dateHeader);
+
+        // 渲染事件
+        if (state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') {
+          filteredData.events.forEach(event => {
+            dateGroup.appendChild(this.renderEventItem(event));
+          });
+        }
+
+        // 渲染待办
+        if (state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'todo') {
+          filteredData.todos.forEach(todo => {
+            dateGroup.appendChild(this.renderTodoItem(todo));
+          });
+        }
+
+        // 渲染笔记
+        if (state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'note') {
+          filteredData.notes.forEach(note => {
+            dateGroup.appendChild(this.renderNoteItem(note));
+          });
+        }
+
+        container.appendChild(dateGroup);
+      });
+
+      // 显示加载更多提示
+      if (state.sidebar.hasMoreBefore) {
+        const loadMoreBefore = document.createElement('div');
+        loadMoreBefore.className = 'load-more-indicator';
+        loadMoreBefore.textContent = '↑ 点击加载更早';
+        loadMoreBefore.style.cursor = 'pointer';
+        loadMoreBefore.addEventListener('click', () => this.loadMoreData('before'));
+        container.insertBefore(loadMoreBefore, container.firstChild);
+      }
+
+      if (state.sidebar.hasMoreAfter) {
+        const loadMoreAfter = document.createElement('div');
+        loadMoreAfter.className = 'load-more-indicator';
+        loadMoreAfter.textContent = '↓ 点击加载更多';
+        loadMoreAfter.style.cursor = 'pointer';
+        loadMoreAfter.addEventListener('click', () => this.loadMoreData('after'));
+        container.appendChild(loadMoreAfter);
+      }
+
+      // 如果没有数据
+      if (container.children.length === 0) {
+        container.innerHTML = '<div class="empty-state">暂无数据</div>';
+      }
+    },
+
+    // 过滤数据
+    filterData(dayData) {
+      const query = state.sidebar.searchQuery;
+      
+      const filterItems = (items) => {
+        if (!query) return items;
+        return items.filter(item => 
+          (item.title && item.title.toLowerCase().includes(query)) ||
+          (item.description && item.description.toLowerCase().includes(query))
+        );
+      };
+
+      return {
+        todos: filterItems(dayData.todos),
+        events: filterItems(dayData.events),
+        notes: filterItems(dayData.notes)
+      };
+    },
+
+    // 渲染待办项
+    renderTodoItem(todo) {
+      const item = document.createElement('div');
+      item.className = 'todo-item';
+
+      let metaHtml = '';
+      if (todo.priority) {
+        metaHtml += `<span class="todo-priority ${utils.getPriorityClass(todo.priority)}">${utils.getPriorityLabel(todo.priority)}</span>`;
+      }
+
+      item.innerHTML = `
+        <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
+        <div class="todo-content" data-id="${todo.id}">
+          <div class="todo-title ${todo.completed ? 'completed' : ''}">${utils.escapeHtml(todo.title)}</div>
+          ${metaHtml ? `<div class="todo-meta">${metaHtml}</div>` : ''}
+        </div>
+        <div class="todo-actions">
+          <button class="edit-btn" data-id="${todo.id}" title="编辑">✎</button>
+          <button class="delete-btn" data-id="${todo.id}" title="删除">×</button>
+        </div>
+      `;
+
+      // 事件绑定
+      const checkbox = item.querySelector('.todo-checkbox');
+      checkbox.addEventListener('change', () => handlers.toggleTodo(todo.id, checkbox.checked));
+
+      const contentDiv = item.querySelector('.todo-content');
+      contentDiv.addEventListener('click', () => handlers.editTodo(todo));
+
+      const editBtn = item.querySelector('.edit-btn');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.editTodo(todo);
+      });
+
+      const deleteBtn = item.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.deleteTodo(todo.id);
+      });
+
+      return item;
+    },
+
+    // 渲染事件项
+    renderEventItem(event) {
+      const item = document.createElement('div');
+      item.className = 'event-item';
+      item.style.borderLeftColor = event.color || '#2563eb';
+
+      let timeHtml = '';
+      if (event.allDay) {
+        timeHtml = '<span class="event-all-day">全天</span>';
+      } else {
+        timeHtml = utils.formatTime(event.startTime * 1000);
+        if (event.endTime) {
+          timeHtml += ` - ${utils.formatTime(event.endTime * 1000)}`;
+        }
+      }
+
+      item.innerHTML = `
+        <div class="event-content" data-id="${event.isRecurringInstance ? event._originalId : event.id}">
+          <div class="event-title">${utils.escapeHtml(event.title)}${event.isRecurringInstance ? ' <span class="recurrence-badge">重复</span>' : ''}</div>
+          <div class="event-time">${timeHtml}</div>
+        </div>
+        <div class="event-actions">
+          <button class="edit-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="编辑">✎</button>
+          <button class="delete-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="删除">×</button>
+        </div>
+      `;
+
+      const eventContent = item.querySelector('.event-content');
+      eventContent.addEventListener('click', () => handlers.editEvent(event));
+
+      const editBtn = item.querySelector('.edit-btn');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.editEvent(event);
+      });
+
+      const deleteBtn = item.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.deleteEvent(event.isRecurringInstance ? event._originalId : event.id);
+      });
+
+      return item;
+    },
+
+    // 渲染笔记项
+    renderNoteItem(note) {
+      const item = document.createElement('div');
+      item.className = 'note-item';
+      item.title = note.title;
+      item.innerHTML = `<div class="note-title">${utils.escapeHtml(note.title)}</div>`;
+
+      item.addEventListener('click', () => {
+        window.open(`/?id=${note.id}`, '_blank');
+      });
+
+      return item;
+    },
+
+    // 刷新数据
+    async refresh() {
+      const dateStr = utils.formatDate(state.selectedDate);
+      console.log('[sidebar] 刷新数据:', dateStr);
+      await this.loadDayData(dateStr);
+      this.render();
+    }
+  };
+
   // ==================== 渲染函数 ====================
   const render = {
     calendar() {
-      // 始终显示月视图
       elements.monthView.style.display = 'flex';
       this.renderMonthView();
     },
 
-      expandLunarEventsSimple(events, monthStart, monthEnd) {
-        const expanded = [];
+    async expandRecurringEvents(events, year, month) {
+      const expanded = [];
+      const monthStart = new Date(year, month, 1);
+      const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
 
-        events.forEach(event => {
-          try {
-            const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
-            if (!recurrence || !recurrence.type) return;
+      const lunarEvents = [];
+      const otherEvents = [];
 
-            const startDate = new Date(event.startTime * 1000);
-            const endDate = event.recurrenceEnd ? new Date(event.recurrenceEnd * 1000) : null;
-            let currentDate = new Date(startDate);
+      events.forEach(event => {
+        if (!event.recurrence) {
+          expanded.push(event);
+          return;
+        }
 
-            const maxIterations = 100;
-            let iterations = 0;
-
-            while ((!endDate || currentDate <= endDate) && currentDate <= monthEnd && iterations < maxIterations) {
-              iterations++;
-
-              // 如果当前日期在月份范围内,添加事件实例
-              if (currentDate >= monthStart && currentDate <= monthEnd) {
-                expanded.push({
-                  ...event,
-                  _originalId: event.id,
-                  _instanceTime: Math.floor(currentDate.getTime() / 1000),
-                  isRecurringInstance: true,
-                  parentEventId: event.id,
-                  startTime: Math.floor(currentDate.getTime() / 1000),
-                  endTime: event.endTime ?
-                    Math.floor(currentDate.getTime() / 1000 + (event.endTime - event.startTime)) :
-                    null
-                });
-              }
-
-              // 计算下一个农历日期(简化版)
-              // 农历月平均约29.53天,农历年约354天
-              if (recurrence.type === 'lunar_monthly') {
-                currentDate = new Date(currentDate.getTime() + 29.53 * 24 * 60 * 60 * 1000);
-              } else if (recurrence.type === 'lunar_yearly') {
-                currentDate = new Date(currentDate.getTime() + 354 * 24 * 60 * 60 * 1000);
-              }
-            }
-          } catch (e) {
-            console.error('简化农历计算失败:', event, e);
-          }
-        });
-
-        return expanded;
-      },
-
-      async expandRecurringEvents(events, year, month) {
-        const expanded = [];
-        const monthStart = new Date(year, month, 1);
-        const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
-
-        // 分离农历重复事件和其他事件
-        const lunarEvents = [];
-        const otherEvents = [];
-
-        events.forEach(event => {
-          if (!event.recurrence) {
+        try {
+          const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
+          if (!recurrence || !recurrence.type) {
             expanded.push(event);
             return;
           }
 
-          try {
-            const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
-            if (!recurrence || !recurrence.type) {
-              expanded.push(event);
-              return;
-            }
-
-            if (recurrence.type === 'lunar_monthly' || recurrence.type === 'lunar_yearly') {
-              console.log('[前端]农历事件:', event.title, '起始日期:', new Date(event.startTime * 1000).toISOString().split('T')[0], '重复类型:', recurrence.type);
-
-              lunarEvents.push(event);
-            } else {
-              otherEvents.push(event);
-            }
-          } catch (e) {
-            console.error('解析重复规则失败:', event, e);
-            expanded.push(event);
+          if (recurrence.type === 'lunar_monthly' || recurrence.type === 'lunar_yearly') {
+            lunarEvents.push(event);
+          } else {
+            otherEvents.push(event);
           }
-        });
+        } catch (e) {
+          console.error('解析重复规则失败:', event, e);
+          expanded.push(event);
+        }
+      });
 
-        // 处理其他类型的重复事件(公历)
-        otherEvents.forEach(event => {
-          try {
-            const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
-            const startDate = new Date(event.startTime * 1000);
-            const endDate = event.recurrenceEnd ? new Date(event.recurrenceEnd * 1000) : null;
+      // 处理公历重复事件
+      otherEvents.forEach(event => {
+        try {
+          const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
+          const startDate = new Date(event.startTime * 1000);
+          const endDate = event.recurrenceEnd ? new Date(event.recurrenceEnd * 1000) : null;
 
-            // 如果是每周重复但没有指定 daysOfWeek，使用事件本身的星期几
-            if (recurrence.type === 'weekly' && !recurrence.daysOfWeek) {
-              recurrence.daysOfWeek = [startDate.getDay()];
-            }
-
-            const current = new Date(startDate);
-            let breakLoop = false;
-
-            if (current < monthStart) {
-              let periodMs = 0;
-              switch (recurrence.type) {
-                case 'daily':
-                  periodMs = 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
-                  break;
-                case 'weekly':
-                  periodMs = 7 * 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
-                  break;
-                case 'monthly':
-                  const yearDiff = monthStart.getFullYear() - current.getFullYear();
-                  const monthDiff = monthStart.getMonth() - current.getMonth();
-                  const totalMonths = yearDiff * 12 + monthDiff;
-                  const periodsToSkip = Math.max(0, totalMonths);
-                  current.setMonth(current.getMonth() + periodsToSkip * (recurrence.interval || 1));
-                  periodMs = 0;
-                  break;
-                case 'yearly':
-                  periodMs = 365 * 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
-                  break;
-              }
-
-              if (periodMs > 0) {
-                const periodsToSkip = Math.ceil((monthStart - current) / periodMs);
-                current.setTime(current.getTime() + periodsToSkip * periodMs);
-              }
-            }
-
-            while ((!endDate || current <= endDate) && current <= monthEnd) {
-              // 对于每周重复，只在指定的星期几添加
-              let shouldAdd = true;
-              if (recurrence.type === 'weekly' && recurrence.daysOfWeek) {
-                shouldAdd = recurrence.daysOfWeek.includes(current.getDay());
-              }
-
-              if (shouldAdd) {
-                expanded.push({
-                  ...event,
-                  _originalId: event.id,
-                  _instanceTime: Math.floor(current.getTime() / 1000),
-                  isRecurringInstance: true,
-                  startTime: Math.floor(current.getTime() / 1000),
-                  endTime: event.endTime ?
-                    Math.floor(current.getTime() / 1000 + (event.endTime - event.startTime)) :
-                    null
-                });
-              }
-
-              switch (recurrence.type) {
-                case 'daily':
-                  current.setDate(current.getDate() + (recurrence.interval || 1));
-                  break;
-                case 'weekly':
-                  current.setDate(current.getDate() + 1); // 每周重复，每天前进，检查是否是指定的星期几
-                  break;
-                case 'monthly':
-                  current.setMonth(current.getMonth() + (recurrence.interval || 1));
-                  break;
-                case 'yearly':
-                  current.setFullYear(current.getFullYear() + (recurrence.interval || 1));
-                  break;
-                default:
-                  breakLoop = true;
-                  break;
-              }
-
-              if (breakLoop) break;
-            }
-          } catch (e) {
-            console.error('展开重复事件失败:', event, e);
-            expanded.push(event);
+          if (recurrence.type === 'weekly' && !recurrence.daysOfWeek) {
+            recurrence.daysOfWeek = [startDate.getDay()];
           }
-        });
 
-        // 异步获取农历重复事件的展开数据
-        if (lunarEvents.length > 0) {
-          const startDate = Math.floor(monthStart.getTime() / 1000);
-          const endDate = Math.floor(monthEnd.getTime() / 1000);
+          const current = new Date(startDate);
+          let breakLoop = false;
 
-          try {
-            const response = await fetch(`/api/events/expand-lunar?startDate=${startDate}&endDate=${endDate}`, {
-              credentials: 'include'
-            });
+          // 快进到月份开始
+          if (current < monthStart) {
+            let periodMs = 0;
+            switch (recurrence.type) {
+              case 'daily':
+                periodMs = 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
+                break;
+              case 'weekly':
+                periodMs = 7 * 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
+                break;
+              case 'monthly':
+                const yearDiff = monthStart.getFullYear() - current.getFullYear();
+                const monthDiff = monthStart.getMonth() - current.getMonth();
+                const totalMonths = yearDiff * 12 + monthDiff;
+                const periodsToSkip = Math.max(0, totalMonths);
+                current.setMonth(current.getMonth() + periodsToSkip * (recurrence.interval || 1));
+                periodMs = 0;
+                break;
+              case 'yearly':
+                periodMs = 365 * 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
+                break;
+            }
 
-            if (response.ok) {
-              const lunarExpanded = await response.json();
-              console.log('[前端] 农历重复API响应成功,返回实例数量:', lunarExpanded.length);
-              lunarExpanded.forEach((instance, index) => {
-                console.log('[前端] 农历实例', index + 1, ':', instance.title, new Date(instance.startTime * 1000).toISOString().split('T')[0]);
-              });
+            if (periodMs > 0) {
+              const periodsToSkip = Math.ceil((monthStart - current) / periodMs);
+              current.setTime(current.getTime() + periodsToSkip * periodMs);
+            }
+          }
 
-              lunarExpanded.forEach(instance => {
-                expanded.push({
-                  ...instance,
-                  _originalId: instance.parentEventId || instance._originalId || instance.id,
-                  isRecurringInstance: true
-                });
-              });
-            } else {
-              console.log('[前端] 农历重复API响应失败,使用简化方法展开');
-              const lunarExpanded = this.expandLunarEventsSimple(lunarEvents, monthStart, monthEnd);
-              lunarExpanded.forEach(instance => {
-                expanded.push({
-                  ...instance,
-                  _originalId: instance.parentEventId || instance._originalId || instance.id,
-                  isRecurringInstance: true
-                });
+          while ((!endDate || current <= endDate) && current <= monthEnd) {
+            let shouldAdd = true;
+            if (recurrence.type === 'weekly' && recurrence.daysOfWeek) {
+              shouldAdd = recurrence.daysOfWeek.includes(current.getDay());
+            }
+
+            if (shouldAdd) {
+              expanded.push({
+                ...event,
+                _originalId: event.id,
+                _instanceTime: Math.floor(current.getTime() / 1000),
+                isRecurringInstance: true,
+                startTime: Math.floor(current.getTime() / 1000),
+                endTime: event.endTime ?
+                  Math.floor(current.getTime() / 1000 + (event.endTime - event.startTime)) :
+                  null
               });
             }
-          } catch (error) {
-            console.error('获取农历重复事件失败:', error);
-            const lunarExpanded = this.expandLunarEventsSimple(lunarEvents, monthStart, monthEnd);
+
+            switch (recurrence.type) {
+              case 'daily':
+                current.setDate(current.getDate() + (recurrence.interval || 1));
+                break;
+              case 'weekly':
+                current.setDate(current.getDate() + 1);
+                break;
+              case 'monthly':
+                current.setMonth(current.getMonth() + (recurrence.interval || 1));
+                break;
+              case 'yearly':
+                current.setFullYear(current.getFullYear() + (recurrence.interval || 1));
+                break;
+              default:
+                breakLoop = true;
+                break;
+            }
+
+            if (breakLoop) break;
+          }
+        } catch (e) {
+          console.error('展开重复事件失败:', event, e);
+          expanded.push(event);
+        }
+      });
+
+      // 处理农历重复事件
+      if (lunarEvents.length > 0) {
+        const startDate = Math.floor(monthStart.getTime() / 1000);
+        const endDate = Math.floor(monthEnd.getTime() / 1000);
+
+        try {
+          const response = await fetch(`/api/events/expand-lunar?startDate=${startDate}&endDate=${endDate}`, {
+            credentials: 'include'
+          });
+
+          if (response.ok) {
+            const lunarExpanded = await response.json();
             lunarExpanded.forEach(instance => {
               expanded.push({
                 ...instance,
@@ -475,37 +892,34 @@ const CalendarApp = (function() {
               });
             });
           }
+        } catch (error) {
+          console.error('获取农历重复事件失败:', error);
         }
+      }
 
-        return expanded;
-      },
+      return expanded;
+    },
+
     renderMonthView() {
       const year = state.currentDate.getFullYear();
       const month = state.currentDate.getMonth();
 
-      // 更新标题
       elements.currentMonth.textContent = `${year}年${month + 1}月`;
 
-      // 清除之前的日期单元格
       if (elements.monthViewGrid) {
         elements.monthViewGrid.innerHTML = '';
       }
 
-      // 检测是否为窄屏
       const isNarrow = window.innerWidth <= 768;
 
       if (isNarrow) {
-        // 窄屏下只渲染选中日期所在的那一行
         this.renderNarrowWeekView();
       } else {
-        // 正常渲染完整的月视图
         this.renderFullMonthView(year, month);
       }
 
-      // 加载月份数据
       dataLoader.loadMonthData(year, month);
 
-      // 加载农历日期
       if (isNarrow) {
         this.loadWeekLunarDates();
       } else {
@@ -520,14 +934,12 @@ const CalendarApp = (function() {
       const totalDays = lastDay.getDate();
       const prevLastDay = new Date(year, month, 0).getDate();
 
-      // 上个月的日期
       for (let i = startDayOfWeek - 1; i >= 0; i--) {
         const day = prevLastDay - i;
         const dateStr = utils.formatDate(new Date(year, month - 1, day));
         this.createMonthDayCell(day, dateStr, true);
       }
 
-      // 当前月的日期
       for (let i = 1; i <= totalDays; i++) {
         const date = new Date(year, month, i);
         const dateStr = utils.formatDate(date);
@@ -536,134 +948,114 @@ const CalendarApp = (function() {
         this.createMonthDayCell(i, dateStr, false, isToday, isSelected);
       }
 
-      // 下个月的日期
       const remainingCells = 42 - (startDayOfWeek + totalDays);
       for (let i = 1; i <= remainingCells; i++) {
         const dateStr = utils.formatDate(new Date(year, month + 1, i));
         this.createMonthDayCell(i, dateStr, true);
       }
 
-      // 加载农历日期
       this.loadLunarDates(year, month);
     },
 
-      async loadLunarDates(year, month) {
-        try {
-          const cacheKey = `${year}-${month}`;
-          let lunarData = state.lunarCache.get(cacheKey);
+    async loadLunarDates(year, month) {
+      try {
+        const cacheKey = `${year}-${month}`;
+        let lunarData = state.lunarCache.get(cacheKey);
 
-          // 如果缓存中没有数据，则从API获取
-          if (!lunarData) {
-            const response = await fetch(`/api/lunar/month/${year}/${month + 1}`, {
-              credentials: 'include'
-            });
+        if (!lunarData) {
+          const response = await fetch(`/api/lunar/month/${year}/${month + 1}`, {
+            credentials: 'include'
+          });
 
-            if (response.ok) {
-              lunarData = await response.json();
-              state.lunarCache.set(cacheKey, lunarData);
-            } else {
-              return;
-            }
+          if (response.ok) {
+            lunarData = await response.json();
+            state.lunarCache.set(cacheKey, lunarData);
+          } else {
+            return;
           }
-
-          const lastDay = new Date(year, month + 1, 0).getDate();
-
-          for (let i = 1; i <= lastDay; i++) {
-            const dateStr = utils.formatDate(new Date(year, month, i));
-            const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
-
-            if (lunarEl && lunarData[dateStr]) {
-              const data = lunarData[dateStr];
-              lunarEl.textContent = data.lunarDayCn;
-              // 如果是节日,显示节日名称
-              if (data.festival) {
-                lunarEl.textContent = data.festival;
-                lunarEl.classList.add('day-festival');
-              }
-            }
-          }
-        } catch (error) {
-          console.error('批量加载农历日期失败:', error);
         }
-      },
 
-      async loadWeekLunarDates() {
-        try {
-          // 获取选中日期所在周的日期
-          const selectedDayOfWeek = state.selectedDate.getDay();
-          const weekStart = new Date(state.selectedDate);
-          weekStart.setDate(state.selectedDate.getDate() - selectedDayOfWeek);
+        const lastDay = new Date(year, month + 1, 0).getDate();
 
-          // 确定周所在的月份
-          const weekMonth = weekStart.getMonth();
-          const weekYear = weekStart.getFullYear();
+        for (let i = 1; i <= lastDay; i++) {
+          const dateStr = utils.formatDate(new Date(year, month, i));
+          const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
+
+          if (lunarEl && lunarData[dateStr]) {
+            const data = lunarData[dateStr];
+            lunarEl.textContent = data.lunarDayCn;
+            if (data.festival) {
+              lunarEl.textContent = data.festival;
+              lunarEl.classList.add('day-festival');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('批量加载农历日期失败:', error);
+      }
+    },
+
+    async loadWeekLunarDates() {
+      try {
+        const selectedDayOfWeek = state.selectedDate.getDay();
+        const weekStart = new Date(state.selectedDate);
+        weekStart.setDate(state.selectedDate.getDate() - selectedDayOfWeek);
+
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+
+        const monthsToLoad = new Set();
+        let current = new Date(weekStart);
+        while (current <= weekEnd) {
+          monthsToLoad.add(`${current.getFullYear()}-${current.getMonth()}`);
+          current.setDate(current.getDate() + 1);
+        }
+
+        for (const cacheKey of monthsToLoad) {
+          if (!state.lunarCache.has(cacheKey)) {
+            const [y, m] = cacheKey.split('-').map(Number);
+            try {
+              const response = await fetch(`/api/lunar/month/${y}/${m + 1}`, {
+                credentials: 'include'
+              });
+              if (response.ok) {
+                const lunarData = await response.json();
+                state.lunarCache.set(cacheKey, lunarData);
+              }
+            } catch (error) {
+              console.error(`加载农历数据失败: ${cacheKey}`, error);
+            }
+          }
+        }
+
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(weekStart);
+          date.setDate(weekStart.getDate() + i);
+          const dateStr = utils.formatDate(date);
+          const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
           
-          // 处理跨月的情况，需要获取多个月份的数据
-          const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekStart.getDate() + 6);
-          const endMonth = weekEnd.getMonth();
-          const endYear = weekEnd.getFullYear();
+          const cacheKey = `${date.getFullYear()}-${date.getMonth()}`;
+          const lunarData = state.lunarCache.get(cacheKey);
 
-          // 获取所有需要的月份数据
-          const monthsToLoad = new Set();
-          monthsToLoad.add(`${weekYear}-${weekMonth}`);
-          if (endYear !== weekYear || endMonth !== weekMonth) {
-            monthsToLoad.add(`${endYear}-${endMonth}`);
-          }
-
-          // 批量加载所有需要的月份数据
-          for (const cacheKey of monthsToLoad) {
-            if (!state.lunarCache.has(cacheKey)) {
-              const [y, m] = cacheKey.split('-').map(Number);
-              try {
-                const response = await fetch(`/api/lunar/month/${y}/${m + 1}`, {
-                  credentials: 'include'
-                });
-                if (response.ok) {
-                  const lunarData = await response.json();
-                  state.lunarCache.set(cacheKey, lunarData);
-                }
-              } catch (error) {
-                console.error(`加载农历数据失败: ${cacheKey}`, error);
-              }
+          if (lunarEl && lunarData && lunarData[dateStr]) {
+            const data = lunarData[dateStr];
+            lunarEl.textContent = data.lunarDayCn;
+            if (data.festival) {
+              lunarEl.textContent = data.festival;
+              lunarEl.classList.add('day-festival');
             }
           }
-
-          // 加载一周的农历数据
-          for (let i = 0; i < 7; i++) {
-            const date = new Date(weekStart);
-            date.setDate(weekStart.getDate() + i);
-            const dateStr = utils.formatDate(date);
-            const lunarEl = document.getElementById(`day-lunar-${dateStr}`);
-            
-            // 从缓存中获取对应月份的数据
-            const dateMonth = date.getMonth();
-            const dateYear = date.getFullYear();
-            const cacheKey = `${dateYear}-${dateMonth}`;
-            const lunarData = state.lunarCache.get(cacheKey);
-
-            if (lunarEl && lunarData && lunarData[dateStr]) {
-              const data = lunarData[dateStr];
-              lunarEl.textContent = data.lunarDayCn;
-              // 如果是节日,显示节日名称
-              if (data.festival) {
-                lunarEl.textContent = data.festival;
-                lunarEl.classList.add('day-festival');
-              }
-            }
-          }
-        } catch (error) {
-          console.error('加载周农历日期失败:', error);
         }
-      },
+      } catch (error) {
+        console.error('加载周农历日期失败:', error);
+      }
+    },
 
     renderNarrowWeekView() {
-      // 获取选中日期所在周的日期
       const selectedDayOfWeek = state.selectedDate.getDay();
       const weekStart = new Date(state.selectedDate);
       weekStart.setDate(state.selectedDate.getDate() - selectedDayOfWeek);
 
-      // 渲染一周的日期
       for (let i = 0; i < 7; i++) {
         const date = new Date(weekStart);
         date.setDate(weekStart.getDate() + i);
@@ -676,27 +1068,27 @@ const CalendarApp = (function() {
       }
     },
 
-      createMonthDayCell(day, dateStr, isOtherMonth, isToday = false, isSelected = false) {
-        const cell = document.createElement('div');
-        cell.className = 'month-day';
-        cell.dataset.dateStr = dateStr; // 存储日期字符串用于事件委托
-        if (isOtherMonth) cell.classList.add('other-month');
-        if (isToday) cell.classList.add('today');
-        if (isSelected) cell.classList.add('selected');
+    createMonthDayCell(day, dateStr, isOtherMonth, isToday = false, isSelected = false) {
+      const cell = document.createElement('div');
+      cell.className = 'month-day';
+      cell.dataset.dateStr = dateStr;
+      if (isOtherMonth) cell.classList.add('other-month');
+      if (isToday) cell.classList.add('today');
+      if (isSelected) cell.classList.add('selected');
 
-        cell.innerHTML = `
-          <div class="day-header">
-            <span class="month-day-number">${day}</span>
-            <span class="day-lunar" id="day-lunar-${dateStr}"></span>
-          </div>
-          <div class="day-summary" id="day-summary-${dateStr}"></div>
-          <div class="day-content" id="day-content-${dateStr}"></div>
-        `;
+      cell.innerHTML = `
+        <div class="day-header">
+          <span class="month-day-number">${day}</span>
+          <span class="day-lunar" id="day-lunar-${dateStr}"></span>
+        </div>
+        <div class="day-summary" id="day-summary-${dateStr}"></div>
+        <div class="day-content" id="day-content-${dateStr}"></div>
+      `;
 
-        if (elements.monthViewGrid) {
-          elements.monthViewGrid.appendChild(cell);
-        }
-      },
+      if (elements.monthViewGrid) {
+        elements.monthViewGrid.appendChild(cell);
+      }
+    },
 
     async updateMonthIndicators() {
       const year = state.currentDate.getFullYear();
@@ -710,12 +1102,6 @@ const CalendarApp = (function() {
         container.innerHTML = '';
       });
 
-      const isNarrow = window.innerWidth <= 768;
-
-      const selectedDateStr = utils.formatDate(state.selectedDate);
-      const selectedDate = new Date(selectedDateStr);
-      const selectedDayOfWeek = selectedDate.getDay();
-
       const dateMap = new Map();
 
       state.currentMonthTodos.forEach(todo => {
@@ -728,38 +1114,22 @@ const CalendarApp = (function() {
       });
 
       const expandedEvents = await this.expandRecurringEvents(state.currentMonthEvents, year, month);
-        console.log('[前端] 展开前的事件数量:', state.currentMonthEvents.length);
-        console.log('[前端] 展开后的事件数量:', expandedEvents.length);
-        expandedEvents.forEach((event, index) => {
-        console.log('[前端] 开始映射事件到日期网格...');
 
-          const eventDate = new Date(event.startTime * 1000);
-          console.log('[前端] 事件', index + 1, ':', event.title, eventDate.toISOString().split('T')[0], 'isRecurringInstance:', event.isRecurringInstance);
-        });
-
-
-      // 映射事件
       expandedEvents.forEach(event => {
         const startDate = new Date(event.startTime * 1000);
         const endDate = event.endTime ? new Date(event.endTime * 1000) : startDate;
 
-        // 使用UTC日期来避免时区问题
         const current = new Date(startDate);
         while (current <= endDate) {
-          const year = current.getUTCFullYear();
-          const month = String(current.getUTCMonth() + 1).padStart(2, '0');
-          const day = String(current.getUTCDate()).padStart(2, '0');
-          const dateKey = `${year}-${month}-${day}`;
+          const dateKey = utils.formatDate(current);
           const existing = dateMap.get(dateKey) || { todos: [], events: [], notes: [] };
           existing.events.push(event);
           dateMap.set(dateKey, existing);
-          current.setUTCDate(current.getUTCDate() + 1);
+          current.setDate(current.getDate() + 1);
         }
       });
 
-      // 映射笔记
       state.currentMonthNotes.forEach(note => {
-        // 尝试多个时间戳字段
         let timestamp = null;
         if (note.updatedAt) {
           timestamp = note.updatedAt;
@@ -770,13 +1140,6 @@ const CalendarApp = (function() {
         }
 
         if (timestamp) {
-        console.log('[前端] dateMap中的日期数量:', dateMap.size);
-        console.log('[前端] dateMap内容:');
-        dateMap.forEach((data, dateStr) => {
-          console.log('[前端] 日期:', dateStr, '事件数量:', data.events.length, '事件标题:', data.events.map(e => e.title).join(', '));
-        });
-
-          // 注意: updatedAt 已经是毫秒时间戳,不需要再乘以 1000
           const dateKey = utils.formatDate(new Date(timestamp));
           const existing = dateMap.get(dateKey) || { todos: [], events: [], notes: [] };
           existing.notes.push(note);
@@ -784,12 +1147,10 @@ const CalendarApp = (function() {
         }
       });
 
-      // 更新DOM
       dateMap.forEach((data, dateStr) => {
         const container = document.getElementById(`day-content-${dateStr}`);
         const summaryContainer = document.getElementById(`day-summary-${dateStr}`);
 
-        // 更新摘要(总是显示,无论窄屏还是宽屏)
         if (summaryContainer) {
           const todoCount = data.todos.length;
           const eventCount = data.events.length;
@@ -822,19 +1183,16 @@ const CalendarApp = (function() {
         if (container) {
           const items = [];
 
-          // 收集要显示的项目（最多5个）
           data.events.slice(0, 5).forEach(event => {
             items.push({ type: 'event', data: event });
           });
 
-          // 如果事件不足5个，补充待办事项
           if (items.length < 5) {
             data.todos.slice(0, 5 - items.length).forEach(todo => {
               items.push({ type: 'todo', data: todo });
             });
           }
 
-          // 渲染项目
           items.forEach(item => {
             const div = document.createElement('div');
             div.className = `day-preview-item ${item.type}`;
@@ -843,7 +1201,6 @@ const CalendarApp = (function() {
             container.appendChild(div);
           });
 
-          // 显示剩余数量
           const totalItems = data.events.length + data.todos.length;
           if (totalItems > 5) {
             const more = document.createElement('div');
@@ -852,141 +1209,6 @@ const CalendarApp = (function() {
             container.appendChild(more);
           }
         }
-      });
-    },
-
-    todos(todos) {
-      elements.todoList.innerHTML = '';
-
-      if (!todos || todos.length === 0) {
-        elements.todoList.innerHTML = '<div class="empty-state">暂无待办事项</div>';
-        return;
-      }
-
-      todos.forEach(todo => {
-        const item = document.createElement('div');
-        item.className = 'todo-item';
-
-        // 构建元数据信息
-        let metaHtml = '';
-        if (todo.priority) {
-          metaHtml += `<span class="todo-priority ${utils.getPriorityClass(todo.priority)}">${utils.getPriorityLabel(todo.priority)}</span>`;
-        }
-        if (todo.dueDate) {
-          metaHtml += `<span class="todo-date">${utils.formatTime(todo.dueDate * 1000)}</span>`;
-        }
-
-        item.innerHTML = `
-          <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''}>
-          <div class="todo-content" data-id="${todo.id}">
-            <div class="todo-title ${todo.completed ? 'completed' : ''}">${utils.escapeHtml(todo.title)}</div>
-            ${metaHtml ? `<div class="todo-meta">${metaHtml}</div>` : ''}
-          </div>
-          <div class="todo-actions">
-            <button class="edit-btn" data-id="${todo.id}" title="编辑">✎</button>
-            <button class="delete-btn" data-id="${todo.id}" title="删除">×</button>
-          </div>
-        `;
-
-        // 事件监听
-        const checkbox = item.querySelector('.todo-checkbox');
-        checkbox.addEventListener('change', () => handlers.toggleTodo(todo.id, checkbox.checked));
-
-        const contentDiv = item.querySelector('.todo-content');
-        contentDiv.addEventListener('click', () => handlers.editTodo(todo));
-
-        const editBtn = item.querySelector('.edit-btn');
-        editBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          handlers.editTodo(todo);
-        });
-
-        const deleteBtn = item.querySelector('.delete-btn');
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          handlers.deleteTodo(todo.id);
-        });
-
-        elements.todoList.appendChild(item);
-      });
-    },
-
-    events(events) {
-      elements.eventList.innerHTML = '';
-
-      if (!events || events.length === 0) {
-        elements.eventList.innerHTML = '<div class="empty-state">暂无事件</div>';
-        return;
-      }
-
-      events.forEach(event => {
-        const item = document.createElement('div');
-        item.className = 'event-item';
-        item.style.borderLeftColor = event.color || '#2563eb';
-
-        // 构建时间信息
-        let timeHtml = '';
-        if (event.allDay) {
-          timeHtml = '<span class="event-all-day">全天</span>';
-        } else {
-          timeHtml = utils.formatTime(event.startTime * 1000);
-          if (event.endTime) {
-            timeHtml += ` - ${utils.formatTime(event.endTime * 1000)}`;
-          }
-        }
-
-        item.innerHTML = `
-          <div class="event-content" data-id="${event.isRecurringInstance ? event._originalId : event.id}">
-            <div class="event-title">${utils.escapeHtml(event.title)}${event.isRecurringInstance ? ' <span class="recurrence-badge">重复</span>' : ''}</div>
-            <div class="event-time">${timeHtml}</div>
-          </div>
-          <div class="event-actions">
-            <button class="edit-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="编辑">✎</button>
-            <button class="delete-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="删除">×</button>
-          </div>
-        `;
-
-        // 点击事件主体打开编辑
-        const eventContent = item.querySelector('.event-content');
-        eventContent.addEventListener('click', () => {
-          handlers.editEvent(event);
-        });
-
-        const editBtn = item.querySelector('.edit-btn');
-        editBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          handlers.editEvent(event);
-        });
-
-        const deleteBtn = item.querySelector('.delete-btn');
-        deleteBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          handlers.deleteEvent(event.isRecurringInstance ? event._originalId : event.id);
-        });
-
-        elements.eventList.appendChild(item);
-      });
-    },
-
-    notes(notes) {
-      elements.noteList.innerHTML = '';
-
-      if (!notes || notes.length === 0) {
-        elements.noteList.innerHTML = '<div class="empty-state">当日无笔记</div>';
-        return;
-      }
-
-      notes.forEach(note => {
-        const item = document.createElement('div');
-        item.className = 'note-item';
-        item.title = note.title;
-        item.innerHTML = `<div class="note-title">${utils.escapeHtml(note.title)}</div>`;
-
-        item.addEventListener('click', () => {
-          window.open(`/?id=${note.id}`, '_blank');
-        });
-
-        elements.noteList.appendChild(item);
       });
     }
   };
@@ -1015,24 +1237,6 @@ const CalendarApp = (function() {
         state.currentMonthEvents = [];
         state.currentMonthNotes = [];
       }
-    },
-
-    async loadDayData() {
-      const dateStr = utils.formatDate(state.selectedDate);
-      elements.sidebarDate.textContent = utils.formatDisplayDate(state.selectedDate);
-
-      try {
-        const data = await api.getDayData(dateStr);
-
-        render.todos(data.todos || []);
-        render.events(data.events || []);
-        render.notes(data.notes || []);
-      } catch (error) {
-        console.error('加载日期数据失败:', error);
-        render.todos([]);
-        render.events([]);
-        render.notes([]);
-      }
     }
   };
 
@@ -1041,50 +1245,44 @@ const CalendarApp = (function() {
     prevMonth() {
       state.currentDate.setMonth(state.currentDate.getMonth() - 1);
       render.calendar();
-      // 重新加载侧边栏数据
-      dataLoader.loadDayData();
+      sidebarRenderer.refresh();
     },
 
     nextMonth() {
       state.currentDate.setMonth(state.currentDate.getMonth() + 1);
       render.calendar();
-      // 重新加载侧边栏数据
-      dataLoader.loadDayData();
+      sidebarRenderer.refresh();
     },
 
     today() {
       state.currentDate = new Date();
       state.selectedDate = new Date();
       render.calendar();
-      dataLoader.loadDayData();
+      sidebarRenderer.refresh();
+    },
+
+    selectDate(dateStr) {
+      state.selectedDate = new Date(dateStr);
+      elements.sidebarDate.textContent = utils.formatSidebarDate(state.selectedDate);
+      render.calendar();
+      sidebarRenderer.refresh();
     },
 
     openTodoModal() {
-      console.log('[CalendarApp] openTodoModal called');
-
-      // 如果不是编辑模式,清空表单并设置默认值
       if (!elements.todoForm.dataset.todoId) {
         const dueDateInput = elements.todoForm.querySelector('[name="dueDate"]');
         dueDateInput.value = utils.formatDate(state.selectedDate);
         const modalTitle = elements.todoModal.querySelector('.modal-title');
         if (modalTitle) modalTitle.textContent = '添加待办事项';
       }
-
-      console.log('[CalendarApp] todoModal before:', elements.todoModal.classList.toString());
       elements.todoModal.classList.add('show');
-      console.log('[CalendarApp] todoModal after:', elements.todoModal.classList.toString());
     },
 
     openEventModal() {
-      console.log('[CalendarApp] openEventModal called');
-
-      // 如果不是编辑模式,设置默认值
       if (!elements.eventForm.dataset.eventId) {
         const startTimeInput = elements.eventForm.querySelector('[name="startTime"]');
         const endTimeInput = elements.eventForm.querySelector('[name="endTime"]');
         const allDayInput = elements.eventForm.querySelector('[name="allDay"]');
-
-        console.log('[CalendarApp] inputs:', { startTimeInput, endTimeInput, allDayInput });
 
         const dateStr = utils.formatDate(state.selectedDate);
         startTimeInput.value = `${dateStr}T09:00`;
@@ -1093,16 +1291,7 @@ const CalendarApp = (function() {
         const modalTitle = elements.eventModal.querySelector('.modal-title');
         if (modalTitle) modalTitle.textContent = '添加事件';
       }
-
       elements.eventModal.classList.add('show');
-
-      // 检查模态框内部的 .modal 元素
-      const modalContent = elements.eventModal.querySelector('.modal');
-      console.log('[CalendarApp] modalContent:', modalContent);
-      console.log('[CalendarApp] modalContent computed display:', window.getComputedStyle(modalContent).display);
-      console.log('[CalendarApp] modalContent computed visibility:', window.getComputedStyle(modalContent).visibility);
-      console.log('[CalendarApp] modalContent computed opacity:', window.getComputedStyle(modalContent).opacity);
-      console.log('[CalendarApp] eventModal computed display:', window.getComputedStyle(elements.eventModal).display);
     },
 
     closeModals() {
@@ -1128,7 +1317,6 @@ const CalendarApp = (function() {
       const formData = new FormData(elements.todoForm);
       const data = Object.fromEntries(formData.entries());
 
-      // 转换日期格式为 Unix 时间戳（秒）
       if (data.dueDate) {
         data.dueDate = Math.floor(new Date(data.dueDate).getTime() / 1000);
       }
@@ -1144,7 +1332,7 @@ const CalendarApp = (function() {
           await api.createTodo(data);
         }
         this.closeModals();
-        dataLoader.loadDayData();
+        sidebarRenderer.refresh();
         dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
       } catch (error) {
         console.error('保存待办事项失败:', error);
@@ -1158,10 +1346,8 @@ const CalendarApp = (function() {
       const formData = new FormData(elements.eventForm);
       const data = Object.fromEntries(formData.entries());
 
-      // 检查是否是编辑模式
       const eventId = elements.eventForm.dataset.eventId;
 
-      // 转换时间格式
       if (data.startTime) {
         data.startTime = Math.floor(new Date(data.startTime).getTime() / 1000);
       }
@@ -1170,7 +1356,6 @@ const CalendarApp = (function() {
       }
       data.allDay = data.allDay === 'true';
 
-      // 处理重复事件
       if (data.recurrence) {
         data.recurrence = JSON.stringify({ type: data.recurrence });
         if (data.recurrenceEnd) {
@@ -1183,29 +1368,27 @@ const CalendarApp = (function() {
 
       try {
         if (eventId) {
-          // 编辑模式
-        await api.updateEvent(eventId, data);
-      } else {
-        // 创建模式
-        await api.createEvent(data);
-      }
-      this.closeModals();
-      delete elements.eventForm.dataset.eventId;
-      const modalTitle = elements.eventModal.querySelector('.modal-title');
-      if (modalTitle) modalTitle.textContent = '添加事件';
+          await api.updateEvent(eventId, data);
+        } else {
+          await api.createEvent(data);
+        }
+        this.closeModals();
+        delete elements.eventForm.dataset.eventId;
+        const modalTitle = elements.eventModal.querySelector('.modal-title');
+        if (modalTitle) modalTitle.textContent = '添加事件';
 
-      dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
-      dataLoader.loadDayData();
-    } catch (error) {
-      console.error('保存事件失败:', error);
-      alert('保存失败，请重试');
-    }
-  },
+        sidebarRenderer.refresh();
+        dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+      } catch (error) {
+        console.error('保存事件失败:', error);
+        alert('保存失败，请重试');
+      }
+    },
 
     async toggleTodo(id, completed) {
       try {
         await api.toggleTodo(id, completed);
-        dataLoader.loadDayData();
+        sidebarRenderer.refresh();
       } catch (error) {
         console.error('切换待办状态失败:', error);
       }
@@ -1216,7 +1399,7 @@ const CalendarApp = (function() {
 
       try {
         await api.deleteTodo(id);
-        dataLoader.loadDayData();
+        sidebarRenderer.refresh();
         dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
       } catch (error) {
         console.error('删除待办事项失败:', error);
@@ -1224,30 +1407,25 @@ const CalendarApp = (function() {
     },
 
     editTodo(todo) {
-      // 填充表单
       elements.todoForm.querySelector('[name="title"]').value = todo.title || '';
       elements.todoForm.querySelector('[name="description"]').value = todo.description || '';
       elements.todoForm.querySelector('[name="priority"]').value = todo.priority || 2;
       elements.todoForm.querySelector('[name="dueDate"]').value = todo.dueDate ? utils.formatDate(new Date(todo.dueDate * 1000)) : '';
 
-      // 设置编辑模式标记
       elements.todoForm.dataset.todoId = todo.id;
       const modalTitle = elements.todoModal.querySelector('.modal-title');
       if (modalTitle) modalTitle.textContent = '编辑待办事项';
 
-      // 显示模态框
       this.openTodoModal();
     },
 
     async deleteEvent(id) {
-      // 检查是否是重复实例
       if (id && typeof id === 'string' && id.includes('_')) {
-        // 这是一个重复实例，提取原始 ID
         const originalId = id.split('_')[0];
         if (confirm('这是一个重复事件实例。确定要删除整个重复事件系列吗？')) {
           try {
             await api.deleteEvent(originalId);
-            dataLoader.loadDayData();
+            sidebarRenderer.refresh();
             dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
           } catch (error) {
             console.error('删除事件失败:', error);
@@ -1261,7 +1439,7 @@ const CalendarApp = (function() {
 
       try {
         await api.deleteEvent(id);
-        dataLoader.loadDayData();
+        sidebarRenderer.refresh();
         dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
       } catch (error) {
         console.error('删除事件失败:', error);
@@ -1270,14 +1448,11 @@ const CalendarApp = (function() {
     },
 
     editEvent(event) {
-      // 检查是否是重复实例
       let eventId = event.id;
       if (event.isRecurringInstance && event._originalId) {
         eventId = event._originalId;
-        console.log('编辑重复实例，使用原始事件 ID:', eventId);
       }
 
-      // 填充表单
       elements.eventForm.querySelector('[name="title"]').value = event.title || '';
       elements.eventForm.querySelector('[name="description"]').value = event.description || '';
       elements.eventForm.querySelector('[name="startTime"]').value = new Date(event.startTime * 1000).toISOString().slice(0, 16);
@@ -1285,7 +1460,6 @@ const CalendarApp = (function() {
       elements.eventForm.querySelector('[name="allDay"]').checked = event.allDay === 1;
       elements.eventForm.querySelector('[name="color"]').value = event.color || '#2563eb';
 
-      // 填充重复设置
       if (event.recurrence) {
         try {
           const recurrenceObj = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
@@ -1310,7 +1484,6 @@ const CalendarApp = (function() {
         document.getElementById('recurrence-end-group').style.display = 'none';
       }
 
-      // 设置编辑模式标记
       elements.eventForm.dataset.eventId = eventId;
       const modalTitle = elements.eventModal.querySelector('.modal-title');
       if (modalTitle) {
@@ -1321,7 +1494,6 @@ const CalendarApp = (function() {
         }
       }
 
-      // 显示模态框
       this.openEventModal();
     },
 
@@ -1382,15 +1554,13 @@ const CalendarApp = (function() {
         if (result.success) {
           alert(`导入成功!共导入 ${result.imported} 个事件${result.skipped > 0 ? `,跳过 ${result.skipped} 个已存在的事件` : ''}`);
 
-          // 重新加载日历数据
           render.calendar();
-          dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+          sidebarRenderer.refresh();
         }
       } catch (error) {
         console.error('导入日历失败:', error);
         alert('导入失败,请检查文件格式');
       } finally {
-        // 清空文件输入
         e.target.value = '';
       }
     },
@@ -1514,9 +1684,8 @@ const CalendarApp = (function() {
         const result = await response.json();
         alert(`同步成功!共导入 ${result.imported} 个事件`);
 
-        // 重新加载日历数据
         render.calendar();
-        dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+        sidebarRenderer.refresh();
       } catch (error) {
         console.error('同步订阅失败:', error);
         alert('同步失败');
@@ -1557,9 +1726,8 @@ const CalendarApp = (function() {
         alert('删除成功');
         handlers.loadSubscriptions();
 
-        // 重新加载日历数据
         render.calendar();
-        dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+        sidebarRenderer.refresh();
       } catch (error) {
         console.error('删除订阅失败:', error);
         alert('删除失败');
@@ -1567,35 +1735,19 @@ const CalendarApp = (function() {
     }
   };
 
-  // ==================== 工具函数 ====================
-  function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
-  }
-
   // ==================== 初始化 ====================
   async function checkAuth() {
     try {
-      // 尝试获取当前日期的数据来验证登录状态
       const today = new Date();
       const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       const response = await fetch(`/api/events/calendar/day/${dateStr}`, {
         credentials: 'include'
       });
-      // 401表示未登录，404可能没有数据但已登录
       if (response.status === 401) {
         return false;
       }
       return true;
     } catch (error) {
-      // 网络错误或其他问题，默认为未登录
       console.error('[CalendarApp] 检查登录状态失败:', error);
       return false;
     }
@@ -1604,12 +1756,10 @@ const CalendarApp = (function() {
   async function init() {
     console.log('[CalendarApp] 初始化开始...');
 
-    // 检查登录状态
     const isLoggedIn = await checkAuth();
     const loginRequiredEl = document.getElementById('login-required');
 
     if (!isLoggedIn) {
-      // 未登录，显示登录提示
       if (loginRequiredEl) {
         loginRequiredEl.classList.add('show');
       }
@@ -1617,7 +1767,6 @@ const CalendarApp = (function() {
       return;
     }
 
-    // 已登录，隐藏登录提示
     if (loginRequiredEl) {
       loginRequiredEl.classList.remove('show');
     }
@@ -1654,25 +1803,22 @@ const CalendarApp = (function() {
       });
     }
 
-      console.log('[CalendarApp] 导航按钮已绑定');
+    // 使用事件委托处理日期单元格点击
+    if (elements.monthViewGrid) {
+      elements.monthViewGrid.addEventListener('click', (e) => {
+        const cell = e.target.closest('.month-day');
+        if (cell && cell.dataset.dateStr) {
+          handlers.selectDate(cell.dataset.dateStr);
+        }
+      });
+    }
 
-      // 使用事件委托处理日期单元格点击
-      if (elements.monthViewGrid) {
-        elements.monthViewGrid.addEventListener('click', (e) => {
-          const cell = e.target.closest('.month-day');
-          if (cell && cell.dataset.dateStr) {
-            state.selectedDate = new Date(cell.dataset.dateStr);
-            render.calendar();
-            dataLoader.loadDayData();
-          }
-        });
-      }
+    // 监听窗口大小变化
+    window.addEventListener('resize', utils.debounce(async () => {
+      render.calendar();
+      await render.updateMonthIndicators();
+    }, 200));
 
-      // 监听窗口大小变化,重新渲染日历
-      window.addEventListener('resize', debounce(async () => {
-        render.calendar();
-        await render.updateMonthIndicators();
-      }, 200));
     // 绑定表单提交
     if (elements.todoForm) {
       elements.todoForm.addEventListener('submit', (e) => handlers.handleTodoSubmit(e));
@@ -1691,7 +1837,7 @@ const CalendarApp = (function() {
       addSubscriptionBtn.addEventListener('click', () => handlers.openSubscriptionForm());
     }
 
-    // 模态框关闭事件 - 点击遮罩层关闭
+    // 模态框关闭事件
     if (elements.todoModal) {
       elements.todoModal.addEventListener('click', (e) => {
         if (e.target === elements.todoModal) handlers.closeModals();
@@ -1703,7 +1849,6 @@ const CalendarApp = (function() {
       });
     }
 
-    // 模态框关闭按钮事件
     document.querySelectorAll('.todo-modal-close, .event-modal-close').forEach(btn => {
       btn.addEventListener('click', handlers.closeModals);
     });
@@ -1712,7 +1857,6 @@ const CalendarApp = (function() {
       btn.addEventListener('click', handlers.closeModals);
     });
 
-    // 订阅模态框关闭
     document.querySelectorAll('.subscription-modal-close, .subscription-form-modal-close, .subscription-form-cancel').forEach(btn => {
       btn.addEventListener('click', handlers.closeSubscriptionModals);
     });
@@ -1736,9 +1880,12 @@ const CalendarApp = (function() {
       if (e.key === 'Escape') handlers.closeModals();
     });
 
+    // 初始化侧边栏
+    sidebarRenderer.init();
+
     // 初始渲染
     render.calendar();
-    dataLoader.loadDayData();
+    elements.sidebarDate.textContent = utils.formatSidebarDate(state.selectedDate);
 
     console.log('[CalendarApp] 初始化完成');
   }

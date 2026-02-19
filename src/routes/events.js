@@ -459,10 +459,9 @@ router.delete('/:id', async (req, res) => {
       // 过滤出当天的事件
       const dayEvents = expandedEvents.filter(event => {
         const eventDate = new Date(event.startTime * 1000);
-        // 使用UTC时间进行比较,与前端日历网格保持一致
-        const year = eventDate.getUTCFullYear();
-        const month = String(eventDate.getUTCMonth() + 1).padStart(2, '0');
-        const day = String(eventDate.getUTCDate()).padStart(2, '0');
+        const year = eventDate.getFullYear();
+        const month = String(eventDate.getMonth() + 1).padStart(2, '0');
+        const day = String(eventDate.getDate()).padStart(2, '0');
         const eventDateStr = `${year}-${month}-${day}`;
         return eventDateStr === dateStr;
       });

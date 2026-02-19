@@ -6,1447 +6,11 @@
   <title>日历 - z7Note</title>
   <link rel="stylesheet" href="/css/variables.css">
   <link rel="stylesheet" href="/css/app.css">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    :root {
-      --accent: #2563eb;
-      --accent-hover: #1d4ed8;
-      --bg: #ffffff;
-      --bg-secondary: #f8fafc;
-      --text: #1e293b;
-      --text-secondary: #64748b;
-      --border: #e2e8f0;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f172a;
-        --bg-secondary: #1e293b;
-        --text: #f1f5f9;
-        --text-secondary: #94a3b8;
-        --border: #334155;
-        --success: #22c55e;
-        --danger: #f87171;
-        --warning: #fbbf24;
-      }
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      overflow: hidden;
-      background: var(--bg);
-      color: var(--text);
-    }
-
-    #calendar-app {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      background: var(--bg);
-    }
-
-    /* 精简的顶部导航栏 */
-    .calendar-header {
-      display: flex;
-      align-items: center;
-      padding: 6px 12px;
-      gap: 8px;
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      min-height: 44px;
-    }
-
-    .calendar-nav {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
-
-    .calendar-nav-left {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex: 1;
-      min-width: 0;
-    }
-
-    .calendar-nav-right {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
-
-    .calendar-nav button {
-      background: var(--accent);
-      color: white;
-      border: none;
-      padding: 5px 9px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      transition: all 0.2s;
-      flex-shrink: 0;
-    }
-
-    .calendar-nav button:hover {
-      background: var(--accent-hover);
-    }
-
-    .calendar-nav button.secondary {
-      background: var(--bg);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .calendar-nav button.secondary:hover {
-      background: var(--bg-secondary);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .view-switcher {
-      display: flex;
-      gap: 1px;
-      background: var(--border);
-      border-radius: 4px;
-      padding: 1px;
-      flex-shrink: 0;
-    }
-
-    .view-btn {
-      background: var(--bg-secondary);
-      color: var(--text-secondary);
-      border: none;
-      padding: 4px 8px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 500;
-      transition: all 0.2s;
-      flex-shrink: 0;
-    }
-
-    .view-btn.active {
-      background: var(--accent);
-      color: white;
-    }
-
-    .calendar-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text);
-      min-width: 120px;
-      max-width: 200px;
-      text-align: center;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .add-btn {
-      background: var(--accent);
-      color: white;
-      border: none;
-      padding: 5px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 14px;
-      flex-shrink: 0;
-    }
-
-    .add-btn:hover {
-      background: var(--accent-hover);
-    }
-
-    /* 主体内容区 */
-    .calendar-main {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    /* 月视图容器 */
-    .month-view {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      min-height: 240px;
-    }
-
-    /* 月视图表头容器 */
-    .month-view-headers {
-      display: flex;
-      flex-direction: row;
-      flex-shrink: 0;
-      border-bottom: 1px solid var(--border);
-      height: 28px;
-    }
-
-    .month-day-header {
-      background: var(--bg-secondary);
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      font-size: 12px;
-      flex: 1;
-      border-right: 1px solid var(--border);
-      box-sizing: border-box;
-    }
-
-    .month-day-header:last-child {
-      border-right: none;
-    }
-
-    /* 月视图日期网格 */
-    .month-view-grid {
-      flex: 1;
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      grid-auto-rows: minmax(40px, 1fr);
-      gap: 1px;
-      background: var(--border);
-      overflow: auto;
-      align-content: start;
-      overflow-y: auto;
-    }
-
-    .month-day {
-      background: var(--bg);
-      color: var(--text);
-      padding: 4px;
-      cursor: pointer;
-      transition: background 0.2s;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      overflow: hidden;
-      min-height: 40px;
-      max-height: 120px;
-      position: relative;
-    }
-
-    .day-content {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      flex: 1;
-      min-height: 0;
-      overflow: hidden;
-    }
-
-    .day-summary {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      display: flex;
-      gap: 2px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .day-badge {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 600;
-      line-height: 1.2;
-      padding: 0 2px;
-    }
-
-    .day-badge-todo {
-      color: var(--accent);
-    }
-
-    .day-badge-event {
-      color: #10b981;
-    }
-
-    .day-badge-note {
-      color: #f59e0b;
-    }
-
-    .month-day:hover {
-      background: var(--bg-secondary);
-    }
-
-    .month-day.other-month {
-      color: var(--text-secondary);
-      opacity: 0.5;
-    }
-
-    .month-day.today {
-      background: rgba(37, 99, 235, 0.05);
-    }
-
-    .month-day.today .month-day-number {
-      color: var(--accent);
-    }
-
-    .month-day.selected {
-      background: rgba(37, 99, 235, 0.1);
-      border: 2px solid var(--accent);
-    }
-
-    .month-day-number {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .day-header {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2px;
-    }
-
-    .day-lunar {
-      font-size: 10px;
-      color: var(--text-secondary);
-      font-weight: 400;
-    }
-
-    .day-lunar.day-festival {
-      color: var(--accent);
-      font-weight: 500;
-    }
-
-    .day-indicators {
-      display: flex;
-      gap: 2px;
-      flex-wrap: wrap;
-    }
-
-    .day-preview-item {
-      font-size: 10px;
-      padding: 2px 4px;
-      border-radius: 2px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      line-height: 1.4;
-      height: 16px;
-      flex-shrink: 0;
-    }
-
-    .day-preview-item.event {
-      background: rgba(16, 185, 129, 0.15);
-      color: #10b981;
-    }
-
-    .day-preview-item.todo {
-      background: rgba(37, 99, 235, 0.15);
-      color: var(--accent);
-    }
-
-    .day-more {
-      font-size: 9px;
-      color: var(--text-secondary);
-      text-align: center;
-      line-height: 1.2;
-    }
-
-    .day-dot {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .day-dot.todo { background: var(--accent); }
-    .day-dot.event { background: #10b981; }
-    .day-dot.note { background: #f59e0b; }
-
-    /* 周视图 - 紧凑布局，增加内容空间 */
-    .week-view {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      min-height: 120px;
-    }
-
-    .week-headers {
-      display: flex;
-      flex: 0 0 20px;
-      gap: 1px;
-      background: var(--border);
-      min-height: 20px;
-    }
-
-    .week-header-cell {
-      background: var(--bg-secondary);
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      font-size: 10px;
-      flex: 1;
-      min-height: 24px;
-    }
-
-    .week-grid {
-      display: flex;
-      flex: 1;
-      gap: 1px;
-      background: var(--border);
-      overflow: hidden;
-      min-height: 0;
-    }
-
-    .week-day {
-      background: var(--bg);
-      color: var(--text);
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      cursor: pointer;
-      transition: all 0.2s;
-      padding: 0;
-      min-height: 0;
-    }
-
-    .week-day:hover {
-      background: var(--bg-secondary);
-    }
-
-    .week-day.today {
-      background: rgba(37, 99, 235, 0.05);
-    }
-
-    .week-day.selected {
-      background: rgba(37, 99, 235, 0.1);
-      border: 2px solid var(--accent);
-    }
-
-    .week-day-number {
-      font-weight: 600;
-      font-size: 18px;
-      line-height: 1;
-    }
-
-    .week-day.today .week-day-number {
-      color: var(--accent);
-    }
-
-    /* 未登录提示 */
-    #login-required {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: var(--bg);
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-    }
-
-    #login-required.show {
-      display: flex;
-    }
-
-    #login-required h2 {
-      font-size: 20px;
-      color: var(--text);
-      margin-bottom: 12px;
-    }
-
-    #login-required p {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin-bottom: 20px;
-    }
-
-    #login-required a {
-      display: inline-block;
-      padding: 10px 20px;
-      background: var(--accent);
-      color: white;
-      text-decoration: none;
-      border-radius: 6px;
-      font-size: 14px;
-      transition: background 0.2s;
-    }
-
-    #login-required a:hover {
-      background: var(--accent-hover);
-    }
-
-    .week-day-indicators {
-      display: flex;
-      gap: 1px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .week-day-dot {
-      width: 3px;
-      height: 3px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .week-day-dot.todo { background: var(--accent); }
-    .week-day-dot.event { background: #10b981; }
-    .week-day-dot.note { background: #f59e0b; }
-
-    .week-day-events {
-      flex: 1;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-
-    .week-event-item {
-      font-size: 8px;
-      padding: 1px 2px;
-      border-radius: 1px;
-      cursor: pointer;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .week-event-item.todo {
-      background: rgba(37, 99, 235, 0.1);
-      color: var(--accent);
-    }
-
-    .week-event-item.event {
-      background: rgba(16, 185, 129, 0.1);
-      color: #10b981;
-    }
-
-    .week-event-item.note {
-      background: rgba(245, 158, 11, 0.1);
-      color: #f59e0b;
-    }
-
-    .week-event-item:hover {
-      opacity: 0.8;
-    }
-
-    /* 侧边栏 */
-    .sidebar {
-      width: 320px;
-      background: var(--bg-secondary);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-    }
-
-    .sidebar-header {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      flex-shrink: 0;
-    }
-
-    .sidebar-title {
-      font-weight: 600;
-      font-size: 14px;
-      color: var(--text);
-    }
-
-    .sidebar-content {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 12px;
-    }
-
-    .section {
-      margin-bottom: 16px;
-    }
-
-    .section:last-child {
-      margin-bottom: 0;
-    }
-
-    .section-title {
-      font-weight: 600;
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .schedule-date-header {
-      font-weight: 600;
-      font-size: 12px;
-      color: var(--text);
-      margin: 12px 0 8px 0;
-      padding-bottom: 4px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .section-title button {
-      background: var(--accent);
-      color: white;
-      border: none;
-      padding: 3px 8px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 10px;
-    }
-
-    .section-title button:hover {
-      background: var(--accent-hover);
-    }
-
-    /* 待办事项 */
-    .todo-item {
-      background: var(--bg);
-      padding: 8px 10px;
-      border-radius: 6px;
-      margin-bottom: 4px;
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .todo-item:hover {
-      border-color: var(--accent);
-    }
-
-    .todo-checkbox {
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
-      accent-color: var(--accent);
-    }
-
-    .todo-content {
-      flex: 1;
-      min-width: 0;
-      cursor: pointer;
-    }
-
-    .todo-actions {
-      display: flex;
-      gap: 4px;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .todo-item:hover .todo-actions {
-      opacity: 1;
-    }
-
-    .todo-title {
-      font-size: 13px;
-      color: var(--text);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .todo-title.completed {
-      text-decoration: line-through;
-      color: var(--text-secondary);
-    }
-
-    .todo-meta {
-      font-size: 10px;
-      color: var(--text-secondary);
-    }
-
-    .todo-priority {
-      padding: 2px 4px;
-      border-radius: 3px;
-      font-size: 10px;
-    }
-
-    .todo-priority.high { background: #fee2e2; color: #dc2626; }
-    .todo-priority.medium { background: #fef3c7; color: #d97706; }
-    .todo-priority.low { background: #d1fae5; color: #059669; }
-
-    /* 事件 */
-    .event-item {
-      background: var(--bg);
-      padding: 8px 10px;
-      border-radius: 6px;
-      margin-bottom: 4px;
-      border-left: 3px solid var(--accent);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .event-content {
-      flex: 1;
-      min-width: 0;
-      cursor: pointer;
-    }
-
-    .event-content:hover {
-      opacity: 0.8;
-    }
-
-    .event-actions {
-      display: flex;
-      gap: 4px;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .event-item:hover .event-actions {
-      opacity: 1;
-    }
-
-    .edit-btn,
-    .delete-btn {
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 14px;
-      color: var(--text-secondary);
-      transition: all 0.2s;
-      flex-shrink: 0;
-    }
-
-    .edit-btn:hover {
-      background: var(--bg-secondary);
-      color: var(--accent);
-    }
-
-    .delete-btn:hover {
-      background: #fee2e2;
-      color: #dc2626;
-    }
-
-    .event-title {
-      font-size: 13px;
-      color: var(--text);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .event-time {
-      font-size: 10px;
-      color: var(--text-secondary);
-    }
-
-    /* 重复标记 */
-    .recurrence-badge {
-      font-size: 10px;
-      color: var(--accent);
-      background: rgba(37, 99, 235, 0.1);
-      padding: 1px 4px;
-      border-radius: 3px;
-      margin-left: 4px;
-    }
-
-    /* 笔记 */
-    .note-item {
-      background: var(--bg);
-      padding: 8px 10px;
-      border-radius: 6px;
-      margin-bottom: 4px;
-      border: 1px solid var(--border);
-      cursor: pointer;
-    }
-
-    .note-item:hover {
-      border-color: var(--accent);
-    }
-
-    .note-title {
-      font-size: 13px;
-      color: var(--text);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 1;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 20px;
-      color: var(--text-secondary);
-      font-size: 13px;
-    }
-
-    /* Modal */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.6);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    }
-
-    .modal-overlay.show {
-      display: flex !important;
-    }
-
-    .modal {
-      background: var(--bg);
-      padding: 20px;
-      border-radius: 12px;
-      width: 400px;
-      max-width: 95vw;
-      max-height: 90vh;
-      overflow-y: auto;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-      display: block;
-      position: relative;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .modal {
-        background: #1e293b;
-      }
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
-    }
-
-    .modal-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text);
-    }
-
-    .modal-close {
-      background: none;
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 24px;
-      line-height: 1;
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-
-    .modal-close:hover {
-      background: var(--bg-secondary);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .modal-close {
-        color: #94a3b8;
-      }
-
-      .modal-close:hover {
-        background: #334155;
-      }
-    }
-
-    .form-group {
-      margin-bottom: 10px;
-    }
-
-    .form-label {
-      display: block;
-      margin-bottom: 3px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text);
-    }
-
-    .form-input,
-    .form-textarea,
-    .form-select {
-      width: 100%;
-      padding: 7px 9px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
-    }
-
-    .form-input:focus,
-    .form-textarea:focus,
-    .form-select:focus {
-      border-color: var(--accent);
-      outline: none;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .form-input,
-      .form-textarea,
-      .form-select {
-        border-color: #334155;
-        background: #334155;
-        color: #f1f5f9;
-      }
-
-      .form-input:focus,
-      .form-textarea:focus,
-      .form-select:focus {
-        border-color: #3b82f6;
-        background: #1e293b;
-      }
-    }
-
-    .form-textarea {
-      min-height: 80px;
-      resize: vertical;
-    }
-
-    /* 颜色输入框全局样式 */
-    input[type="color"] {
-      width: 32px;
-      height: 32px;
-      padding: 2px;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-    }
-
-    .form-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: nowrap;
-    }
-
-    .form-row .form-group {
-      flex: 0 0 auto;
-      min-width: 0;
-    }
-
-    /* 提醒时间列宽减少 */
-    .form-group-reminder-time {
-      flex: 0 0 120px;
-      min-width: 120px;
-    }
-
-    /* 提醒方式列宽增加 */
-    .form-group-reminder-method {
-      flex: 1;
-      min-width: 0;
-    }
-
-    /* 优先级列宽减少 */
-    .form-group-priority {
-      flex: 0 0 80px;
-      min-width: 80px;
-    }
-
-    /* 确保提醒选项不换行 */
-    .reminder-options {
-      display: flex;
-      gap: 8px;
-      flex-wrap: nowrap;
-      align-items: center;
-    }
-
-    .reminder-option {
-      flex-shrink: 0;
-      white-space: nowrap;
-      font-size: 13px;
-    }
-
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .btn {
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      border: none;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--accent-hover);
-    }
-
-    .btn-secondary {
-      background: var(--bg);
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-
-    .btn-secondary:hover {
-      background: var(--bg-secondary);
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .btn-primary {
-        background: #3b82f6;
-      }
-
-      .btn-primary:hover {
-        background: #2563eb;
-      }
-
-      .btn-secondary {
-        background: #334155;
-        color: #f1f5f9;
-        border-color: #475569;
-      }
-
-      .btn-secondary:hover {
-        background: #475569;
-        border-color: #94a3b8;
-      }
-    }
-
-    /* 响应式设计 */
-    @media (max-width: 768px) {
-      /* 窄屏下页面高度自适应,不强制填满屏幕 */
-      #calendar-app {
-        height: auto;
-        min-height: 100vh;
-      }
-
-      /* 窄屏下body可以滚动 */
-      body {
-        overflow: auto;
-      }
-
-      /* 窄屏下主体区域不强制填满 */
-      .calendar-main {
-        flex: 0 0 auto;
-        flex-direction: column;
-        overflow: visible;
-      }
-
-      .calendar-header {
-        flex-wrap: wrap;
-        padding: 4px 6px;
-        gap: 4px;
-      }
-
-      .calendar-nav {
-        gap: 4px;
-      }
-
-      .calendar-nav-left {
-        gap: 4px;
-      }
-
-      .calendar-nav-right {
-        gap: 4px;
-      }
-
-      .calendar-nav button,
-      .add-btn {
-        padding: 3px 5px;
-        min-width: 30px;
-        font-size: 15px;
-      }
-
-      #prev-month,
-      #next-month {
-        font-size: 17px;
-      }
-
-      .calendar-title {
-        font-size: 12px;
-        flex: 1;
-        text-align: center;
-        min-width: 60px;
-      }
-
-      .calendar-nav {
-        gap: 2px;
-      }
-
-      .calendar-nav-left {
-        gap: 2px;
-      }
-
-      .calendar-nav-right {
-        gap: 2px;
-      }
-
-      .sidebar {
-        width: 100%;
-        border-left: none;
-        border-top: 1px solid var(--border);
-        max-height: none;
-        overflow: visible;
-      }
-
-      /* 窄屏下月视图容器高度自适应 */
-      .month-view {
-        flex: 0 0 auto;
-        min-height: auto;
-      }
-
-      /* 窄屏下日期网格不占满剩余空间 */
-      .month-view-grid {
-        flex: 0 0 auto;
-        grid-auto-rows: minmax(60px, 1fr);
-        overflow: hidden;
-      }
-
-      /* 窄屏下日期单元格更大,更易于点击 */
-      .month-day {
-        min-height: 60px;
-        padding: 6px;
-      }
-
-      .month-day-number {
-        font-size: 15px;
-      }
-
-      .day-preview-item {
-        font-size: 11px;
-        height: 18px;
-      }
-
-      /* 确保 form-row 在 768px 以下不换行 */
-      .form-row {
-        flex-wrap: nowrap !important;
-        gap: 10px;
-        min-width: 0;
-      }
-
-      .form-row .form-group {
-        min-width: 0;
-      }
-
-      /* 保持水平布局的form-row（提醒选项行） */
-      .form-row.keep-horizontal {
-        flex-direction: row !important;
-        gap: 10px;
-      }
-
-      .form-row.keep-horizontal .reminder-options {
-        flex-wrap: nowrap !important;
-        gap: 6px;
-      }
-
-    /* 调整列宽适应较窄屏幕 */
-    .form-group-priority {
-      flex: 0 0 70px !important;
-      min-width: 70px !important;
-      width: 70px;
-    }
-
-    .form-group-due-date {
-      flex: 1 !important;
-      min-width: 0 !important;
-    }
-
-    .form-group-allday {
-      flex: 0 0 65px !important;
-      min-width: 65px !important;
-      width: 65px;
-    }
-
-    .form-group-color {
-      flex: 0 0 45px !important;
-      min-width: 45px !important;
-      width: 45px;
-    }
-
-    .form-group-recurrence {
-      flex: 1 !important;
-      min-width: 0 !important;
-    }
-
-    .form-group-reminder-time {
-      flex: 0 0 110px !important;
-      min-width: 110px !important;
-      width: 110px;
-    }
-
-    .form-group-reminder-method {
-      flex: 1 !important;
-      min-width: 0 !important;
-      overflow: hidden;
-    }
-
-    /* 提醒选项不换行 */
-    .reminder-options {
-      flex-wrap: nowrap !important;
-      gap: 6px;
-    }
-
-    .reminder-option {
-      font-size: 12px;
-      flex-shrink: 0;
-      white-space: nowrap;
-    }
-
-    /* 输入框和选择框缩小 padding */
-    .form-label {
-      font-size: 12px;
-      margin-bottom: 3px;
-    }
-
-    .form-input,
-    .form-select {
-      padding: 6px 7px;
-      font-size: 12px;
-    }
-
-    /* 模态框减小 padding */
-    .modal {
-      padding: 16px;
-    }
-  }
-
-    @media (max-width: 480px) {
-      .calendar-header {
-        padding: 3px 4px;
-        gap: 2px;
-      }
-
-      .calendar-nav {
-        gap: 1px;
-      }
-
-      .calendar-nav-left {
-        gap: 1px;
-      }
-
-      .calendar-nav-right {
-        gap: 1px;
-      }
-
-      .calendar-nav button,
-      .add-btn {
-        padding: 2px 3px;
-        min-width: 26px;
-        font-size: 13px;
-      }
-
-      /* 日期导航箭头字体 */
-      #prev-month,
-      #next-month {
-        font-size: 15px;
-      }
-
-      /* 超窄屏下只保留最基本的功能 */
-      #today-btn {
-        display: none;
-      }
-
-      .calendar-title {
-        font-size: 11px;
-        min-width: 50px;
-      }
-
-      /* 超窄屏下调整form-row间距 */
-      .form-row {
-        gap: 6px;
-      }
-
-      /* 超窄屏下保持水平布局的form-row */
-      .form-row.keep-horizontal {
-        gap: 6px;
-      }
-
-      .form-row.keep-horizontal .reminder-options {
-        gap: 4px;
-      }
-
-      .month-view {
-        grid-auto-rows: minmax(40px, 1fr);
-      }
-
-      .month-day {
-        min-height: 40px;
-        padding: 3px;
-      }
-
-      .month-day-number {
-        font-size: 12px;
-      }
-
-      .week-grid {
-        grid-template-rows: 50px 1fr;
-      }
-
-      .week-day {
-        padding: 4px 3px;
-      }
-
-      .week-day-number {
-        font-size: 14px;
-      }
-
-      .week-day-content {
-        font-size: 10px;
-      }
-
-      .section-title {
-        font-size: 10px;
-      }
-
-      .todo-item,
-      .event-item,
-      .note-item {
-        padding: 6px 8px;
-      }
-
-      .modal {
-        width: 100%;
-        max-height: 100vh;
-        padding: 12px;
-        border-radius: 0;
-      }
-
-      .modal-header {
-        margin-bottom: 10px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--border);
-      }
-
-      .modal-title {
-        font-size: 15px;
-      }
-
-      .modal-close {
-        font-size: 20px;
-        padding: 2px 6px;
-      }
-
-      .form-group {
-        margin-bottom: 8px;
-      }
-
-      .form-label {
-        font-size: 12px;
-        margin-bottom: 2px;
-      }
-
-      .form-input,
-      .form-textarea,
-      .form-select {
-        padding: 5px 6px;
-        font-size: 12px;
-      }
-
-      /* 日期时间输入框压缩padding */
-      input[type="date"],
-      input[type="datetime-local"] {
-        padding: 4px 6px;
-      }
-
-      .form-textarea {
-        min-height: 60px;
-      }
-
-      /* 窄屏下调整列宽 */
-      .form-group-priority {
-        flex: 0 0 55px !important;
-        min-width: 55px !important;
-        width: 55px;
-      }
-
-      .form-group-due-date {
-        flex: 1 !important;
-        min-width: 0 !important;
-      }
-
-      .form-group-allday {
-        flex: 0 0 55px !important;
-        min-width: 55px !important;
-        width: 55px;
-      }
-
-      .form-group-color {
-        flex: 0 0 40px !important;
-        min-width: 40px !important;
-        width: 40px;
-      }
-
-      .form-group-recurrence {
-        flex: 1 !important;
-        min-width: 0 !important;
-      }
-
-      .form-group-reminder-time {
-        flex: 0 0 85px !important;
-        min-width: 85px !important;
-        width: 85px;
-      }
-
-      /* 窄屏下日期选择框字体缩小 */
-      .form-group-reminder-time select,
-      .form-group-priority select {
-        font-size: 11px;
-        padding: 4px 3px;
-      }
-
-      .modal-actions {
-        margin-top: 12px;
-        padding-top: 10px;
-        gap: 6px;
-      }
-
-      .btn {
-        padding: 8px 12px;
-        font-size: 13px;
-      }
-
-      /* 提醒方式复选框样式 - 超窄屏下 */
-      .reminder-options {
-        gap: 4px;
-      }
-
-      .reminder-option {
-        gap: 3px;
-        font-size: 12px;
-      }
-
-      .reminder-option input[type="checkbox"] {
-        width: 14px;
-        height: 14px;
-      }
-    }
-  </style>
+  <link rel="stylesheet" href="/css/calendar.css">
 </head>
 <body>
   <div id="calendar-app">
+    <!-- 顶部导航 -->
     <div class="calendar-header">
       <div class="calendar-nav calendar-nav-left">
         <button class="secondary" id="prev-month">←</button>
@@ -1463,7 +27,9 @@
       </div>
     </div>
 
+    <!-- 主体区域 -->
     <div class="calendar-main">
+      <!-- 月视图 -->
       <div class="month-view" id="month-view">
         <div class="month-view-headers">
           <div class="month-day-header">日</div>
@@ -1477,52 +43,39 @@
         <div class="month-view-grid" id="month-view-grid"></div>
       </div>
 
+      <!-- 侧边栏 -->
       <div class="sidebar">
         <div class="sidebar-header">
           <span class="sidebar-title" id="sidebar-date">选择日期</span>
-        </div>
-        <div class="sidebar-content">
-          <div class="section">
-            <div class="section-title">
-              待办事项
-              <button id="todo-add-btn">+ 添加</button>
-            </div>
-            <div id="todo-list"></div>
-          </div>
-          <div class="section">
-            <div class="section-title">
-              事件
-              <button id="event-add-btn">+ 添加</button>
-            </div>
-            <div id="event-list"></div>
-          </div>
-          <div class="section">
-            <div class="section-title">
-              提醒历史
-              <button id="refresh-reminder-history-btn" style="font-size: 11px; padding: 2px 6px;">刷新</button>
-            </div>
-            <div id="reminder-history-list" style="max-height: 200px; overflow-y: auto;"></div>
-          </div>
-          <div class="section">
-            <div class="section-title">当日笔记</div>
-            <div id="note-list"></div>
+          <div class="sidebar-header-actions">
+            <button class="icon-btn" id="todo-add-btn" title="添加待办">☑</button>
+            <button class="icon-btn" id="event-add-btn" title="添加事件">📅</button>
           </div>
         </div>
+        <input type="text" id="sidebar-search" class="sidebar-search" placeholder="搜索...">
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-tab="all">全部</button>
+          <button class="sidebar-tab" data-tab="event">事件</button>
+          <button class="sidebar-tab" data-tab="todo">待办</button>
+          <button class="sidebar-tab" data-tab="note">笔记</button>
+        </div>
+        <div class="sidebar-content" id="sidebar-content"></div>
       </div>
     </div>
 
-  <!-- 未登录提示 -->
-  <div id="login-required">
-    <h2>需要登录</h2>
-    <p>请登录后查看日历内容</p>
-    <a href="/">返回首页登录</a>
+    <!-- 未登录提示 -->
+    <div id="login-required">
+      <h2>需要登录</h2>
+      <p>请登录后查看日历内容</p>
+      <a href="/">返回首页登录</a>
+    </div>
   </div>
 
-  <!-- Todo Modal -->
+  <!-- 待办模态框 -->
   <div class="modal-overlay" id="todo-modal">
     <div class="modal">
       <div class="modal-header">
-        <h3 class="modal-title">添加待办事项</h3>
+        <h3 class="modal-title">添加待办</h3>
         <button class="modal-close todo-modal-close">×</button>
       </div>
       <form id="todo-form">
@@ -1534,8 +87,8 @@
           <label class="form-label">描述</label>
           <textarea class="form-textarea" name="description" placeholder="添加详细描述（可选）"></textarea>
         </div>
-        <div class="form-row keep-horizontal">
-          <div class="form-group form-group-priority">
+        <div class="form-row">
+          <div class="form-group form-group-narrow">
             <label class="form-label">优先级</label>
             <select class="form-select" name="priority">
               <option value="1">低</option>
@@ -1543,13 +96,13 @@
               <option value="3">高</option>
             </select>
           </div>
-          <div class="form-group form-group-due-date">
+          <div class="form-group form-group-narrow">
             <label class="form-label">截止日期</label>
             <input type="date" class="form-input" name="dueDate">
           </div>
         </div>
-        <div class="form-row keep-horizontal">
-          <div class="form-group form-group-reminder-time">
+        <div class="form-row">
+          <div class="form-group form-group-narrow">
             <label class="form-label">提醒时间</label>
             <select class="form-select" name="reminderTime">
               <option value="0,0,15">提前15分钟</option>
@@ -1560,18 +113,12 @@
               <option value="7,0,0">提前7天</option>
             </select>
           </div>
-          <div class="form-group form-group-reminder-method">
+          <div class="form-group">
             <label class="form-label">提醒方式</label>
             <div class="reminder-options">
-              <label class="reminder-option">
-                <input type="checkbox" name="reminderEmail" value="1" checked> 邮件
-              </label>
-              <label class="reminder-option">
-                <input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知
-              </label>
-              <label class="reminder-option">
-                <input type="checkbox" name="reminderCaldav" value="1"> 日历应用
-              </label>
+              <label class="reminder-option"><input type="checkbox" name="reminderEmail" value="1" checked> 邮件</label>
+              <label class="reminder-option"><input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知</label>
+              <label class="reminder-option"><input type="checkbox" name="reminderCaldav" value="1"> 日历应用</label>
             </div>
           </div>
         </div>
@@ -1583,7 +130,7 @@
     </div>
   </div>
 
-  <!-- Event Modal -->
+  <!-- 事件模态框 -->
   <div class="modal-overlay" id="event-modal">
     <div class="modal">
       <div class="modal-header">
@@ -1599,29 +146,29 @@
           <label class="form-label">描述</label>
           <textarea class="form-textarea" name="description" placeholder="添加详细描述（可选）"></textarea>
         </div>
-        <div class="form-row keep-horizontal">
-          <div class="form-group">
+        <div class="form-row">
+          <div class="form-group form-group-half">
             <label class="form-label">开始时间 *</label>
             <input type="datetime-local" class="form-input" name="startTime" required>
           </div>
-          <div class="form-group">
+          <div class="form-group form-group-half">
             <label class="form-label">结束时间</label>
             <input type="datetime-local" class="form-input" name="endTime">
           </div>
         </div>
-        <div class="form-row keep-horizontal">
-          <div class="form-group form-group-allday">
-            <label class="form-label">全天事件</label>
+        <div class="form-row">
+          <div class="form-group form-group-narrow">
+            <label class="form-label">全天</label>
             <select class="form-select" name="allDay">
               <option value="false">否</option>
               <option value="true" selected>是</option>
             </select>
           </div>
-          <div class="form-group form-group-color">
+          <div class="form-group form-group-narrow">
             <label class="form-label">颜色</label>
             <input type="color" class="form-input" name="color" value="#2563eb">
           </div>
-          <div class="form-group form-group-recurrence">
+          <div class="form-group">
             <label class="form-label">重复</label>
             <select class="form-select" name="recurrence" id="recurrence-select">
               <option value="">不重复</option>
@@ -1638,8 +185,8 @@
           <label class="form-label">重复结束日期</label>
           <input type="date" class="form-input" name="recurrenceEnd" id="recurrence-end">
         </div>
-        <div class="form-row keep-horizontal">
-          <div class="form-group form-group-reminder-time">
+        <div class="form-row">
+          <div class="form-group form-group-narrow">
             <label class="form-label">提醒时间</label>
             <select class="form-select" name="reminderTime">
               <option value="0,0,15">提前15分钟</option>
@@ -1650,18 +197,12 @@
               <option value="7,0,0">提前7天</option>
             </select>
           </div>
-          <div class="form-group form-group-reminder-method">
+          <div class="form-group">
             <label class="form-label">提醒方式</label>
             <div class="reminder-options">
-              <label class="reminder-option">
-                <input type="checkbox" name="reminderEmail" value="1" checked> 邮件
-              </label>
-              <label class="reminder-option">
-                <input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知
-              </label>
-              <label class="reminder-option">
-                <input type="checkbox" name="reminderCaldav" value="1"> 日历应用
-              </label>
+              <label class="reminder-option"><input type="checkbox" name="reminderEmail" value="1" checked> 邮件</label>
+              <label class="reminder-option"><input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知</label>
+              <label class="reminder-option"><input type="checkbox" name="reminderCaldav" value="1"> 日历应用</label>
             </div>
           </div>
         </div>
@@ -1673,7 +214,7 @@
     </div>
   </div>
 
-  <!-- 订阅管理 Modal -->
+  <!-- 订阅管理模态框 -->
   <div class="modal-overlay" id="subscription-modal">
     <div class="modal" style="width: 600px;">
       <div class="modal-header">
@@ -1683,13 +224,11 @@
       <div style="margin-bottom: 16px;">
         <button type="button" class="btn btn-primary" id="add-subscription-btn">添加订阅</button>
       </div>
-      <div id="subscription-list" style="max-height: 400px; overflow-y: auto;">
-        <!-- 订阅列表将在这里显示 -->
-      </div>
+      <div id="subscription-list" style="max-height: 400px; overflow-y: auto;"></div>
     </div>
   </div>
 
-  <!-- 添加/编辑订阅 Modal -->
+  <!-- 订阅表单模态框 -->
   <div class="modal-overlay" id="subscription-form-modal">
     <div class="modal">
       <div class="modal-header">
@@ -1718,70 +257,27 @@
     </div>
   </div>
 
-  <!-- 隐藏的文件输入框 -->
   <input type="file" id="ics-file-input" accept=".ics" style="display: none;">
 
   <script>
-  // 浏览器通知处理器
+  // 浏览器通知
   (function() {
-    // 请求通知权限
     if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().then(permission => {
-        console.log('通知权限:', permission);
-      });
+      Notification.requestPermission();
     }
-
-    // 监听WebSocket提醒消息
     window.addEventListener('message', function(event) {
       if (event.data && event.data.type === 'reminder') {
         const { itemType, item } = event.data;
-        const isEvent = itemType === 'event';
-        const title = isEvent ? '📅 事件提醒' : '✅ 待办提醒';
-        const body = `${item.title}\n⏰ ${item.timeStr || ''}${item.description ? '\n' + item.description : ''}`;
-
         if (Notification.permission === 'granted') {
-          new Notification(title, {
-            body: body,
-            icon: '/favicon.ico',
-            tag: `reminder-${item.id}`,
-            requireInteraction: false
+          new Notification(itemType === 'event' ? '📅 事件提醒' : '✅ 待办提醒', {
+            body: `${item.title}\n⏰ ${item.timeStr || ''}`,
+            icon: '/favicon.ico'
           });
         }
       }
     });
-
-    // 监听自定义事件（用于内部触发）
-    document.addEventListener('showNotification', function(e) {
-      const { title, body, options = {} } = e.detail;
-      if (Notification.permission === 'granted') {
-        const notification = new Notification(title, {
-          body: body,
-          icon: options.icon || '/favicon.ico',
-          tag: options.tag || Date.now().toString(),
-          requireInteraction: false
-        });
-
-        notification.onclick = function() {
-          window.focus();
-          notification.close();
-          if (options.url) {
-            window.location.href = options.url;
-          }
-        };
-
-        setTimeout(() => notification.close(), 10000);
-      }
-    });
-
-    // 全局通知函数
-    window.showBrowserNotification = function(title, body, options = {}) {
-      const event = new CustomEvent('showNotification', {
-        detail: { title, body, options }
-      });
-      document.dispatchEvent(event);
-    };
   })();
   </script>
-  <script src="/js/calendar.js?v=1771051421"></script>
+  <script src="/js/calendar.js?v=4"></script>
 </body>
 </html>

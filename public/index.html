@@ -148,6 +148,7 @@
             <button class="tool-btn" onclick="ui.redo()" title="重做 (Ctrl+Y)">↪️</button>
             <button class="tool-btn" onclick="ui.setMode('split')" title="分屏">↔️</button>
             <button id="btn-preview" class="tool-btn" onclick="ui.togglePreview()" title="预览">👁️</button>
+            <button class="tool-btn" onclick="window.location.href='/calendar.html'" title="日历">📅</button>
             <button class="tool-btn" onclick="ui.toggleTheme()" title="切换主题">🌓</button>
             <button class="tool-btn" onclick="ui.showShortcuts()" title="快捷键 (F1)">⌨️</button>
         </div>
@@ -189,7 +190,6 @@
                     <input type="file" id="importFile" style="display:none" onchange="ui.importData(event)">
                     <button onclick="document.getElementById('importFile').click()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">导入</button>
                     <button onclick="tools.openBackupConfig()" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">备份</button>
-                    <button onclick="window.location.href='/calendar.html'" class="tool-btn" style="flex:1; padding: 4px 2px; font-size:11px;">日历</button>
                 </div>
             </div>
 
@@ -217,7 +217,11 @@
                     <span id="user-email-display" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px;">
                         邮箱: 未绑定
                     </span>
-                    <a href="javascript:ui.promptBindEmail()" style="color: var(--accent); text-decoration: none; margin-left: 6px; font-size: 11px;">修改</a>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <a href="javascript:ui.promptBindEmail()" style="color: var(--accent); text-decoration: none; font-size: 11px;">修改邮箱</a>
+                        <a href="javascript:ui.showChangePasswordModal()" style="color: var(--accent); text-decoration: none; font-size: 11px;">修改密码</a>
+                        <a href="javascript:ui.show2FASettings()" style="color: var(--accent); text-decoration: none; font-size: 11px;">2FA</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -419,6 +423,48 @@
             }
         });
     </script>
+
+    <!-- 修改密码模态框 -->
+    <div id="change-password-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>修改密码</h3>
+                <button class="modal-close" onclick="ui.closeChangePasswordModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="username-input">
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">旧密码</label>
+                    <input type="password" id="old-password-input" placeholder="输入旧密码" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">新密码</label>
+                    <input type="password" id="new-password-input" placeholder="输入新密码（至少6位）" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:12px;color:var(--gray);display:block;margin-bottom:4px;">确认新密码</label>
+                    <input type="password" id="confirm-password-input" placeholder="再次输入新密码" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;outline:none;">
+                </div>
+                <div id="change-password-error" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;"></div>
+                <div class="modal-actions">
+                    <button class="btn" onclick="ui.closeChangePasswordModal()">取消</button>
+                    <button id="change-password-btn" class="btn btn-green" onclick="ui.changePassword()">确认修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2FA 设置模态框 -->
+    <div id="2fa-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>两步验证设置</h3>
+                <button class="modal-close" onclick="ui.close2FAModal()">×</button>
+            </div>
+            <div class="modal-body" id="2fa-content">
+            </div>
+        </div>
+    </div>
 
     <!-- 备份配置模态框 -->
     <div id="backup-modal" class="modal">

@@ -548,8 +548,29 @@ sudo certbot --nginx -d your-domain.com
 3. **定期备份数据** - 使用内置备份功能或手动备份 `data/` 目录
 4. **查看日志排查问题** - 使用 `docker-compose logs -f`
 5. **目录权限设置** - 确保 `data/` 和 `logs/` 目录权限为 1001:1001
+6. **定期清理备份** - 建议配置备份保留数量，避免占用过多磁盘空间
+7. **CDN缓存管理** - `data/cdn-cache/` 目录会自动缓存CDN资源，可定期清理
 
 ## 🔧 故障排除
+
+### 磁盘空间不足
+
+如果磁盘空间不足，可以清理以下内容：
+
+```bash
+# 1. 清理旧备份文件（保留最近5个）
+cd data/backups
+ls -t z7note-*.zip | tail -n +6 | xargs rm -f
+
+# 2. 清理CDN缓存（会自动重新下载）
+rm -rf data/cdn-cache/*
+
+# 3. 清理旧的同步备份
+rm -f data/backups/z7note-sync-backup-*.db
+
+# 4. 查看磁盘使用情况
+du -sh data/*
+```
 
 ### 权限错误
 
