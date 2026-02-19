@@ -2136,6 +2136,11 @@ const UIManager = {
                 userDisplay.textContent = `用户: ${data.username}`;
             }
 
+            // 保存用户名到localStorage供WebSocket使用
+            if (data.username) {
+                localStorage.setItem('z7note_username', data.username);
+            }
+
             // 更新邮箱显示
             const emailDisplay = document.getElementById('user-email-display');
             if (emailDisplay) {

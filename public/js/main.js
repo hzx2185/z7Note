@@ -31,11 +31,11 @@ import wsManager from './websocket.js';
         // 从服务器加载笔记
         await loadNotesFromServer();
 
+        // 加载用户信息（必须在WebSocket连接之前）
+        await ui.loadUserInfo();
+
         // 连接WebSocket
         connectWebSocket();
-
-        // 加载用户信息
-        ui.loadUserInfo().catch(() => {});
 
     } catch (e) {
         console.error('[App] 初始化失败:', e);
