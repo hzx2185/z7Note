@@ -401,7 +401,7 @@
     async function loadContacts(search = '') {
       try {
         const url = search ? `/api/contacts?search=${encodeURIComponent(search)}` : '/api/contacts';
-        const res = await fetch(url);
+        const res = await fetch(url, { credentials: 'same-origin' });
         contacts = await res.json();
         renderContactsList();
       } catch (e) {
@@ -438,7 +438,7 @@
     // 选择联系人
     async function selectContact(id) {
       try {
-        const res = await fetch(`/api/contacts/${id}`);
+        const res = await fetch(`/api/contacts/${id}`, { credentials: 'same-origin' });
         currentContact = await res.json();
         renderContactDetail();
         renderContactsList();
@@ -670,7 +670,7 @@
         const url = editingId ? `/api/contacts/${editingId}` : '/api/contacts';
         const method = editingId ? 'PUT' : 'POST';
         
-        const res = await fetch(url, {
+        const res = await fetch(url, { credentials: 'same-origin', 
           method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -696,7 +696,7 @@
       if (!confirm(`确定删除联系人 "${currentContact.fn}" 吗？`)) return;
       
       try {
-        const res = await fetch(`/api/contacts/${currentContact.id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/contacts/${currentContact.id}`, { method: 'DELETE', credentials: 'same-origin' });
         if (res.ok) {
           currentContact = null;
           loadContacts();
@@ -740,7 +740,7 @@
       }
       
       try {
-        const res = await fetch('/api/contacts/import', {
+        const res = await fetch('/api/contacts/import', { credentials: 'same-origin', 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vcard: vcardContent })
