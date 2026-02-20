@@ -135,6 +135,27 @@
     - vCard 3.0 格式支持
     - 自动发现配置（/.well-known/carddav）
 
+  ### 📁 WebDAV 文件同步
+
+  - **笔记同步**:
+    - 标准 WebDAV 协议支持（RFC 4918）
+    - 笔记以 Markdown 文件格式同步
+    - 支持双向同步（读取和写入）
+    - 与 iOS "文件" App 原生集成
+    - 支持第三方笔记应用（Taio、1Writer、Obsidian Mobile）
+
+  - **使用方式**:
+    - 服务器地址：`http://your-server:3000/webdav/`
+    - 用户名：您的 z7Note 用户名
+    - 密码：您的 z7Note 密码
+    - 笔记文件格式：`笔记标题.md`
+
+  - **功能特性**:
+    - 自动检测文件变更（ETag 支持）
+    - 支持创建、更新、删除笔记
+    - 支持离线编辑后同步
+    - 笔记配额检查
+
 ### 💾 数据备份
 
 - **自动备份**:
@@ -542,6 +563,15 @@ sudo certbot --nginx -d your-domain.com
 - 服务器地址：`http://your-server:3000/caldav`
 - 用户名：您的 z7Note 用户名
 - 密码：您的 z7Note 密码
+
+### Q: 如何使用 WebDAV 同步笔记？
+**A:** 配置支持 WebDAV 的应用：
+- **iOS "文件" App**：添加服务器 → 输入 `http://your-server:3000/webdav/`
+- **Taio / 1Writer**：添加 WebDAV 服务 → 输入服务器地址和账号
+- 用户名：您的 z7Note 用户名
+- 密码：您的 z7Note 密码
+
+笔记会以 Markdown 文件格式显示，支持读取和编辑。
 
 ### Q: 如何添加日历订阅？
 **A:** 点击日历页面的"订阅"按钮：

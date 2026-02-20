@@ -31,10 +31,10 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 
 // 中间件配置
-// JSON body 解析器（跳过分片上传路由和 CalDAV 路由）
+// JSON body 解析器（跳过分片上传路由和 DAV 路由）
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/upload/chunk') || req.path.startsWith('/caldav') || req.path.startsWith('/carddav')) {
-    // 跳过 JSON 解析，让后面的 raw 中间件或 CalDAV/CardDAV 路由自己处理
+  if (req.path.startsWith('/api/upload/chunk') || req.path.startsWith('/caldav') || req.path.startsWith('/carddav') || req.path.startsWith('/webdav')) {
+    // 跳过 JSON 解析，让后面的 raw 中间件或 DAV 路由自己处理
     next();
   } else {
     express.json({ limit: '50mb' })(req, res, next);
@@ -49,6 +49,15 @@ app.use(securityHeaders);
 // 为分片上传添加 raw body 解析
 app.use('/api/upload/chunk', express.raw({ type: '*/*', limit: '50mb' }));
 
+// 为 WebDAV PUT 请求添加 raw body 解析
+app.use('/webdav', (req, res, next) => {
+  if (req.method === 'PUT') {
+    express.raw({ type: '*/*', limit: '50mb' })(req, res, next);
+  } else {
+    next();
+  }
+});
+
 // 认证中间件 - 保护需要认证的路由
 app.use((req, res, next) => {
   const publicPaths = [
@@ -60,6 +69,7 @@ app.use((req, res, next) => {
     '/favicon.ico', '/css/', '/js/', '/cdn/',
     '/caldav/', '/caldav', '/.well-known/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/carddav/', '/carddav', '/.well-known/carddav',  // CardDAV 路由使用 Basic Auth，不需要 Cookie 认证
+    '/webdav/', '/webdav',  // WebDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/api/lunar',  // 农历API公开访问
     '/calendar.html', '/reminder-settings.html', '/contacts.html'  // 日历、提醒设置和联系人页面
   ];
@@ -91,6 +101,7 @@ const todosRoutes = require('./routes/todos');
 const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
 const carddavRoutes = require('./routes/carddav');
+const webdavRoutes = require('./routes/webdav');
 const contactsRoutes = require('./routes/contacts');
 const timelineRoutes = require('./routes/timeline');
 const lunarRoutes = require('./routes/lunar');
@@ -185,6 +196,10 @@ if (config.caldav.enabled) {
   app.use('/.well-known/carddav', (req, res) => {
     res.redirect(302, '/carddav/');
   });
+
+  // WebDAV 路由（使用 Basic Auth）
+  app.use('/webdav', webdavRoutes);
+  console.log('[WebDAV] WebDAV 服务已启用 (Basic Auth)');
 
 // 设置 SSE 路由
 sseRoutes.setupSSE(app);
