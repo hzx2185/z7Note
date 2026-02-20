@@ -91,6 +91,7 @@ const todosRoutes = require('./routes/todos');
 const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
 const carddavRoutes = require('./routes/carddav');
+const contactsRoutes = require('./routes/contacts');
 const timelineRoutes = require('./routes/timeline');
 const lunarRoutes = require('./routes/lunar');
 const calendarSubscriptionsRoutes = require('./routes/calendarSubscriptions');
@@ -157,6 +158,7 @@ app.use('/api/lunar', lunarRoutes);
 app.use('/api/calendar-subscriptions', calendarSubscriptionsRoutes);
 app.use('/api/reminders', remindersRoutes);
 app.use('/api/2fa', tfaRoutes);
+app.use('/api/contacts', contactsRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {
