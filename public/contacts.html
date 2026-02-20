@@ -43,7 +43,7 @@
       width: 300px;
       border-right: 1px solid var(--border-color, #ddd);
       overflow-y: auto;
-      background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      background: #fff;
     }
     
     .contact-item {
@@ -81,7 +81,7 @@
       flex: 1;
       padding: 24px;
       overflow-y: auto;
-      background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      background: #fff;
     }
     
     .detail-header {
@@ -173,7 +173,7 @@
     .modal-overlay.active { display: flex; }
     
     .modal {
-      background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      background: #fff;
       border-radius: 12px;
       width: 90%;
       max-width: 500px;
@@ -264,6 +264,46 @@
         --border-color: #444;
       }
     }
+
+      /* 移动端响应式 */
+      @media (max-width: 768px) {
+        .contacts-header {
+          flex-wrap: wrap;
+          padding: 12px;
+        }
+        .contacts-nav-right {
+          width: 100%;
+          margin-top: 12px;
+          flex-wrap: wrap;
+        }
+        .search-input {
+          width: 100%;
+          margin-bottom: 8px;
+        }
+        .contacts-nav-right .btn {
+          flex: 1;
+          min-width: 80px;
+        }
+        .contacts-main {
+          flex-direction: column;
+        }
+        .contacts-list {
+          width: 100%;
+          height: 40vh;
+          border-right: none;
+          border-bottom: 1px solid var(--border-color, #ddd);
+        }
+        .contact-detail {
+          height: 60vh;
+        }
+        .modal {
+          width: 95%;
+          max-height: 85vh;
+        }
+        .form-row {
+          flex-direction: column;
+        }
+      }
   </style>
 </head>
 <body>
@@ -402,10 +442,30 @@
       try {
         const url = search ? `/api/contacts?search=${encodeURIComponent(search)}` : '/api/contacts';
         const res = await fetch(url, { credentials: 'same-origin' });
+        
+        if (!res.ok) {
+          if (res.status === 401) {
+            contacts = [];
+            renderContactsList();
+            const detail = document.getElementById('contact-detail');
+            detail.innerHTML = `
+              <div class="empty-state">
+                <div class="empty-icon">🔒</div>
+                <div class="empty-text">请先登录</div>
+                <a href="/login.html" style="margin-top: 12px; color: var(--primary-color, #2563eb);">去登录</a>
+              </div>
+            `;
+            return;
+          }
+          throw new Error('加载失败');
+        }
+        
         contacts = await res.json();
         renderContactsList();
       } catch (e) {
         console.error('加载联系人失败', e);
+        contacts = [];
+        renderContactsList();
       }
     }
     
