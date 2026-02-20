@@ -61,7 +61,7 @@ app.use((req, res, next) => {
     '/caldav/', '/caldav', '/.well-known/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/carddav/', '/carddav', '/.well-known/carddav',  // CardDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/api/lunar',  // 农历API公开访问
-    '/calendar.html', '/reminder-settings.html'  // 日历和提醒设置页面
+    '/calendar.html', '/reminder-settings.html', '/contacts.html'  // 日历、提醒设置和联系人页面
   ];
 
   const isPublic = publicPaths.some(path => req.path.startsWith(path));
