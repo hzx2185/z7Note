@@ -36,18 +36,74 @@ router.options('*', (req, res) => {
 router.propfind('/', basicAuthMiddleware, async (req, res) => {
   try {
     const username = req.user;
+    const depth = req.header('Depth') || '0';
+    
+    // 解析请求的 XML body，获取需要返回的属性
+    let requestedProps = [];
+    if (req.body) {
+      try {
+        const propMatch = req.body.match(/<D:prop[^>]*>([\s\S]*?)<\/D:prop>/i);
+        if (propMatch) {
+          const propContent = propMatch[1];
+          const propNames = propContent.match(/<D:([a-z-]+)>/gi);
+          if (propNames) {
+            requestedProps = propNames.map(p => p.replace(/<\/?D:/gi, '').replace(/>/g, ''));
+          }
+        }
+      } catch (e) {
+        // 忽略解析错误
+      }
+    }
+    
+    let propXml = '';
+    
+    // 根据请求的属性返回相应内容
+    if (requestedProps.includes('current-user-principal') || requestedProps.length === 0) {
+      propXml += `
+          <D:current-user-principal>
+            <D:href>/webdav/${username}/</D:href>
+          </D:current-user-principal>`;
+    }
+    
+    if (requestedProps.includes('resourcetype') || requestedProps.length === 0) {
+      propXml += `
+          <D:resourcetype><D:collection/></D:resourcetype>`;
+    }
+    
+    if (requestedProps.includes('displayname') || requestedProps.length === 0) {
+      propXml += `
+          <D:displayname>z7Note</D:displayname>`;
+    }
+
     const xml = `<?xml version="1.0" encoding="utf-8" ?>
 <D:multistatus xmlns:D="DAV:">
   <D:response>
     <D:href>/webdav/</D:href>
     <D:propstat>
-      <D:prop>
-        <D:resourcetype><D:collection/></D:resourcetype>
-        <D:displayname>z7Note</D:displayname>
+      <D:prop>${propXml}
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
   </D:response>
+</D:multistatus>`;
+    
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.status(207).send(xml);
+  } catch (error) {
+    log('ERROR', 'WebDAV 根路径 PROPFIND 失败', { error: error.message });
+    res.status(500).send();
+  }
+});
+
+// PROPFIND /:username - 用户目录（不带斜杠）
+router.propfind('/:username', basicAuthMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    if (username !== req.user) return res.status(403).send();
+    
+    // 重定向到带斜杠的路径
+    const xml = `<?xml version="1.0" encoding="utf-8" ?>
+<D:multistatus xmlns:D="DAV:">
   <D:response>
     <D:href>/webdav/${username}/</D:href>
     <D:propstat>
@@ -59,10 +115,11 @@ router.propfind('/', basicAuthMiddleware, async (req, res) => {
     </D:propstat>
   </D:response>
 </D:multistatus>`;
+    
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.status(207).send(xml);
   } catch (error) {
-    log('ERROR', 'WebDAV 根路径 PROPFIND 失败', { error: error.message });
+    log('ERROR', 'WebDAV PROPFIND 用户目录失败', { error: error.message });
     res.status(500).send();
   }
 });
@@ -91,6 +148,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     if (depth === '1') {
       notes.forEach(note => {
         const filename = sanitizeFilename(note.title || note.id) + '.md';
+        const contentLength = Buffer.byteLength(note.content || '', 'utf8');
         itemsXml += `
     <D:response>
       <D:href>/webdav/${username}/${filename}</D:href>
@@ -100,8 +158,9 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
           <D:getetag>"${note.updatedAt}"</D:getetag>
           <D:getcontenttype>text/markdown; charset=utf-8</D:getcontenttype>
           <D:resourcetype/>
-          <D:getcontentlength>${Buffer.byteLength(note.content || '', 'utf8')}</D:getcontentlength>
+          <D:getcontentlength>${contentLength}</D:getcontentlength>
           <D:getlastmodified>${new Date(note.updatedAt).toUTCString()}</D:getlastmodified>
+          <D:creationdate>${new Date(note.updatedAt).toISOString()}</D:creationdate>
         </D:prop>
         <D:status>HTTP/1.1 200 OK</D:status>
       </D:propstat>
@@ -118,6 +177,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
         <D:resourcetype><D:collection/></D:resourcetype>
         <D:displayname>${username} 的笔记</D:displayname>
         <D:getctag>"${ctag}"</D:getctag>
+        <D:getlastmodified>${new Date(ctag).toUTCString()}</D:getlastmodified>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -147,6 +207,7 @@ router.propfind('/:username/:filename', basicAuthMiddleware, async (req, res) =>
       return;
     }
 
+    const contentLength = Buffer.byteLength(note.content || '', 'utf8');
     const xml = `<?xml version="1.0" encoding="utf-8" ?>
 <D:multistatus xmlns:D="DAV:">
   <D:response>
@@ -157,8 +218,9 @@ router.propfind('/:username/:filename', basicAuthMiddleware, async (req, res) =>
         <D:getetag>"${note.updatedAt}"</D:getetag>
         <D:getcontenttype>text/markdown; charset=utf-8</D:getcontenttype>
         <D:resourcetype/>
-        <D:getcontentlength>${Buffer.byteLength(note.content || '', 'utf8')}</D:getcontentlength>
+        <D:getcontentlength>${contentLength}</D:getcontentlength>
         <D:getlastmodified>${new Date(note.updatedAt).toUTCString()}</D:getlastmodified>
+        <D:creationdate>${new Date(note.updatedAt).toISOString()}</D:creationdate>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -232,10 +294,12 @@ router.put('/:username/:filename', basicAuthMiddleware, async (req, res) => {
 
     // 获取请求体内容
     let content = '';
-    if (req.is('text/*') || req.is('application/octet-stream')) {
+    if (Buffer.isBuffer(req.body)) {
       content = req.body.toString('utf8');
-    } else {
+    } else if (typeof req.body === 'string') {
       content = req.body;
+    } else {
+      content = JSON.stringify(req.body);
     }
 
     // 从文件名提取标题（去掉 .md 后缀）
@@ -317,9 +381,63 @@ router.mkcol('/:username/', basicAuthMiddleware, (req, res) => {
   res.status(201).end();
 });
 
+// MKCOL /:username - 创建目录（虚拟成功）
+router.mkcol('/:username', basicAuthMiddleware, (req, res) => {
+  if (req.params.username !== req.user) return res.status(403).send();
+  res.status(201).end();
+});
+
 // MKCOL / - 创建根目录（虚拟成功）
 router.mkcol('/', basicAuthMiddleware, (req, res) => {
   res.status(201).end();
+});
+
+// GET /:username/ - 获取目录信息
+router.get('/:username/', basicAuthMiddleware, async (req, res) => {
+  try {
+    const { username } = req.params;
+    if (username !== req.user) return res.status(403).send();
+    
+    // 返回目录的 HTML 列表（用于浏览器访问）
+    const notes = await getConnection().all(
+      'SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 0',
+      [username]
+    );
+    
+    let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${username} 的笔记</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 20px; }
+    h1 { color: #333; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 8px 0; border-bottom: 1px solid #eee; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>${username} 的笔记</h1>
+  <ul>`;
+    
+    notes.forEach(note => {
+      const filename = sanitizeFilename(note.title || note.id) + '.md';
+      html += `\n    <li><a href="/webdav/${username}/${filename}">${escapeXml(note.title || '未命名')}</a></li>`;
+    });
+    
+    html += `
+  </ul>
+</body>
+</html>`;
+    
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (error) {
+    log('ERROR', 'WebDAV GET 目录失败', { error: error.message });
+    res.status(500).send();
+  }
 });
 
 // 辅助函数：根据文件名查找笔记

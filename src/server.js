@@ -49,10 +49,14 @@ app.use(securityHeaders);
 // 为分片上传添加 raw body 解析
 app.use('/api/upload/chunk', express.raw({ type: '*/*', limit: '50mb' }));
 
-// 为 WebDAV PUT 请求添加 raw body 解析
+// 为 WebDAV 请求添加 body 解析
 app.use('/webdav', (req, res, next) => {
   if (req.method === 'PUT') {
+    // PUT 请求使用 raw body
     express.raw({ type: '*/*', limit: '50mb' })(req, res, next);
+  } else if (req.method === 'PROPFIND') {
+    // PROPFIND 请求解析 XML body
+    express.text({ type: 'application/xml', limit: '1mb' })(req, res, next);
   } else {
     next();
   }
