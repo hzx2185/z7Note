@@ -114,6 +114,14 @@
     - 支持 VEVENT（事件）和 VTODO（待办事项）同步
     - 自动发现配置（/.well-known/caldav）
 
+    - **CardDAV 同步**:
+      - 标准 CardDAV 协议支持（RFC 6352）
+      - 与系统通讯录应用同步
+      - 多设备同时使用
+      - 支持 iOS、Android、macOS、Windows、Linux
+      - vCard 3.0 格式支持
+      - 自动发现配置（/.well-known/carddav）
+
 ### 💾 数据备份
 
 - **自动备份**:

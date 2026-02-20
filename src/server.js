@@ -33,8 +33,8 @@ const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 // 中间件配置
 // JSON body 解析器（跳过分片上传路由和 CalDAV 路由）
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/upload/chunk') || req.path.startsWith('/caldav')) {
-    // 跳过 JSON 解析，让后面的 raw 中间件或 CalDAV 路由自己处理
+  if (req.path.startsWith('/api/upload/chunk') || req.path.startsWith('/caldav') || req.path.startsWith('/carddav')) {
+    // 跳过 JSON 解析，让后面的 raw 中间件或 CalDAV/CardDAV 路由自己处理
     next();
   } else {
     express.json({ limit: '50mb' })(req, res, next);
@@ -59,6 +59,7 @@ app.use((req, res, next) => {
     '/s/', '/health', '/test-backup.html',
     '/favicon.ico', '/css/', '/js/', '/cdn/',
     '/caldav/', '/caldav', '/.well-known/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
+    '/carddav/', '/carddav', '/.well-known/carddav',  // CardDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/api/lunar',  // 农历API公开访问
     '/calendar.html', '/reminder-settings.html'  // 日历和提醒设置页面
   ];
@@ -89,6 +90,7 @@ const userBackupRoutes = require('./routes/userBackup');
 const todosRoutes = require('./routes/todos');
 const eventsRoutes = require('./routes/events');
 const caldavRoutes = require('./routes/caldav');
+const carddavRoutes = require('./routes/carddav');
 const timelineRoutes = require('./routes/timeline');
 const lunarRoutes = require('./routes/lunar');
 const calendarSubscriptionsRoutes = require('./routes/calendarSubscriptions');
@@ -166,6 +168,15 @@ if (config.caldav.enabled) {
     res.redirect(302, '/caldav/');
   });
 }
+
+  // CardDAV 路由（使用 Basic Auth）
+  app.use('/carddav', carddavRoutes);
+  console.log('[CardDAV] CardDAV 服务已启用 (Basic Auth)');
+
+  // .well-known/carddav 支持（用于自动发现）
+  app.use('/.well-known/carddav', (req, res) => {
+    res.redirect(302, '/carddav/');
+  });
 
 // 设置 SSE 路由
 sseRoutes.setupSSE(app);

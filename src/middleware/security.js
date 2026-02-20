@@ -1,6 +1,7 @@
 function securityHeaders(req, res, next) {
-  // CalDAV 路由跳过大部分安全头，避免干扰客户端
-  if (req.path.startsWith('/caldav') || req.path.startsWith('/.well-known/caldav')) {
+  // CalDAV/CardDAV 路由跳过大部分安全头，避免干扰客户端
+  if (req.path.startsWith('/caldav') || req.path.startsWith('/.well-known/caldav') ||
+      req.path.startsWith('/carddav') || req.path.startsWith('/.well-known/carddav')) {
     // 只保留基本的 HSTS
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     return next();
