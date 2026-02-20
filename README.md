@@ -104,13 +104,15 @@
 
 ### 🤝 协作功能
 
-- **CalDAV 同步**:
-  - 标准 CalDAV 协议支持
-  - 与系统日历应用同步
-  - 多设备同时使用
-  - 支持 iOS、Android、macOS、Windows、Linux
+  - **CalDAV 同步**:
+    - 标准 CalDAV 协议支持（RFC 4791）
+    - 与系统日历应用同步
+    - 多设备同时使用
+    - 支持 iOS、Android、macOS、Windows、Linux
     - 完善的时区处理（支持带TZID参数的时间）
     - UID一致性保证（避免重复事件）
+    - 支持 VEVENT（事件）和 VTODO（待办事项）同步
+    - 自动发现配置（/.well-known/caldav）
 
 ### 💾 数据备份
 

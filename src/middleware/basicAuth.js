@@ -48,7 +48,7 @@ async function verifyBasicAuth(authHeader) {
     const isValid = await bcrypt.compare(password, user.password);
 
     if (!isValid) {
-      log('DEBUG', 'Basic Auth 密码错误', { username });
+      log('DEBUG', 'Basic Auth 密码错误', { username, passwordLength: password.length });
       return null;
     }
 

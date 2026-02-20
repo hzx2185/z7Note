@@ -58,7 +58,7 @@ app.use((req, res, next) => {
     '/api/share/public-list', '/api/share/public/', '/api/share/info', '/api/share/attachment', '/api/share/blog-info',
     '/s/', '/health', '/test-backup.html',
     '/favicon.ico', '/css/', '/js/', '/cdn/',
-    '/caldav/', '/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
+    '/caldav/', '/caldav', '/.well-known/caldav',  // CalDAV 路由使用 Basic Auth，不需要 Cookie 认证
     '/api/lunar',  // 农历API公开访问
     '/calendar.html', '/reminder-settings.html'  // 日历和提醒设置页面
   ];

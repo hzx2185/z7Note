@@ -31,8 +31,9 @@ router.use((req, res, next) => {
 // OPTIONS - 宣告服务器支持的方法
 router.options('*', (req, res) => {
   res.setHeader('Allow', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH');
-  res.setHeader('DAV', '1, 2, 3, calendar-access, calendar-schedule');
+  res.setHeader('DAV', '1, 2, 3, calendar-access, calendar-schedule, sync');
   res.setHeader('MS-Author-Via', 'DAV');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.status(200).end();
 });
 
@@ -97,7 +98,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     if (username !== req.user) return res.status(403).send();
 
     const depth = req.header('Depth') || '0';
-    const now = Date.now();
+    let ctag = 0;
     let itemsXml = '';
 
     if (depth === '1') {
@@ -106,6 +107,10 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
         getConnection().all('SELECT id, title, updatedAt FROM todos WHERE username = ?', [username])
       ]);
       const items = [...events, ...todos];
+        // 计算最新的 updatedAt 作为 ctag
+        if (items.length > 0) {
+          ctag = Math.max(...items.map(i => i.updatedAt || 0));
+        }
       const log = require('../utils/logger');
       log('INFO', 'PROPFIND depth=1', {
         username,
@@ -123,7 +128,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
         <D:displayname>${item.title}</D:displayname>
         <D:getetag>"${item.updatedAt}"</D:getetag>
         <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
-        <D:resourcetype><C:calendar-resource/></D:resourcetype>
+        <D:resourcetype/>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -143,7 +148,8 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
           <C:comp name="VEVENT"/>
           <C:comp name="VTODO"/>
         </C:supported-calendar-component-set>
-        <D:getctag>"${now}"</D:getctag>
+        <D:getctag>"${ctag}"</D:getctag>
+        <C:calendar-timezone></C:calendar-timezone>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -495,6 +501,10 @@ router.delete('/:username/', basicAuthMiddleware, async (req, res) => {
 async function generateMultiStatusResponseWithData(username, events, todos) {
   let responses = '';
   const items = [...events, ...todos];
+        // 计算最新的 updatedAt 作为 ctag
+        if (items.length > 0) {
+          ctag = Math.max(...items.map(i => i.updatedAt || 0));
+        }
 
   for (const item of items) {
     const isEvent = !!item.startTime;
