@@ -145,6 +145,12 @@ app.get('/reminder-settings.html', (req, res) => {
     res.setHeader('Expires', '0');
     res.sendFile(path.join(PUBLIC_DIR, 'timeline.html'));
 });
+app.get('/contacts.html', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.sendFile(path.join(PUBLIC_DIR, 'contacts.html'));
+});
 
 app.use(authRoutes);
 app.use(notesRoutes);

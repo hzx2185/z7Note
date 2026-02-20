@@ -114,13 +114,26 @@
     - 支持 VEVENT（事件）和 VTODO（待办事项）同步
     - 自动发现配置（/.well-known/caldav）
 
-    - **CardDAV 同步**:
-      - 标准 CardDAV 协议支持（RFC 6352）
-      - 与系统通讯录应用同步
-      - 多设备同时使用
-      - 支持 iOS、Android、macOS、Windows、Linux
-      - vCard 3.0 格式支持
-      - 自动发现配置（/.well-known/carddav）
+  ### 👤 联系人管理
+
+  - **联系人页面**:
+    - 创建、编辑、删除联系人
+    - 支持姓名、电话、邮箱、公司、职位等信息
+    - 联系人搜索功能
+    - 联系人详情查看
+
+  - **导入导出**:
+    - 导入 vCard 格式联系人
+    - 导出单个或全部联系人为 vCard
+    - 支持 .vcf 文件上传导入
+
+  - **CardDAV 同步**:
+    - 标准 CardDAV 协议支持（RFC 6352）
+    - 与系统通讯录应用同步
+    - 多设备同时使用
+    - 支持 iOS、Android、macOS、Windows、Linux
+    - vCard 3.0 格式支持
+    - 自动发现配置（/.well-known/carddav）
 
 ### 💾 数据备份
 

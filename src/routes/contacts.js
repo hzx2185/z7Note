@@ -16,7 +16,7 @@ function generateId() {
 }
 
 // 获取联系人列表
-router.get('/api/contacts', async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { search } = req.query;
     
@@ -40,7 +40,7 @@ router.get('/api/contacts', async (req, res) => {
 });
 
 // 获取单个联系人
-router.get('/api/contacts/:id', async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const contact = await getConnection().get(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
@@ -55,7 +55,7 @@ router.get('/api/contacts/:id', async (req, res) => {
 });
 
 // 创建联系人
-router.post('/api/contacts', async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname } = req.body;
     
@@ -97,7 +97,7 @@ router.post('/api/contacts', async (req, res) => {
 });
 
 // 更新联系人
-router.put('/api/contacts/:id', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname } = req.body;
     
@@ -146,7 +146,7 @@ router.put('/api/contacts/:id', async (req, res) => {
 });
 
 // 删除联系人
-router.delete('/api/contacts/:id', async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const result = await getConnection().run(
       'DELETE FROM contacts WHERE id = ? AND username = ?',
@@ -166,7 +166,7 @@ router.delete('/api/contacts/:id', async (req, res) => {
 });
 
 // 导出 vCard
-router.get('/api/contacts/export/:id', async (req, res) => {
+router.get('/export/:id', async (req, res) => {
   try {
     const contact = await getConnection().get(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
@@ -187,7 +187,7 @@ router.get('/api/contacts/export/:id', async (req, res) => {
 });
 
 // 导出所有联系人
-router.get('/api/contacts/export', async (req, res) => {
+router.get('/export', async (req, res) => {
   try {
     const contacts = await getConnection().all(
       'SELECT * FROM contacts WHERE username = ?',
@@ -207,7 +207,7 @@ router.get('/api/contacts/export', async (req, res) => {
 });
 
 // 导入 vCard
-router.post('/api/contacts/import', async (req, res) => {
+router.post('/import', async (req, res) => {
   try {
     const { vcard: vcardContent } = req.body;
     

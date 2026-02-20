@@ -8,59 +8,59 @@
   <link rel="stylesheet" href="/css/app.css">
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    
+    body { margin: 0; overflow: auto; }
+
     .contacts-app { display: flex; flex-direction: column; height: 100vh; }
-    
+
     /* 顶部导航 */
     .contacts-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 20px;
+      padding: 8px 16px;
       background: var(--bg-secondary, #f5f5f5);
       border-bottom: 1px solid var(--border-color, #ddd);
     }
-    
-    .contacts-nav-left { display: flex; align-items: center; gap: 12px; }
-    .contacts-nav-right { display: flex; align-items: center; gap: 8px; }
-    
-    .contacts-title { font-size: 18px; font-weight: 600; }
-    
+
+    .contacts-nav-left, .contacts-nav-right { display: flex; align-items: center; gap: 8px; }
+    .contacts-title { font-size: 16px; font-weight: 600; }
+
     .search-input {
-      padding: 8px 12px;
+      padding: 6px 10px;
       border: 1px solid var(--border-color, #ddd);
-      border-radius: 6px;
-      width: 200px;
-      font-size: 14px;
+      border-radius: 4px;
+      width: 180px;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
     }
-    
+
     /* 主体区域 */
     .contacts-main { display: flex; flex: 1; overflow: hidden; }
-    
+
     /* 联系人列表 */
     .contacts-list {
-      width: 300px;
+      width: 260px;
       border-right: 1px solid var(--border-color, #ddd);
       overflow-y: auto;
       background: #fff;
     }
-    
+
     .contact-item {
       display: flex;
       align-items: center;
-      padding: 12px 16px;
+      padding: 8px 12px;
       cursor: pointer;
       border-bottom: 1px solid var(--border-color, #eee);
       transition: background 0.2s;
     }
-    
+
     .contact-item:hover { background: var(--bg-hover, #f0f0f0); }
     .contact-item.active { background: var(--bg-active, #e3f2fd); }
-    
+
     .contact-avatar {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       background: var(--primary-color, #2563eb);
       color: white;
@@ -68,64 +68,59 @@
       align-items: center;
       justify-content: center;
       font-weight: 600;
-      margin-right: 12px;
+      font-size: 14px;
+      margin-right: 10px;
       flex-shrink: 0;
     }
-    
+
     .contact-info { flex: 1; min-width: 0; }
-    .contact-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .contact-org { font-size: 12px; color: var(--text-secondary, #666); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    
+    .contact-name { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contact-org { font-size: 11px; color: var(--text-secondary, #666); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
     /* 联系人详情 */
     .contact-detail {
       flex: 1;
-      padding: 24px;
+      padding: 16px;
       overflow-y: auto;
       background: #fff;
     }
-    
+
     .detail-header {
       display: flex;
       align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 24px;
+      margin-bottom: 16px;
+      padding-bottom: 16px;
       border-bottom: 1px solid var(--border-color, #eee);
     }
-    
+
     .detail-avatar {
-      width: 80px;
-      height: 80px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       background: var(--primary-color, #2563eb);
       color: white;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px;
+      font-size: 24px;
       font-weight: 600;
-      margin-right: 20px;
+      margin-right: 16px;
     }
-    
+
     .detail-title { flex: 1; }
-    .detail-name { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
-    .detail-org { color: var(--text-secondary, #666); }
-    
-    .detail-actions { display: flex; gap: 8px; }
-    
-    .detail-section { margin-bottom: 24px; }
-    .detail-section-title { font-size: 14px; font-weight: 600; color: var(--text-secondary, #666); margin-bottom: 12px; text-transform: uppercase; }
-    
-    .detail-row {
-      display: flex;
-      align-items: center;
-      padding: 8px 0;
-    }
-    
-    .detail-label { width: 80px; color: var(--text-secondary, #666); font-size: 14px; }
-    .detail-value { flex: 1; }
+    .detail-name { font-size: 20px; font-weight: 600; margin-bottom: 2px; }
+    .detail-org { font-size: 13px; color: var(--text-secondary, #666); }
+    .detail-actions { display: flex; gap: 6px; }
+
+    .detail-section { margin-bottom: 16px; }
+    .detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary, #666); margin-bottom: 8px; text-transform: uppercase; }
+
+    .detail-row { display: flex; align-items: center; padding: 4px 0; }
+    .detail-label { width: 60px; color: var(--text-secondary, #666); font-size: 13px; }
+    .detail-value { flex: 1; font-size: 13px; }
     .detail-value a { color: var(--primary-color, #2563eb); text-decoration: none; }
     .detail-value a:hover { text-decoration: underline; }
-    
+
     /* 空状态 */
     .empty-state {
       display: flex;
@@ -135,123 +130,128 @@
       height: 100%;
       color: var(--text-secondary, #666);
     }
-    
-    .empty-icon { font-size: 48px; margin-bottom: 16px; }
-    .empty-text { font-size: 16px; }
-    
-    /* 按钮样式 */
-    .btn {
-      padding: 8px 16px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    
-    .btn-primary { background: var(--primary-color, #2563eb); color: white; }
-    .btn-primary:hover { opacity: 0.9; }
-    .btn-secondary { background: var(--bg-secondary, #e5e7eb); color: var(--text-primary, #333); }
-    .btn-secondary:hover { background: var(--bg-hover, #d1d5db); }
-    .btn-danger { background: #ef4444; color: white; }
-    .btn-danger:hover { opacity: 0.9; }
-    
-    /* 模态框 */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.5);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    
-    .modal-overlay.active { display: flex; }
-    
-    .modal {
-      background: #fff;
-      border-radius: 12px;
-      width: 90%;
-      max-width: 500px;
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-    
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border-color, #eee);
-    }
-    
-    .modal-title { font-size: 18px; font-weight: 600; }
-    .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary, #666); }
-    
-    .modal-body { padding: 20px; }
-    
-    .form-group { margin-bottom: 16px; }
-    .form-label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; }
-    .form-input, .form-select, .form-textarea {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--border-color, #ddd);
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    
-    .form-row { display: flex; gap: 12px; }
-    .form-row .form-group { flex: 1; }
-    
-    .form-textarea { min-height: 80px; resize: vertical; }
-    
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      padding: 16px 20px;
-      border-top: 1px solid var(--border-color, #eee);
-    }
-    
+
+    .empty-icon { font-size: 36px; margin-bottom: 12px; }
+    .empty-text { font-size: 14px; }
+
     /* 电话/邮箱列表 */
-    .multi-input-list { margin-bottom: 8px; }
-    .multi-input-item {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    .multi-input-item select { width: 100px; }
+    .multi-input-list { margin-bottom: 6px; }
+    .multi-input-item { display: flex; gap: 6px; margin-bottom: 6px; }
+    .multi-input-item select { width: 80px; }
     .multi-input-item input { flex: 1; }
-    .multi-input-item button { padding: 8px 12px; }
-    
+    .multi-input-item button { padding: 6px 10px; }
+
     .add-item-btn {
       background: none;
       border: 1px dashed var(--border-color, #ddd);
-      padding: 8px 12px;
-      border-radius: 6px;
+      padding: 6px 10px;
+      border-radius: 4px;
       cursor: pointer;
       color: var(--text-secondary, #666);
       width: 100%;
+      font-size: 13px;
     }
     .add-item-btn:hover { border-color: var(--primary-color, #2563eb); color: var(--primary-color, #2563eb); }
-    
+
     /* 返回按钮 */
     .back-btn {
       background: none;
       border: none;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-secondary, #666);
       display: flex;
       align-items: center;
       gap: 4px;
     }
     .back-btn:hover { color: var(--primary-color, #2563eb); }
-    
+
+    /* 模态框样式 - 覆盖全局样式 */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 5vh;
+      z-index: 10000;
+      overflow-y: auto;
+    }
+    .modal-overlay.show { display: flex !important; }
+
+    /* 覆盖 base.css 中的 .modal 样式 */
+    .modal-overlay > .modal {
+      display: block !important;
+      position: relative !important;
+      inset: auto !important;
+      z-index: auto !important;
+      background: var(--bg, #fff) !important;
+      padding: 12px;
+      border-radius: 6px;
+      width: 380px;
+      max-width: 94vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.3);
+      margin-bottom: 5vh;
+    }
+
+    .modal-overlay .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .modal-overlay .modal-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text, #333);
+      margin: 0;
+    }
+
+    .modal-overlay .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary, #666);
+      cursor: pointer;
+      font-size: 18px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .modal-overlay .modal-close:hover { background: var(--bg-secondary, #f0f0f0); }
+
+    .modal-overlay .modal-body { font-size: 13px; padding: 0; }
+
+    .modal-overlay .modal-footer {
+      display: flex !important;
+      justify-content: flex-end;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-color, #ddd);
+    }
+
+    .form-group { margin-bottom: 8px; }
+    .form-label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--text-secondary, #666); }
+    .form-input, .form-textarea {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--border-color, #ddd);
+      border-radius: 4px;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .form-textarea { min-height: 60px; resize: vertical; }
+    .form-row { display: flex; gap: 8px; }
+    .form-row .form-group { flex: 1; }
+
     /* 暗色主题 */
     @media (prefers-color-scheme: dark) {
       :root {
@@ -263,47 +263,25 @@
         --text-secondary: #999;
         --border-color: #444;
       }
+      .contacts-list, .contact-detail, .contacts-header { background: var(--bg); }
     }
 
-      /* 移动端响应式 */
-      @media (max-width: 768px) {
-        .contacts-header {
-          flex-wrap: wrap;
-          padding: 12px;
-        }
-        .contacts-nav-right {
-          width: 100%;
-          margin-top: 12px;
-          flex-wrap: wrap;
-        }
-        .search-input {
-          width: 100%;
-          margin-bottom: 8px;
-        }
-        .contacts-nav-right .btn {
-          flex: 1;
-          min-width: 80px;
-        }
-        .contacts-main {
-          flex-direction: column;
-        }
-        .contacts-list {
-          width: 100%;
-          height: 40vh;
-          border-right: none;
-          border-bottom: 1px solid var(--border-color, #ddd);
-        }
-        .contact-detail {
-          height: 60vh;
-        }
-        .modal {
-          width: 95%;
-          max-height: 85vh;
-        }
-        .form-row {
-          flex-direction: column;
-        }
-      }
+    /* 移动端响应式 */
+    @media (max-width: 768px) {
+      .contacts-header { flex-wrap: wrap; padding: 8px; }
+      .contacts-nav-left { width: 100%; justify-content: space-between; margin-bottom: 8px; }
+      .contacts-nav-right { width: 100%; flex-wrap: wrap; gap: 6px; }
+      .search-input { width: 100%; order: -1; margin-bottom: 6px; }
+      .contacts-nav-right .btn { flex: 1; min-width: 50px; font-size: 12px; padding: 6px 8px; }
+      .contacts-main { flex-direction: column; }
+      .contacts-list { width: 100%; height: 40vh; border-right: none; border-bottom: 1px solid var(--border-color, #ddd); }
+      .contact-detail { height: 60vh; padding: 12px; }
+      .detail-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .detail-actions { width: 100%; justify-content: space-between; }
+      .detail-actions .btn { flex: 1; }
+      .multi-input-item { flex-direction: column; }
+      .multi-input-item select { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -318,25 +296,22 @@
         <input type="text" class="search-input" id="search-input" placeholder="搜索联系人...">
         <button class="btn btn-secondary" id="import-btn">📥 导入</button>
         <button class="btn btn-secondary" id="export-btn">📤 导出</button>
-        <button class="btn btn-primary" id="add-btn">➕ 添加联系人</button>
+        <button class="btn btn-primary" id="add-btn">➕ 添加</button>
       </div>
     </div>
-    
+
     <!-- 主体区域 -->
     <div class="contacts-main">
-      <!-- 联系人列表 -->
       <div class="contacts-list" id="contacts-list"></div>
-      
-      <!-- 联系人详情 -->
       <div class="contact-detail" id="contact-detail">
         <div class="empty-state">
           <div class="empty-icon">👤</div>
-          <div class="empty-text">选择一个联系人查看详情</div>
+          <div class="empty-text">选择联系人查看详情</div>
         </div>
       </div>
     </div>
   </div>
-  
+
   <!-- 添加/编辑模态框 -->
   <div class="modal-overlay" id="contact-modal">
     <div class="modal">
@@ -356,24 +331,24 @@
               <input type="text" class="form-input" name="n_given" placeholder="名" required>
             </div>
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">全名 *</label>
             <input type="text" class="form-input" name="fn" placeholder="全名" required>
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">电话</label>
             <div class="multi-input-list" id="tel-list"></div>
             <button type="button" class="add-item-btn" onclick="addTelItem()">+ 添加电话</button>
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">邮箱</label>
             <div class="multi-input-list" id="email-list"></div>
             <button type="button" class="add-item-btn" onclick="addEmailItem()">+ 添加邮箱</button>
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">公司</label>
@@ -384,17 +359,17 @@
               <input type="text" class="form-input" name="title" placeholder="职位">
             </div>
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">网址</label>
             <input type="url" class="form-input" name="url" placeholder="https://">
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">生日</label>
             <input type="date" class="form-input" name="bday">
           </div>
-          
+
           <div class="form-group">
             <label class="form-label">备注</label>
             <textarea class="form-textarea" name="note" placeholder="备注信息"></textarea>
@@ -407,7 +382,7 @@
       </form>
     </div>
   </div>
-  
+
   <!-- 导入模态框 -->
   <div class="modal-overlay" id="import-modal">
     <div class="modal">
@@ -418,12 +393,12 @@
       <div class="modal-body">
         <div class="form-group">
           <label class="form-label">vCard 内容</label>
-          <textarea class="form-textarea" id="vcard-content" placeholder="粘贴 vCard 内容..." style="min-height: 200px;"></textarea>
+          <textarea class="form-textarea" id="vcard-content" placeholder="粘贴 vCard 内容..." style="min-height: 120px;"></textarea>
         </div>
-        <p style="font-size: 12px; color: var(--text-secondary, #666);">
-          支持粘贴 vCard 格式的联系人信息，或上传 .vcf 文件
+        <p style="font-size: 11px; color: var(--text-secondary, #666); margin: 6px 0;">
+          支持粘贴 vCard 格式或上传 .vcf 文件
         </p>
-        <input type="file" id="vcf-file" accept=".vcf" style="margin-top: 12px;">
+        <input type="file" id="vcf-file" accept=".vcf">
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="import-cancel">取消</button>
@@ -432,34 +407,51 @@
     </div>
   </div>
 
+  <!-- 确认删除模态框 -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal" style="width: 320px;">
+      <div class="modal-header">
+        <h3 class="modal-title">确认删除</h3>
+        <button class="modal-close" id="confirm-modal-close">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message" style="margin: 0; line-height: 1.5;"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="confirm-cancel">取消</button>
+        <button type="button" class="btn btn-danger" id="confirm-ok">删除</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let contacts = [];
     let currentContact = null;
     let editingId = null;
-    
+    let confirmCallback = null;
+
     // 加载联系人列表
     async function loadContacts(search = '') {
       try {
         const url = search ? `/api/contacts?search=${encodeURIComponent(search)}` : '/api/contacts';
         const res = await fetch(url, { credentials: 'same-origin' });
-        
+
         if (!res.ok) {
           if (res.status === 401) {
             contacts = [];
             renderContactsList();
-            const detail = document.getElementById('contact-detail');
-            detail.innerHTML = `
+            document.getElementById('contact-detail').innerHTML = `
               <div class="empty-state">
                 <div class="empty-icon">🔒</div>
                 <div class="empty-text">请先登录</div>
-                <a href="/login.html" style="margin-top: 12px; color: var(--primary-color, #2563eb);">去登录</a>
+                <a href="/login.html" style="margin-top: 8px; color: var(--accent, #2563eb);">去登录</a>
               </div>
             `;
             return;
           }
           throw new Error('加载失败');
         }
-        
+
         contacts = await res.json();
         renderContactsList();
       } catch (e) {
@@ -468,24 +460,18 @@
         renderContactsList();
       }
     }
-    
+
     // 渲染联系人列表
     function renderContactsList() {
       const list = document.getElementById('contacts-list');
-      
-      if (contacts.length === 0) {
-        list.innerHTML = `
-          <div class="empty-state" style="height: 100%;">
-            <div class="empty-icon">👤</div>
-            <div class="empty-text">暂无联系人</div>
-          </div>
-        `;
+
+      if (!contacts.length) {
+        list.innerHTML = '<div class="empty-state" style="height: 100%;"><div class="empty-icon">👤</div><div class="empty-text">暂无联系人</div></div>';
         return;
       }
-      
+
       list.innerHTML = contacts.map(c => `
-        <div class="contact-item ${currentContact && currentContact.id === c.id ? 'active' : ''}" 
-             onclick="selectContact('${c.id}')">
+        <div class="contact-item ${currentContact?.id === c.id ? 'active' : ''}" onclick="selectContact('${c.id}')">
           <div class="contact-avatar">${getInitial(c.fn || c.n_given || '?')}</div>
           <div class="contact-info">
             <div class="contact-name">${escapeHtml(c.fn || '未命名')}</div>
@@ -494,7 +480,7 @@
         </div>
       `).join('');
     }
-    
+
     // 选择联系人
     async function selectContact(id) {
       try {
@@ -506,27 +492,21 @@
         console.error('加载联系人详情失败', e);
       }
     }
-    
+
     // 渲染联系人详情
     function renderContactDetail() {
       const detail = document.getElementById('contact-detail');
       const c = currentContact;
-      
+
       if (!c) {
-        detail.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-icon">👤</div>
-            <div class="empty-text">选择一个联系人查看详情</div>
-          </div>
-        `;
+        detail.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">选择联系人查看详情</div></div>';
         return;
       }
-      
-      // 解析电话和邮箱
+
       let tels = [], emails = [];
       try { tels = JSON.parse(c.tel || '[]'); } catch(e) {}
       try { emails = JSON.parse(c.email || '[]'); } catch(e) {}
-      
+
       detail.innerHTML = `
         <div class="detail-header">
           <div class="detail-avatar">${getInitial(c.fn || c.n_given || '?')}</div>
@@ -540,92 +520,37 @@
             <button class="btn btn-danger" onclick="deleteContact()">删除</button>
           </div>
         </div>
-        
-        ${tels.length > 0 ? `
-          <div class="detail-section">
-            <div class="detail-section-title">电话</div>
-            ${tels.map(t => `
-              <div class="detail-row">
-                <div class="detail-label">${escapeHtml(t.type || '电话')}</div>
-                <div class="detail-value"><a href="tel:${escapeHtml(t.value)}">${escapeHtml(t.value)}</a></div>
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-        
-        ${emails.length > 0 ? `
-          <div class="detail-section">
-            <div class="detail-section-title">邮箱</div>
-            ${emails.map(e => `
-              <div class="detail-row">
-                <div class="detail-label">${escapeHtml(e.type || '邮箱')}</div>
-                <div class="detail-value"><a href="mailto:${escapeHtml(e.value)}">${escapeHtml(e.value)}</a></div>
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-        
-        ${c.url ? `
-          <div class="detail-section">
-            <div class="detail-section-title">网址</div>
-            <div class="detail-row">
-              <div class="detail-label">网址</div>
-              <div class="detail-value"><a href="${escapeHtml(c.url)}" target="_blank">${escapeHtml(c.url)}</a></div>
-            </div>
-          </div>
-        ` : ''}
-        
-        ${c.bday ? `
-          <div class="detail-section">
-            <div class="detail-section-title">生日</div>
-            <div class="detail-row">
-              <div class="detail-label">生日</div>
-              <div class="detail-value">${escapeHtml(c.bday)}</div>
-            </div>
-          </div>
-        ` : ''}
-        
-        ${c.note ? `
-          <div class="detail-section">
-            <div class="detail-section-title">备注</div>
-            <div class="detail-row">
-              <div class="detail-value" style="white-space: pre-wrap;">${escapeHtml(c.note)}</div>
-            </div>
-          </div>
-        ` : ''}
+        ${tels.length ? `<div class="detail-section"><div class="detail-section-title">电话</div>${tels.map(t => `<div class="detail-row"><div class="detail-label">${escapeHtml(t.type || '电话')}</div><div class="detail-value"><a href="tel:${escapeHtml(t.value)}">${escapeHtml(t.value)}</a></div></div>`).join('')}</div>` : ''}
+        ${emails.length ? `<div class="detail-section"><div class="detail-section-title">邮箱</div>${emails.map(e => `<div class="detail-row"><div class="detail-label">${escapeHtml(e.type || '邮箱')}</div><div class="detail-value"><a href="mailto:${escapeHtml(e.value)}">${escapeHtml(e.value)}</a></div></div>`).join('')}</div>` : ''}
+        ${c.url ? `<div class="detail-section"><div class="detail-section-title">网址</div><div class="detail-row"><div class="detail-label">网址</div><div class="detail-value"><a href="${escapeHtml(c.url)}" target="_blank">${escapeHtml(c.url)}</a></div></div></div>` : ''}
+        ${c.bday ? `<div class="detail-section"><div class="detail-section-title">生日</div><div class="detail-row"><div class="detail-label">生日</div><div class="detail-value">${escapeHtml(c.bday)}</div></div></div>` : ''}
+        ${c.note ? `<div class="detail-section"><div class="detail-section-title">备注</div><div class="detail-row"><div class="detail-value" style="white-space: pre-wrap;">${escapeHtml(c.note)}</div></div></div>` : ''}
       `;
     }
-    
-    // 获取首字母
-    function getInitial(name) {
-      if (!name) return '?';
-      return name.charAt(0).toUpperCase();
-    }
-    
-    // HTML 转义
+
+    function getInitial(name) { return name ? name.charAt(0).toUpperCase() : '?'; }
+
     function escapeHtml(text) {
       if (!text) return '';
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
     }
-    
-    // 打开添加模态框
+
     function openAddModal() {
       editingId = null;
       document.getElementById('modal-title').textContent = '添加联系人';
       document.getElementById('contact-form').reset();
       document.getElementById('tel-list').innerHTML = '';
       document.getElementById('email-list').innerHTML = '';
-      document.getElementById('contact-modal').classList.add('active');
+      document.getElementById('contact-modal').classList.add('show');
     }
-    
-    // 编辑联系人
+
     function editContact() {
       if (!currentContact) return;
       editingId = currentContact.id;
       document.getElementById('modal-title').textContent = '编辑联系人';
-      
+
       const form = document.getElementById('contact-form');
       form.n_family.value = currentContact.n_family || '';
       form.n_given.value = currentContact.n_given || '';
@@ -635,24 +560,22 @@
       form.url.value = currentContact.url || '';
       form.bday.value = currentContact.bday || '';
       form.note.value = currentContact.note || '';
-      
-      // 解析电话和邮箱
+
       let tels = [], emails = [];
       try { tels = JSON.parse(currentContact.tel || '[]'); } catch(e) {}
       try { emails = JSON.parse(currentContact.email || '[]'); } catch(e) {}
-      
+
       const telList = document.getElementById('tel-list');
       const emailList = document.getElementById('email-list');
       telList.innerHTML = '';
       emailList.innerHTML = '';
-      
+
       tels.forEach(t => addTelItem(t.type, t.value));
       emails.forEach(e => addEmailItem(e.type, e.value));
-      
-      document.getElementById('contact-modal').classList.add('active');
+
+      document.getElementById('contact-modal').classList.add('show');
     }
-    
-    // 添加电话项
+
     function addTelItem(type = 'CELL', value = '') {
       const list = document.getElementById('tel-list');
       const div = document.createElement('div');
@@ -668,8 +591,7 @@
       `;
       list.appendChild(div);
     }
-    
-    // 添加邮箱项
+
     function addEmailItem(type = 'INTERNET', value = '') {
       const list = document.getElementById('email-list');
       const div = document.createElement('div');
@@ -685,34 +607,48 @@
       `;
       list.appendChild(div);
     }
-    
-    // 关闭模态框
+
     function closeModal() {
-      document.getElementById('contact-modal').classList.remove('active');
+      document.getElementById('contact-modal').classList.remove('show');
     }
-    
+
+    // 显示确认对话框
+    function showConfirm(message, callback) {
+      document.getElementById('confirm-message').textContent = message;
+      confirmCallback = callback;
+      document.getElementById('confirm-modal').classList.add('show');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-modal').classList.remove('show');
+      confirmCallback = null;
+    }
+
+    // 确认对话框事件
+    document.getElementById('confirm-modal-close').addEventListener('click', closeConfirmModal);
+    document.getElementById('confirm-cancel').addEventListener('click', closeConfirmModal);
+    document.getElementById('confirm-ok').addEventListener('click', async () => {
+      if (confirmCallback) {
+        await confirmCallback();
+      }
+      closeConfirmModal();
+    });
+
     // 保存联系人
     document.getElementById('contact-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      
       const form = e.target;
-      
-      // 收集电话
-      const tels = [];
-      document.querySelectorAll('#tel-list .multi-input-item').forEach(item => {
-        const type = item.querySelector('select').value;
-        const value = item.querySelector('input').value;
-        if (value) tels.push({ type, value });
-      });
-      
-      // 收集邮箱
-      const emails = [];
-      document.querySelectorAll('#email-list .multi-input-item').forEach(item => {
-        const type = item.querySelector('select').value;
-        const value = item.querySelector('input').value;
-        if (value) emails.push({ type, value });
-      });
-      
+
+      const tels = [...document.querySelectorAll('#tel-list .multi-input-item')].map(item => ({
+        type: item.querySelector('select').value,
+        value: item.querySelector('input').value
+      })).filter(t => t.value);
+
+      const emails = [...document.querySelectorAll('#email-list .multi-input-item')].map(item => ({
+        type: item.querySelector('select').value,
+        value: item.querySelector('input').value
+      })).filter(e => e.value);
+
       const data = {
         n_family: form.n_family.value,
         n_given: form.n_given.value,
@@ -725,17 +661,18 @@
         bday: form.bday.value,
         note: form.note.value
       };
-      
+
       try {
         const url = editingId ? `/api/contacts/${editingId}` : '/api/contacts';
         const method = editingId ? 'PUT' : 'POST';
-        
-        const res = await fetch(url, { credentials: 'same-origin', 
+
+        const res = await fetch(url, {
+          credentials: 'same-origin',
           method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
         });
-        
+
         if (res.ok) {
           closeModal();
           loadContacts();
@@ -749,65 +686,61 @@
         alert('保存失败');
       }
     });
-    
-    // 删除联系人
+
     async function deleteContact() {
       if (!currentContact) return;
-      if (!confirm(`确定删除联系人 "${currentContact.fn}" 吗？`)) return;
-      
-      try {
-        const res = await fetch(`/api/contacts/${currentContact.id}`, { method: 'DELETE', credentials: 'same-origin' });
-        if (res.ok) {
-          currentContact = null;
-          loadContacts();
-          renderContactDetail();
+
+      showConfirm(`确定删除联系人 "${currentContact.fn}" 吗？`, async () => {
+        try {
+          const res = await fetch(`/api/contacts/${currentContact.id}`, { method: 'DELETE', credentials: 'same-origin' });
+          if (res.ok) {
+            currentContact = null;
+            loadContacts();
+            renderContactDetail();
+          }
+        } catch (e) {
+          console.error('删除联系人失败', e);
         }
-      } catch (e) {
-        console.error('删除联系人失败', e);
-      }
+      });
     }
-    
-    // 导出单个联系人
-    async function exportContact() {
-      if (!currentContact) return;
-      window.location.href = `/api/contacts/export/${currentContact.id}`;
+
+    function exportContact() {
+      if (currentContact) window.location.href = `/api/contacts/export/${currentContact.id}`;
     }
-    
-    // 导出所有联系人
+
     document.getElementById('export-btn').addEventListener('click', () => {
       window.location.href = '/api/contacts/export';
     });
-    
-    // 导入模态框
+
     document.getElementById('import-btn').addEventListener('click', () => {
-      document.getElementById('import-modal').classList.add('active');
+      document.getElementById('import-modal').classList.add('show');
     });
-    
+
     document.getElementById('import-modal-close').addEventListener('click', () => {
-      document.getElementById('import-modal').classList.remove('active');
+      document.getElementById('import-modal').classList.remove('show');
     });
-    
+
     document.getElementById('import-cancel').addEventListener('click', () => {
-      document.getElementById('import-modal').classList.remove('active');
+      document.getElementById('import-modal').classList.remove('show');
     });
-    
-    // 导入确认
+
     document.getElementById('import-confirm').addEventListener('click', async () => {
       const vcardContent = document.getElementById('vcard-content').value;
       if (!vcardContent.trim()) {
         alert('请输入 vCard 内容');
         return;
       }
-      
+
       try {
-        const res = await fetch('/api/contacts/import', { credentials: 'same-origin', 
+        const res = await fetch('/api/contacts/import', {
+          credentials: 'same-origin',
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ vcard: vcardContent })
         });
-        
+
         if (res.ok) {
-          document.getElementById('import-modal').classList.remove('active');
+          document.getElementById('import-modal').classList.remove('show');
           document.getElementById('vcard-content').value = '';
           loadContacts();
         } else {
@@ -819,30 +752,25 @@
         alert('导入失败');
       }
     });
-    
-    // 文件导入
+
     document.getElementById('vcf-file').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
       const reader = new FileReader();
       reader.onload = (event) => {
         document.getElementById('vcard-content').value = event.target.result;
       };
       reader.readAsText(file);
     });
-    
-    // 搜索
+
     document.getElementById('search-input').addEventListener('input', (e) => {
       loadContacts(e.target.value);
     });
-    
-    // 事件绑定
+
     document.getElementById('add-btn').addEventListener('click', openAddModal);
     document.getElementById('modal-close').addEventListener('click', closeModal);
     document.getElementById('modal-cancel').addEventListener('click', closeModal);
-    
-    // 初始化
+
     loadContacts();
   </script>
 </body>
