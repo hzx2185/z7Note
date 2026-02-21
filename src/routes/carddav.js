@@ -103,10 +103,10 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let itemsXml = '';
 
     if (depth === '1') {
-      const contacts = await getConnection().all(
-        'SELECT id, fn, updatedAt FROM contacts WHERE username = ?', 
-        [username]
-      );
+        const [contacts, notes] = await Promise.all([
+          getConnection().all('SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 0', [username]),
+          getConnection().all('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username])
+        ]);
       
       // 计算最新的 updatedAt 作为 ctag
       if (contacts.length > 0) {
@@ -118,14 +118,15 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
         contactsCount: contacts.length
       });
       
-      contacts.forEach(contact => {
+      const allItems = [...notes, ...contacts];
+        allItems.forEach(item => {
         itemsXml += `
     <D:response>
-      <D:href>/carddav/${username}/${contact.id}.vcf</D:href>
+      <D:href>/carddav/${username}/${item.id}.vcf</D:href>
       <D:propstat>
         <D:prop>
-          <D:displayname>${contact.fn || 'Unnamed'}</D:displayname>
-          <D:getetag>"${contact.updatedAt}"</D:getetag>
+          <D:displayname>${item.title || item.fn || 'Unnamed'}</D:displayname>
+          <D:getetag>"${item.updatedAt}"</D:getetag>
           <D:getcontenttype>text/vcard; charset=utf-8</D:getcontenttype>
           <D:resourcetype/>
         </D:prop>
@@ -237,15 +238,16 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
 
         // 生成响应
         let responsesXml = '';
-        contacts.forEach(contact => {
+        const allItems = [...notes, ...contacts];
+        allItems.forEach(item => {
           const vcard = VCardGenerator.contactToVCard(contact);
           responsesXml += `
   <D:response>
-    <D:href>/carddav/${username}/${contact.id}.vcf</D:href>
+    <D:href>/carddav/${username}/${item.id}.vcf</D:href>
     <D:propstat>
       <D:prop>
         <C:address-data>${escapeXml(vcard)}</C:address-data>
-        <D:getetag>"${contact.updatedAt}"</D:getetag>
+        <D:getetag>"${item.updatedAt}"</D:getetag>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>

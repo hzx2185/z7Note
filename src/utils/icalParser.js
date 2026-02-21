@@ -9,10 +9,11 @@ class ICalParser {
    * 解析 iCal 内容，提取事件和待办事项
    */
   static parse(icalContent) {
-    const result = {
-      events: [],
-      todos: []
-    };
+      const result = {
+        events: [],
+        todos: [],
+        notes: []
+      };
 
     try {
       // 预处理：移除换行转义
@@ -233,6 +234,21 @@ class ICalParser {
     };
 
     return todo;
+  }
+  
+  /**
+   * 解析笔记（VJOURNAL）
+   */
+  static parseNote(item) {
+    const note = {
+      id: this.extractUID(item.UID),
+      title: item.SUMMARY || '未命名',
+      content: item.DESCRIPTION || '',
+      createdAt: Math.floor(Date.now() / 1000),
+      updatedAt: Math.floor(Date.now() / 1000)
+    };
+  
+    return note;
   }
 
   /**

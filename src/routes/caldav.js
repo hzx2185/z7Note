@@ -102,11 +102,12 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let itemsXml = '';
 
     if (depth === '1') {
-      const [events, todos] = await Promise.all([
+      const [events, todos, notes] = await Promise.all([
         getConnection().all('SELECT id, title, updatedAt FROM events WHERE username = ?', [username]),
+          getConnection().all('SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 0', [username]),
         getConnection().all('SELECT id, title, updatedAt FROM todos WHERE username = ?', [username])
       ]);
-      const items = [...events, ...todos];
+      const items = [...events, ...todos, ...notes];
         // 计算最新的 updatedAt 作为 ctag
         if (items.length > 0) {
           ctag = Math.max(...items.map(i => i.updatedAt || 0));
@@ -147,6 +148,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
         <C:supported-calendar-component-set>
           <C:comp name="VEVENT"/>
           <C:comp name="VTODO"/>
+            <C:comp name="VJOURNAL"/>
         </C:supported-calendar-component-set>
         <D:getctag>"${ctag}"</D:getctag>
         <C:calendar-timezone></C:calendar-timezone>
@@ -266,7 +268,8 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
               const item = [...events, ...todos].find(i => i.id === id);
               if (item) {
                 const isEvent = !!item.startTime;
-                const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent ? [item] : [], username);
+                const isNote = !!item.content && !item.startTime && !item.dueDate;
+              const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent && !isNote ? [item] : [], username, isNote ? [item] : []);
                 log('INFO', 'REPORT 返回ICS内容', {
                   username,
                   itemId: id,
@@ -336,10 +339,12 @@ router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
         const { username, filename } = req.params;
         if (username !== req.user) return res.status(403).send();
         const item = await getConnection().get('SELECT * FROM events WHERE id = ? AND username = ?', [filename, username]) || 
-                     await getConnection().get('SELECT * FROM todos WHERE id = ? AND username = ?', [filename, username]);
+                     await getConnection().get('SELECT * FROM todos WHERE id = ? AND username = ?', [filename, username]) ||
+                       await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ? AND deleted = 0', [filename, username]);
         if (item) {
             const isEvent = !!item.startTime;
-            const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent ? [item] : [], username);
+            const isNote = !!item.content && !item.startTime && !item.dueDate;
+              const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent && !isNote ? [item] : [], username, isNote ? [item] : []);
             log('INFO', 'CalDAV GET 返回ICS内容', {
                 username,
                 filename,
@@ -430,6 +435,32 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
                   }
               }
             }
+              if (parsed && parsed.notes && parsed.notes.length > 0) {
+                log('INFO', 'CalDAV PUT 准备保存笔记', {
+                  noteCount: parsed.notes.length,
+                  notes: parsed.notes.map(n => ({
+                    id: n.id,
+                    title: n.title,
+                    contentLength: n.content ? n.content.length : 0
+                  }))
+                });
+                for (const note of parsed.notes) {
+                  try {
+                    const existing = await getConnection().get('SELECT id FROM notes WHERE id = ? AND username = ?', [note.id, username]);
+                    log('INFO', 'CalDAV PUT 检查笔记是否存在', { noteId: note.id, exists: !!existing });
+                    if (existing) {
+                      log('INFO', 'CalDAV PUT 更新笔记', { noteId: note.id, title: note.title });
+                      await getConnection().run('UPDATE notes SET title=?, content=?, updatedAt=? WHERE id=? AND username=?', [note.title, note.content || '', Math.floor(Date.now()/1000), note.id, username]);
+                    } else {
+                      log('INFO', 'CalDAV PUT 插入笔记', { noteId: note.id, title: note.title });
+                      await getConnection().run('INSERT INTO notes (id, username, title, content, createdAt, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, ?, 0)', [note.id, username, note.title, note.content || '', Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)]);
+                    }
+                    log('INFO', 'CalDAV PUT 笔记保存成功', { noteId: note.id, title: note.title });
+                  } catch (dbError) {
+                    log('ERROR', 'CalDAV PUT 笔记数据库操作失败', { noteId: note.id, error: dbError.message, stack: dbError.stack });
+                  }
+                }
+              }
             res.setHeader('ETag', `"${Date.now()}"`);
             res.status(201).send();
           } catch (e) {
@@ -500,7 +531,7 @@ router.delete('/:username/', basicAuthMiddleware, async (req, res) => {
 // Helper function to generate response for REPORT
 async function generateMultiStatusResponseWithData(username, events, todos) {
   let responses = '';
-  const items = [...events, ...todos];
+  const items = [...events, ...todos, ...notes];
         // 计算最新的 updatedAt 作为 ctag
         if (items.length > 0) {
           ctag = Math.max(...items.map(i => i.updatedAt || 0));
@@ -509,7 +540,8 @@ async function generateMultiStatusResponseWithData(username, events, todos) {
   for (const item of items) {
     const isEvent = !!item.startTime;
     const href = `/caldav/${username}/${item.id}.ics`;
-    const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent ? [item] : [], username);
+    const isNote = !!item.content && !item.startTime && !item.dueDate;
+              const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent && !isNote ? [item] : [], username, isNote ? [item] : []);
     responses += `
   <D:response>
     <D:href>${href}</D:href>

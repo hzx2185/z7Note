@@ -158,10 +158,49 @@ class ICalGenerator {
     return lines.join('\r\n');
   }
 
+  
+  /**
+   * 将笔记转换为 iCal 格式（VJOURNAL - 备忘录）
+   */
+  static noteToICal(note) {
+    const lines = [];
+
+    // VJOURNAL 开始
+    lines.push('BEGIN:VJOURNAL');
+
+    // UID
+    lines.push(`UID:${note.id}@z7note`);
+
+    // DTSTAMP（创建时间）
+    const created = note.createdAt || note.updatedAt || Date.now();
+    const createdDate = new Date(created * 1000);
+    lines.push(`DTSTAMP:${this.formatDateTime(createdDate)}`);
+
+    // DTSTART（创建日期）
+    lines.push(`DTSTART;VALUE=DATE:${this.formatDate(createdDate)}`);
+
+    // SUMMARY（标题）
+    if (note.title) {
+      lines.push(`SUMMARY:${this.escapeText(note.title)}`);
+    }
+
+    // DESCRIPTION（内容）
+    if (note.content) {
+      lines.push(`DESCRIPTION:${this.escapeText(note.content)}`);
+    }
+
+    // SEQUENCE（版本号）
+    lines.push(`SEQUENCE:${Math.floor((note.updatedAt || note.createdAt || 0) / 1000)}`);
+
+    // VJOURNAL 结束
+    lines.push('END:VJOURNAL');
+
+    return lines.join('\r\n');
+  }
   /**
    * 生成完整的 iCal 日历文件
    */
-  static generateCalendar(events, todos, username) {
+  static generateCalendar(events, todos, username, notes = []) {
     const lines = [];
 
     // VCALENDAR 开始
@@ -206,6 +245,13 @@ class ICalGenerator {
         lines.push(this.todoToICal(todo));
       });
     }
+  
+      // 添加笔记（备忘录）
+      if (notes && notes.length > 0) {
+        notes.forEach(note => {
+          lines.push(this.noteToICal(note));
+        });
+      }
 
     // VCALENDAR 结束
     lines.push('END:VCALENDAR');
