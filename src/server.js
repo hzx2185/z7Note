@@ -205,26 +205,6 @@ if (config.caldav.enabled) {
   app.use('/webdav', webdavRoutes);
   console.log('[WebDAV] WebDAV 服务已启用 (Basic Auth)');
 
-  // WebDAV 兼容路由：将 /username/file.md 转发到 /webdav/username/file.md
-  // 用于兼容某些 WebDAV 客户端的相对路径请求
-  app.use((req, res, next) => {
-    // 匹配模式：/username/filename.md
-    const match = req.path.match(/^\/([^\/]+)\/([^\/]+\.md)$/);
-    if (match) {
-      const method = req.method;
-      // 只处理 WebDAV 相关的方法
-      if (method === 'GET' || method === 'HEAD' || method === 'PUT' || method === 'DELETE' || method === 'PROPFIND') {
-        const [, username, filename] = match;
-        console.log(`[WebDAV Redirect] ${method} ${req.path} -> /webdav/${username}/${filename}`);
-        // 重写 URL
-        req.url = `/webdav/${username}/${filename}`;
-        // 重新处理请求
-        return app._router.handle(req, res, next);
-      }
-    }
-    next();
-  });
-
 // 设置 SSE 路由
 sseRoutes.setupSSE(app);
 

@@ -103,7 +103,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let itemsXml = '';
 
     if (depth === '1') {
-        const [contacts, notes] = await Promise.all([
+        const [notes, contacts] = await Promise.all([
           getConnection().all('SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 0', [username]),
           getConnection().all('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username])
         ]);
@@ -238,16 +238,15 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
 
         // 生成响应
         let responsesXml = '';
-        const allItems = [...notes, ...contacts];
-        allItems.forEach(item => {
+        contacts.forEach(contact => {
           const vcard = VCardGenerator.contactToVCard(contact);
           responsesXml += `
   <D:response>
-    <D:href>/carddav/${username}/${item.id}.vcf</D:href>
+    <D:href>/carddav/${username}/${contact.id}.vcf</D:href>
     <D:propstat>
       <D:prop>
         <C:address-data>${escapeXml(vcard)}</C:address-data>
-        <D:getetag>"${item.updatedAt}"</D:getetag>
+        <D:getetag>"${contact.updatedAt}"</D:getetag>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>

@@ -548,12 +548,12 @@ const ToolsManager = {
                         let cleanLine = firstLine.replace(/^#+\s*/, '').trim();
                         cleanLine = cleanLine.replace(/^[`*_\-]+/, '').trim();
 
-                        // 检查是否包含斜杠（分类分隔符）
-                        if (cleanLine.includes('/')) {
-                            const parts = cleanLine.split('/');
+                        // 检查是否包含下划线（分类分隔符）
+                        if (cleanLine.includes('_')) {
+                            const parts = cleanLine.split('_');
                             const category = parts[0].replace(/^#+\s*/, '').trim();
-                            const title = parts.slice(1).join('/').trim() || '未命名';
-                            newTitle = `${category}/${title.substring(0, 80)}`;
+                            const title = parts.slice(1).join('_').trim() || '未命名';
+                            newTitle = `${category}_${title.substring(0, 80)}`;
                         } else {
                             newTitle = cleanLine.substring(0, 80) || '未命名';
                         }

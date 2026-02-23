@@ -1247,7 +1247,7 @@ const APIManager = {
                 title = s.target;
                 typeLabel = '📁';
             } else {
-                title = s.target.split('/').pop() || s.target;
+                title = s.target.split('_').pop() || s.target;
                 typeLabel = '📎';
             }
 
@@ -1312,7 +1312,7 @@ const APIManager = {
                 } else if (s.targetType === 'category') {
                     title = s.target;
                 } else {
-                    title = s.target.split('/').pop() || s.target;
+                    title = s.target.split('_').pop() || s.target;
                 }
                 return title.toLowerCase().includes(keyword);
             });
@@ -1585,8 +1585,8 @@ const APIManager = {
             list.innerHTML = problematicNotes.map(note => {
                 // 提取纯标题（不含分类）
                 let displayTitle = note.title;
-                if (displayTitle.includes('/')) {
-                    displayTitle = displayTitle.split('/').slice(1).join('/').trim();
+                if (displayTitle.includes('_')) {
+                    displayTitle = displayTitle.split('_').slice(1).join('_').trim();
                 }
                 return `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(128,128,128,0.2);">

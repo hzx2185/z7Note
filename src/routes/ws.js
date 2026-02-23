@@ -139,6 +139,8 @@ function broadcast(type, data, options = {}) {
   let totalClients = 0;
   const { username: targetUsername } = options;
 
+  log('INFO', 'WebSocket开始广播', { type, targetUsername, clientCount: wss.clients.size });
+
   wss.clients.forEach((client) => {
     totalClients++;
 
@@ -164,16 +166,6 @@ function broadcastNoteUpdate(note) {
 // 广播笔记删除
 function broadcastNoteDelete(noteId) {
   broadcast('note_delete', { noteId });
-}
-
-// 广播笔记更新
-function broadcastNoteUpdate(note, excludeUserId = null) {
-  broadcast('note_update', { note }, excludeUserId);
-}
-
-// 广播笔记删除
-function broadcastNoteDelete(noteId, excludeUserId = null) {
-  broadcast('note_delete', { noteId }, excludeUserId);
 }
 
 // 广播批量笔记更新

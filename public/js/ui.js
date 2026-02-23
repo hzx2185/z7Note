@@ -1,5 +1,5 @@
 // UI 核心逻辑模块
-import { parseTitleAndCategory } from './utils.js';
+import { fetchWithTimeout } from './utils.js';
 
 const UIManager = {
     notes: [],
@@ -887,36 +887,11 @@ const UIManager = {
             currentNote.isTemp = false;
         }
 
-        // 智能标题和分类更新
-        const currentTitle = this.notes[idx].title;
-        let finalTitle = currentTitle;
-        const { fullTitle: newFullTitle } = parseTitleAndCategory(content);
-
-        // 如果是新笔记或标题为默认标题，直接使用解析的标题
-        if (!currentTitle || currentTitle === '新笔记' || currentTitle === '未命名') {
-            finalTitle = newFullTitle;
-        } else {
-            // 对于已有标题的笔记，检查内容第一行是否与当前标题一致
-            const currentHasCategory = currentTitle.includes('/');
-            const newHasCategory = newFullTitle.includes('/');
-
-            const currentCategory = currentHasCategory ? currentTitle.split('/')[0].trim() : '';
-            const currentPureTitle = currentHasCategory ? currentTitle.split('/').slice(1).join('/').trim() : currentTitle.trim();
-
-            const newCategory = newHasCategory ? newFullTitle.split('/')[0].trim() : '';
-            const newPureTitle = newHasCategory ? newFullTitle.split('/').slice(1).join('/').trim() : newFullTitle.trim();
-
-            // 如果分类或标题任一个变化了，就更新
-            if (currentCategory !== newCategory || currentPureTitle !== newPureTitle) {
-                finalTitle = newFullTitle;
-            }
-        }
-
+        // 保存笔记，标题不变（用户需要手工修改标题）
         const now = Date.now();
         this.notes[idx] = {
             ...this.notes[idx],
             content,
-            title: finalTitle,
             updatedAt: now,
             isTemp: false
         };
@@ -1020,8 +995,8 @@ const UIManager = {
         // 分组
         for (const n of displayNotes) {
             let folder = '未分类';
-            if (n.title && n.title.includes('/')) {
-                const firstPart = n.title.split('/')[0];
+            if (n.title && n.title.includes('_')) {
+                const firstPart = n.title.split('_')[0];
                 folder = firstPart.replace(/^#*\s*/, '').trim() || '未分类';
             }
             if (!groups[folder]) groups[folder] = [];
@@ -1074,18 +1049,19 @@ const UIManager = {
 
                 // 提取纯标题
                 let displayTitle = n.title || '无标题';
-                if (displayTitle.includes('/')) {
-                    displayTitle = displayTitle.split('/').slice(1).join('/').trim();
+                if (displayTitle.includes('_')) {
+                    displayTitle = displayTitle.split('_').slice(1).join('_').trim();
                 }
 
                 // 使用事件委托，减少事件监听器数量
                 el.dataset.id = n.id;
                 el.dataset.title = displayTitle;
+                el.dataset.fullTitle = n.title; // 保存完整标题用于编辑
 
                 // 复选框和标题的HTML
                 const checkbox = this.batchMode ? `<input type="checkbox" class="note-checkbox" ${this.selectedIds.has(n.id.toString()) ? 'checked' : ''}>` : '';
                 const shareBtnHtml = !this.batchMode ? `<span class="note-action-share" title="分享">🔗</span><span class="note-action-delete" title="删除">×</span>` : '';
-                el.innerHTML = `${checkbox}<div class="note-info">${displayTitle}</div>${shareBtnHtml}`;
+                el.innerHTML = `${checkbox}<div class="note-info" title="双击编辑标题">${displayTitle}</div>${shareBtnHtml}`;
 
                 fContent.appendChild(el);
             }
@@ -1169,8 +1145,23 @@ const UIManager = {
             }
         };
 
+        // 处理双击编辑标题
+        this._dblClickHandler = (e) => {
+            const noteInfo = e.target.closest('.note-info');
+            if (!noteInfo) return;
+
+            const noteItem = noteInfo.closest('.note-item');
+            if (!noteItem) return;
+
+            e.stopPropagation();
+            const noteId = noteItem.dataset.id;
+            const fullTitle = noteItem.dataset.fullTitle;
+            this.editNoteTitle(noteId, fullTitle);
+        };
+
         // 绑定事件委托
         list.addEventListener('click', this._listEventHandler);
+        list.addEventListener('dblclick', this._dblClickHandler);
     },
 
     // 切换笔记
@@ -1332,8 +1323,8 @@ const UIManager = {
         const folders = new Set();
         for (const n of filtered) {
             let folder = '未分类';
-            if (n.title && n.title.includes('/')) {
-                const firstPart = n.title.split('/')[0];
+            if (n.title && n.title.includes('_')) {
+                const firstPart = n.title.split('_')[0];
                 folder = firstPart.replace(/^#*\s*/, '').trim() || '未分类';
             }
             folders.add(folder);
@@ -1468,6 +1459,80 @@ const UIManager = {
         }
     },
 
+    // 编辑笔记标题
+    async editNoteTitle(noteId, currentTitle) {
+        // 找到对应的笔记项元素
+        const noteItem = document.querySelector(`.note-item[data-id="${noteId}"]`);
+        if (!noteItem) return;
+
+        const noteInfo = noteItem.querySelector('.note-info');
+        if (!noteInfo) return;
+
+        // 保存原始内容
+        const originalHTML = noteInfo.innerHTML;
+
+        // 创建输入框
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentTitle;
+        input.className = 'title-edit-input';
+        input.style.cssText = `
+            width: 100%;
+            padding: 4px 8px;
+            border: 2px solid var(--primary, #4CAF50);
+            border-radius: 4px;
+            font-size: inherit;
+            font-family: inherit;
+            background: var(--bg, #fff);
+            color: var(--text, #333);
+            outline: none;
+            box-sizing: border-box;
+        `;
+
+        // 替换内容
+        noteInfo.innerHTML = '';
+        noteInfo.appendChild(input);
+        input.focus();
+        input.select();
+
+        // 保存函数
+        const saveTitle = async () => {
+            const newTitle = input.value.trim();
+            if (newTitle && newTitle !== currentTitle) {
+                const idx = this.notes.findIndex(n => n.id.toString() === noteId.toString());
+                if (idx !== -1) {
+                    const now = Date.now();
+                    this.notes[idx] = {
+                        ...this.notes[idx],
+                        title: newTitle,
+                        updatedAt: now
+                    };
+
+                    // 保存到云端
+                    await this.saveToCloud(this.notes[idx]);
+
+                    // 重新渲染左侧目录
+                    this.render();
+                }
+            } else {
+                // 恢复原始内容
+                noteInfo.innerHTML = originalHTML;
+            }
+        };
+
+        // 监听事件
+        input.addEventListener('blur', saveTitle);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                input.value = currentTitle;
+                input.blur();
+            }
+        });
+    },
+
     // 批量移动
     async batchMove() {
         if (this.selectedIds.size === 0) return;
@@ -1475,7 +1540,7 @@ const UIManager = {
         const folderName = prompt("请输入目标目录名称（留空则移至根目录）：", "");
         if (folderName === null) return;
         
-        const cleanFolderName = folderName.trim().replace(/\//g, '');
+        const cleanFolderName = folderName.trim().replace(/_/g, '');
         const now = Date.now();
         
         // 保存选中的数量和ID列表，因为 toggleBatchMode 会清空 selectedIds
@@ -1491,48 +1556,19 @@ const UIManager = {
         this.notes = this.notes.map(n => {
             const noteId = n.id.toString();
             if (selectedIdList.includes(noteId)) {
-                // 从内容第一行解析纯标题（去掉分类前缀）
-                let pureTitle = '';
-                if (n.content) {
-                    const firstLine = n.content.split('\n')[0] || '';
-                    const cleanLine = firstLine.replace(/^#+\s*/, '').trim();
-                    if (cleanLine.includes('/')) {
-                        pureTitle = cleanLine.split('/').slice(1).join('/').trim();
-                    } else {
-                        pureTitle = cleanLine;
-                    }
-                }
-                
-                // 如果解析失败，回退到从 title 解析
-                if (!pureTitle) {
-                    pureTitle = n.title.includes('/') ? n.title.split('/').pop() : n.title;
-                }
-                
-                const newTitle = cleanFolderName ? `${cleanFolderName}/${pureTitle}` : pureTitle;
-                
-                // 同步更新内容的第一行
-                let newContent = n.content || '';
-                if (newContent) {
-                    const lines = newContent.split('\n');
-                    if (lines.length > 0) {
-                        const firstLine = lines[0];
-                        const headingMatch = firstLine.match(/^(#{1,6}\s*)/);
-                        const headingPrefix = headingMatch ? headingMatch[1] : '';
-                        lines[0] = headingPrefix + newTitle;
-                        newContent = lines.join('\n');
-                    }
-                } else {
-                    newContent = '# ' + newTitle;
-                }
-                
+                // 从标题中提取纯标题（去掉分类前缀）
+                let pureTitle = n.title.includes('_') ? n.title.split('_').pop() : n.title;
+
+                const newTitle = cleanFolderName ? `${cleanFolderName}_${pureTitle}` : pureTitle;
+
                 updatedCount++;
-                const updatedNote = { ...n, title: newTitle, content: newContent, updatedAt: now, isUnsynced: true };
-                
+                const updatedNote = { ...n, title: newTitle, updatedAt: now, isUnsynced: true };
+
                 // 如果这是当前打开的笔记，保存引用
                 if (noteId === activeIdStr) {
                     updatedActiveNote = updatedNote;
                 }
-                
+
                 return updatedNote;
             }
             return n;
