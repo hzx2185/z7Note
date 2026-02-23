@@ -580,12 +580,39 @@ sudo certbot --nginx -d your-domain.com
 
 ### Q: 如何使用 WebDAV 同步笔记？
 **A:** 配置支持 WebDAV 的应用：
-- **iOS "文件" App**：添加服务器 → 输入 `http://your-server:3000/webdav/`
-- **Taio / 1Writer**：添加 WebDAV 服务 → 输入服务器地址和账号
+
+**通用配置信息：**
+- 服务器地址：`http://your-server:3000/webdav/`（注意末尾的斜杠）
 - 用户名：您的 z7Note 用户名
 - 密码：您的 z7Note 密码
 
-笔记会以 Markdown 文件格式显示，支持读取和编辑。
+**iOS "文件" App 配置：**
+1. 打开"文件" App
+2. 点击右上角"..." → "连接服务器"
+3. 输入服务器地址：`http://your-server:3000/webdav/`
+4. 选择"注册用户"，输入用户名和密码
+5. 点击"下一步"完成连接
+
+**Taio / 1Writer 配置：**
+1. 打开应用设置
+2. 添加 WebDAV 服务
+3. 输入服务器地址、用户名、密码
+4. 保存配置
+
+**Obsidian Remotely Save 插件配置：**
+1. 安装 Remotely Save 插件
+2. 打开插件设置
+3. 选择同步方式：WebDAV
+4. 输入服务器地址：`http://your-server:3000/webdav/`
+5. 输入用户名和密码
+6. 点击"检查"测试连接
+7. 保存配置并开始同步
+
+**注意事项：**
+- 笔记会以 Markdown 文件格式显示，支持读取和编辑
+- 目录分隔符使用 `_`（例如：`web_vnt配置教程.md`）
+- 附件会自动同步，路径会自动转换
+- 建议在 Obsidian 中不设置附件目录，或设置为根目录
 
 ### Q: 如何添加日历订阅？
 **A:** 点击日历页面的"订阅"按钮：
