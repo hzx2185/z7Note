@@ -12,42 +12,44 @@
     .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 4px; gap: 4px; }
     .toolbar { display: flex; gap: 4px; align-items: center; background: var(--side); padding: 4px; border-radius: 4px; border: 1px solid var(--border); }
     .search-input { flex: 1; height: 26px; padding: 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); outline: none; font-size: 12px; }
-    
+    #pagination { display: none; gap: 4px; align-items: center; }
+    #pagination.show { display: flex !important; }
+
     .table-container { flex: 1; background: var(--side); border: 1px solid var(--border); border-radius: 4px; overflow: auto; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th { position: sticky; top: 0; background: var(--side); z-index: 10; text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); color: var(--gray); font-size: 12px; }
     td { padding: 2px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: var(--row-h); }
     tr:hover { background: rgba(128,128,128,0.05); cursor: pointer; }
     tr.selected { background: rgba(37,99,235,0.1); }
-    
+
     .col-cb { width: 28px; text-align: center; }
     .col-name { width: 80px; color: var(--accent); font-weight: 500; }
     .col-tel { width: 100px; }
     .col-email { width: 130px; }
     .col-org { width: 90px; }
-    
+
     @media (max-width: 600px) { .col-org, .col-email { display: none; } .col-tel { width: auto; } .header b span { display: none; } }
 
     .modal-content { max-width: 360px; }
     .form-group { margin-bottom: 6px; }
     .form-group label { font-size: 11px; color: var(--gray); display: block; margin-bottom: 2px; }
     input, textarea, select { width: 100%; padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; }
-    
+
     .multi-item { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
     .multi-item select { width: 65px; flex-shrink: 0; height: 26px; font-size: 11px; padding: 0 4px; }
     .multi-item input { flex: 1; height: 26px; font-size: 12px; }
-    
+
     .modal-actions-full { display: flex; gap: 8px; padding: 10px 0 0; }
     .modal-actions-full .btn { flex: 1; min-height: 32px; font-size: 13px; border-radius: 4px; }
     .btn-xs { padding: 2px 6px; font-size: 11px; height: 24px; min-width: auto; border-radius: 3px; }
     .tool-btn { min-width: auto; padding: 0 6px; height: 28px; font-size: 12px; }
 
-    /* 查重表头与行对齐 */
-    .dup-group { padding: 4px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; background: var(--bg); }
+    /* 查重和历史记录通用样式 */
+    .dup-group, .history-item { padding: 4px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; background: var(--bg); }
     .dup-row { display: flex; align-items: center; gap: 4px; padding: 4px 0; font-size: 11px; color: var(--text); }
     .dup-row:not(:last-child) { border-bottom: 1px solid rgba(128,128,128,0.05); }
     .dup-header { color: var(--gray); font-weight: 500; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px; }
-    
+
     .dup-col-sel { width: 24px; flex-shrink: 0; text-align: center; }
     .dup-col-name { width: 60px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dup-col-info { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -73,7 +75,7 @@
   <div class="main">
     <div class="toolbar">
       <input type="text" class="search-input" id="search-input" placeholder="搜索姓名、电话、邮箱..." oninput="onSearch()">
-      <div id="pagination" style="display:none;gap:4px;align-items:center">
+      <div id="pagination">
         <button class="tool-btn btn-xs" onclick="changePage(-1)">‹</button>
         <span id="page-info" style="font-size:11px;color:var(--gray)"></span>
         <button class="tool-btn btn-xs" onclick="changePage(1)">›</button>
@@ -135,7 +137,6 @@
     <div class="modal-content" style="max-width:440px">
       <div class="modal-header"><h3>清理重复</h3><button onclick="$('dup-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <!-- 批量合并表头 -->
         <div class="dup-row dup-header" style="padding-left:4px">
           <div class="dup-col-sel" title="勾选组进行合并"><input type="checkbox" id="dup-sel-all" checked onclick="toggleAllDups(this.checked)"></div>
           <div class="dup-col-sel" title="选择保留哪一行">留</div>
@@ -190,7 +191,7 @@
         </tr>`;
       }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>';
       $('count-info').textContent = `(${total}${selected.size?`/选${selected.size}`:''})`;
-      $('pagination').style.display = total > pageSize ? 'flex' : 'none';
+      $('pagination').className = total > pageSize ? 'show' : '';
       $('page-info').textContent = `${page}/${Math.ceil(total/pageSize)}`;
     }
 
@@ -235,11 +236,11 @@
     }
 
     async function deleteSingle() { if (confirm('确定删除此联系人?')) { await fetch(`/api/contacts/${curId}`,{method:'DELETE'}); closeModal(); load(); } }
-    async function batchDelete() { 
+    async function batchDelete() {
       if (!selected.size) return alert('请先选择要删除的联系人');
-      if (confirm(`确定删除选中的 ${selected.size} 个联系人?`)) { await fetch('/api/contacts/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})}); selected.clear(); load(); } 
+      if (confirm(`确定删除选中的 ${selected.size} 个联系人?`)) { await fetch('/api/contacts/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})}); selected.clear(); load(); }
     }
-    async function batchMerge() { 
+    async function batchMerge() {
       if (selected.size < 2) return alert('请至少选择两个联系人进行合并');
       if (confirm(`确定合并选中的 ${selected.size} 个联系人?`)) { const ids=[...selected]; await fetch('/api/contacts/merge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keepId:ids[0],mergeIds:ids.slice(1)})}); selected.clear(); load(); }
     }
@@ -259,7 +260,7 @@
           </div>
           ${g.contacts.map((c, ci) => {
             let tel = '', email = '';
-            try { 
+            try {
               const tels = JSON.parse(c.tel||'[]'); tel = tels[0]?.value || '';
               const emails = JSON.parse(c.email||'[]'); email = emails[0]?.value || '';
             } catch(e){}
@@ -299,7 +300,6 @@
       }
     }
 
-    // 显示历史记录
     async function showHistory() {
       if (!curId) return;
       try {
@@ -313,7 +313,6 @@
           $('history-list').innerHTML = history.map(h => {
             const time = new Date(h.created_at * 1000).toLocaleString('zh-CN');
             let actionText = '';
-            let actionColor = 'var(--text)';
 
             switch (h.action) {
               case 'create':
@@ -337,7 +336,7 @@
                 actionText = esc(h.action);
             }
 
-            return `<div style="padding:8px;border-bottom:1px solid var(--border);font-size:12px">
+            return `<div class="history-item" style="padding:8px;border-bottom:1px solid var(--border);font-size:12px">
               <div style="color:var(--gray);font-size:11px;margin-bottom:4px">${time}</div>
               <div>${actionText}</div>
             </div>`;
