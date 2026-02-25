@@ -11,8 +11,8 @@
     .header { height: 40px; padding: 0 8px; flex-shrink: 0; background: var(--side); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 4px; gap: 4px; }
     .toolbar { display: flex; gap: 4px; align-items: center; background: var(--side); padding: 4px; border-radius: 4px; border: 1px solid var(--border); }
-    .search-input { flex: 1; height: 26px; padding: 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); outline: none; font-size: 12px; }
-    #pagination { display: none; gap: 4px; align-items: center; }
+    .search-input { flex: 1; min-width: 0; height: 26px; padding: 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); outline: none; font-size: 12px; }
+    #pagination { display: none; gap: 4px; align-items: center; flex-shrink: 0; }
     #pagination.show { display: flex !important; }
 
     .table-container { flex: 1; background: var(--side); border: 1px solid var(--border); border-radius: 4px; overflow: auto; }
