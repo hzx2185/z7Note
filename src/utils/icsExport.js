@@ -29,22 +29,16 @@ function exportToICS(events, options = {}) {
     'X-WR-CALDESC:z7Note 日历导出'
   ];
 
-  // 根据目标应用添加特定属性
-  if (targetApp === 'google') {
-    lines.push('X-WR-CALNAME:z7Note Calendar');
-    lines.push('X-WR-CALDESC:Exported from z7Note');
-  } else if (targetApp === 'outlook') {
-    lines.push('X-WR-CALNAME:z7Note Calendar');
-    lines.push('X-WR-CALDESC:Exported from z7Note');
-  }
-
   events.forEach(event => {
+    // 使用事件自带的时区，如果没有则使用默认时区
+    const eventTimezone = event.timezone || timezone;
+    
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${event.id}@z7note`);
-    lines.push(`DTSTAMP:${formatICSDate(new Date())}`);
-    lines.push(`DTSTART:${formatICSDate(new Date(event.startTime * 1000), event.allDay)}`);
+    lines.push(`DTSTAMP:${formatICSDateTime(new Date(), {utc: true})}`); // DTSTAMP should be UTC
+    lines.push(`DTSTART;${event.allDay ? 'VALUE=DATE:' : `TZID=${eventTimezone}:`}${formatICSDateTime(new Date(event.startTime * 1000), {allDay: event.allDay, timezone: eventTimezone})}`);
     if (event.endTime) {
-      lines.push(`DTEND:${formatICSDate(new Date(event.endTime * 1000), event.allDay)}`);
+      lines.push(`DTEND;${event.allDay ? 'VALUE=DATE:' : `TZID=${eventTimezone}:`}${formatICSDateTime(new Date(event.endTime * 1000), {allDay: event.allDay, timezone: eventTimezone})}`);
     }
     lines.push(`SUMMARY:${escapeICS(event.title)}`);
     if (event.description) {
@@ -139,7 +133,7 @@ function exportToICS(events, options = {}) {
  * @returns {Array} 事件列表
  */
 function importFromICS(icsContent, options = {}) {
-  const {
+  let {
     importReminders = true,
     sourceApp = 'auto' // 'auto', 'google', 'outlook', 'standard'
   } = options;
@@ -205,10 +199,13 @@ function importFromICS(icsContent, options = {}) {
 
     const [key, ...valueParts] = line.split(':');
     const value = valueParts.join(':');
+    
+    // 提取主键名（去掉参数部分）
+    const mainKey = key.split(';')[0];
 
     // 处理 VALARM 内容
     if (inAlarm) {
-      switch (key) {
+      switch (mainKey) {
         case 'TRIGGER':
           currentAlarm.trigger = value;
           break;
@@ -226,15 +223,27 @@ function importFromICS(icsContent, options = {}) {
     }
 
     // 处理 VEVENT 内容
-    switch (key) {
+    switch (mainKey) {
       case 'UID':
         currentEvent.id = value.replace(/@z7note$/, '') || generateId();
         break;
       case 'DTSTART':
-        currentEvent.startTime = parseICSDate(value);
+        // 传递完整的key（包含参数）和value给parseICSDate
+        currentEvent.startTime = parseICSDate(key + ':' + value);
+        // 提取时区信息
+        if (key.includes('TZID=')) {
+          const tzidMatch = key.match(/TZID=([^;:]+)/);
+          if (tzidMatch) {
+            currentEvent.timezone = tzidMatch[1];
+          }
+        }
+        // 检查是否是全天事件
+        if (key.includes('VALUE=DATE')) {
+          currentEvent.allDay = true;
+        }
         break;
       case 'DTEND':
-        currentEvent.endTime = parseICSDate(value);
+        currentEvent.endTime = parseICSDate(key + ':' + value);
         break;
       case 'SUMMARY':
         currentEvent.title = unescapeICS(value);
@@ -377,51 +386,160 @@ function mapOutlookColor(color) {
 }
 
 /**
- * 格式化日期为ICS格式（增强版）
+ * 格式化日期为ICS格式（仅日期部分）
  */
-function formatICSDate(date, isAllDay = false) {
-  if (isAllDay) {
-    // 全天事件只使用日期部分
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}${month}${day}`;
+function formatICSDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+/**
+ * 格式化日期时间为ICS格式（支持全天、UTC、TZID）
+ * @param {Date} date - Date对象
+ * @param {Object} options - 选项 { allDay: boolean, utc: boolean, timezone: string }
+ * @returns {string} ICS格式日期时间字符串
+ */
+function formatICSDateTime(date, options = {}) {
+  const { allDay = false, utc = false, timezone = 'Asia/Shanghai' } = options;
+
+  if (allDay) {
+    return formatICSDate(date);
   }
 
+  // 如果是 UTC，则使用 getUTCHours 等方法，并添加 'Z'
+  if (utc) {
+    const utcYear = date.getUTCFullYear();
+    const utcMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const utcDay = String(date.getUTCDate()).padStart(2, '0');
+    const utcHours = String(date.getUTCHours()).padStart(2, '0');
+    const utcMinutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const utcSeconds = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${utcYear}${utcMonth}${utcDay}T${utcHours}${utcMinutes}${utcSeconds}Z`;
+  }
+
+  // 对于带TZID的时间，需要将UTC时间转换为指定时区的本地时间
+  const offset = getTimezoneOffset(timezone);
+  if (offset !== null) {
+    // 将UTC时间转换为本地时间
+    const localTime = new Date(date.getTime() + (offset * 60 * 60 * 1000));
+    
+    const year = localTime.getUTCFullYear();
+    const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(localTime.getUTCDate()).padStart(2, '0');
+    const hours = String(localTime.getUTCHours()).padStart(2, '0');
+    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+  }
+
+  // 如果无法识别时区，使用本地时间
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
-
-  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
+  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
 }
 
 /**
- * 解析ICS格式日期
+ * 获取时区偏移（小时）
+ * @param {string} timezone - 时区ID，如 'Asia/Shanghai'
+ * @returns {number|null} - 相对于UTC的偏移小时数，东时区为正
+ */
+function getTimezoneOffset(timezone) {
+  // 常见时区映射表
+  const timezoneMap = {
+    'Asia/Shanghai': 8,
+    'Asia/Chongqing': 8,
+    'Asia/Hong_Kong': 8,
+    'Asia/Taipei': 8,
+    'Asia/Singapore': 8,
+    'Asia/Tokyo': 9,
+    'Asia/Seoul': 9,
+    'Asia/Dubai': 4,
+    'Asia/Kolkata': 5.5,
+    'Europe/London': 0,
+    'Europe/Paris': 1,
+    'Europe/Berlin': 1,
+    'Europe/Moscow': 3,
+    'America/New_York': -5,
+    'America/Chicago': -6,
+    'America/Denver': -7,
+    'America/Los_Angeles': -8,
+    'America/Sao_Paulo': -3,
+    'Australia/Sydney': 10,
+    'Pacific/Auckland': 12
+  };
+  
+  return timezoneMap[timezone] !== undefined ? timezoneMap[timezone] : null;
+}
+
+/**
+ * 解析ICS格式日期时间
+ * @param {string} icsDate - ICS日期时间字符串
+ * @returns {number} Unix时间戳 (秒)
  */
 function parseICSDate(icsDate) {
-  // 移除时区信息和T
-  const cleanDate = icsDate.replace(/[TZ]/g, '');
+  let value = icsDate;
+  let isAllDay = false;
+  let isUTC = false;
+  let tzId = '';
 
-  if (cleanDate.length === 8) {
-    // 只有日期,没有时间
-    const year = parseInt(cleanDate.substring(0, 4));
-    const month = parseInt(cleanDate.substring(4, 6)) - 1;
-    const day = parseInt(cleanDate.substring(6, 8));
+  // 检查是否有参数，如 VALUE=DATE 或 TZID
+  const paramMatch = icsDate.match(/^([^;]+;)?(TZID=([^:]+):)?(VALUE=DATE:)?(.*)$/i);
+  if (paramMatch) {
+    if (paramMatch[4]) { // VALUE=DATE:
+      isAllDay = true;
+    }
+    if (paramMatch[3]) { // TZID=
+      tzId = paramMatch[3];
+    }
+    value = paramMatch[5]; // 实际日期时间值
+  }
+
+  if (value.endsWith('Z')) {
+    isUTC = true;
+    value = value.slice(0, -1);
+  }
+
+  const year = parseInt(value.substring(0, 4));
+  const month = parseInt(value.substring(4, 6)) - 1;
+  const day = parseInt(value.substring(6, 8));
+  
+  if (isAllDay) {
+    // 全天事件，按本地时区处理为当天开始
     const date = new Date(year, month, day);
     return Math.floor(date.getTime() / 1000);
   }
 
-  const year = parseInt(cleanDate.substring(0, 4));
-  const month = parseInt(cleanDate.substring(4, 6)) - 1;
-  const day = parseInt(cleanDate.substring(6, 8));
-  const hours = parseInt(cleanDate.substring(8, 10));
-  const minutes = parseInt(cleanDate.substring(10, 12));
-  const seconds = parseInt(cleanDate.substring(12, 14));
+  const hours = parseInt(value.substring(9, 11)); // THHMMSS
+  const minutes = parseInt(value.substring(11, 13));
+  const seconds = parseInt(value.substring(13, 15));
 
-  const date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+  let date;
+  if (isUTC) {
+    date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+  } else if (tzId) {
+    // 对于带TZID的时间，需要将本地时间转换为UTC时间
+    const offset = getTimezoneOffset(tzId);
+    if (offset !== null) {
+      // 先构造本地时间的时间戳（当作UTC处理）
+      const localTimestamp = Date.UTC(year, month, day, hours, minutes, seconds);
+      // 减去时区偏移得到UTC时间
+      const utcTimestamp = localTimestamp - (offset * 60 * 60 * 1000);
+      date = new Date(utcTimestamp);
+    } else {
+      // 如果无法识别时区，按本地时间处理
+      date = new Date(year, month, day, hours, minutes, seconds);
+    }
+  } else {
+    // 浮动时间（没有Z也没有TZID），也按本地时间处理
+    date = new Date(year, month, day, hours, minutes, seconds);
+  }
+  
   return Math.floor(date.getTime() / 1000);
 }
 

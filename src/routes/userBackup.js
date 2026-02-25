@@ -9,8 +9,11 @@ const {
   setupUserBackupCron
 } = require('../services/userExport');
 
+// 直接读取环境变量，避免模块初始化顺序问题
+const dailyBackupLimit = parseInt(process.env.DAILY_BACKUP_LIMIT) || 0;
+
 // 获取用户备份配置
-router.get('/api/user/backup/config', async (req, res) => {
+router.get('/config', async (req, res) => {
   try {
     const config = await getUserBackupConfig(req.user);
     res.json(config);
@@ -21,9 +24,22 @@ router.get('/api/user/backup/config', async (req, res) => {
 });
 
 // 更新用户备份配置
-router.post('/api/user/backup/config', async (req, res) => {
+router.post('/config', async (req, res) => {
   try {
-    const { enabled, schedule, sendEmail, emailAddress, webdavUrl, webdavUsername, webdavPassword, includeAttachments } = req.body;
+    const {
+      enabled,
+      schedule,
+      sendEmail,
+      emailAddress,
+      webdavUrl,
+      webdavUsername,
+      webdavPassword,
+      includeAttachments,
+      includeCalendar,
+      includeTodos,
+      includeContacts,
+      includeReminders
+    } = req.body;
 
     await updateUserBackupConfig(req.user, {
       enabled: enabled === true || enabled === 'true',
@@ -33,7 +49,11 @@ router.post('/api/user/backup/config', async (req, res) => {
       webdavUrl,
       webdavUsername,
       webdavPassword,
-      includeAttachments: includeAttachments === true || includeAttachments === 'true'
+      includeAttachments: includeAttachments === true || includeAttachments === 'true',
+      includeCalendar: includeCalendar !== undefined ? (includeCalendar === true || includeCalendar === 'true') : true,
+      includeTodos: includeTodos !== undefined ? (includeTodos === true || includeTodos === 'true') : true,
+      includeContacts: includeContacts !== undefined ? (includeContacts === true || includeContacts === 'true') : true,
+      includeReminders: includeReminders !== undefined ? (includeReminders === true || includeReminders === 'true') : true
     });
 
     // 重新设置定时任务
@@ -48,7 +68,7 @@ router.post('/api/user/backup/config', async (req, res) => {
 });
 
 // 测试 WebDAV 连接
-router.post('/api/user/backup/test', async (req, res) => {
+router.post('/test', async (req, res) => {
   try {
     const { webdavUrl, webdavUsername, webdavPassword } = req.body;
 
@@ -79,7 +99,8 @@ router.post('/api/user/backup/test', async (req, res) => {
         try {
           const testDir = '/z7note-backups/test-' + Date.now();
           await client.createDirectory(testDir);
-          await client.deleteDirectory(testDir);
+          // 删除测试目录 - 使用 deleteFile 而不是 deleteDirectory
+          await client.deleteFile(testDir);
           canCreateDirectory = true;
           console.log('[WebDAV 测试] 可以在 z7note-backups 目录下创建子目录');
         } catch (e) {
@@ -111,13 +132,14 @@ router.post('/api/user/backup/test', async (req, res) => {
 });
 
 // 立即备份
-router.post('/api/user/backup/now', async (req, res) => {
+router.post('/now', async (req, res) => {
   try {
     console.log('[立即备份] 开始处理备份请求');
 
-    // 检查每日备份限制（优先使用系统配置，如果系统配置为0则不限制）
-    const dailyBackupLimit = await getSystemConfig('dailyBackupLimit');
-    const limit = parseInt(dailyBackupLimit) || config.dailyBackupLimit;
+    // 检查每日备份限制（直接使用环境变量）
+    const limit = dailyBackupLimit;
+
+    console.log(`[立即备份] 备份限制配置: ${limit} (0=不限制)`);
 
     if (limit > 0) {
       const savedConfig = await getUserBackupConfig(req.user);
@@ -133,12 +155,15 @@ router.post('/api/user/backup/now', async (req, res) => {
           return res.status(429).json({ error: '今日已备份过，每天只能备份一次' });
         }
       }
+    } else {
+      console.log(`[立即备份] 备份限制已禁用，允许无限次备份`);
     }
 
     // 优先使用请求体中的配置（允许一次性覆盖）
     let config = req.body;
     if (!config || !config.webdavUrl) {
       // 如果请求体中没有配置，则从数据库获取保存的配置
+      const savedConfig = await getUserBackupConfig(req.user);
       config = savedConfig;
     }
 
@@ -153,6 +178,10 @@ router.post('/api/user/backup/now', async (req, res) => {
       webdavUsername: config.webdavUsername,
       webdavPassword: config.webdavPassword,
       includeAttachments: config.includeAttachments !== undefined ? config.includeAttachments : true,
+      includeCalendar: config.includeCalendar !== undefined ? config.includeCalendar : true,
+      includeTodos: config.includeTodos !== undefined ? config.includeTodos : true,
+      includeContacts: config.includeContacts !== undefined ? config.includeContacts : true,
+      includeReminders: config.includeReminders !== undefined ? config.includeReminders : true,
       sendEmail: config.sendEmail !== undefined ? config.sendEmail : false,
       emailAddress: config.emailAddress || null
     };

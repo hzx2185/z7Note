@@ -69,8 +69,8 @@ router.post('/import', async (req, res) => {
         // 创建事件
         const id = event.id || Date.now().toString(36) + Math.random().toString(36).slice(2);
         await getConnection().run(
-          `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, noteId, recurrence, reminderEmail, reminderBrowser, reminderCaldav, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, noteId, recurrence, recurrenceEnd, reminderEmail, reminderBrowser, reminderCaldav, timezone, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             req.user,
@@ -82,9 +82,11 @@ router.post('/import', async (req, res) => {
             event.color || '#2563eb',
             null,
             event.recurrence ? JSON.stringify(event.recurrence) : null,
+            event.recurrenceEnd || null,
             event.reminderEmail ? 1 : 0,
             event.reminderBrowser ? 1 : 0,
             event.reminderCaldav ? 1 : 0,
+            event.timezone || null,
             Math.floor(Date.now() / 1000),
             Math.floor(Date.now() / 1000)
           ]

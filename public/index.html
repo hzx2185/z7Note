@@ -516,13 +516,44 @@
                     <!-- 备份选项 -->
                     <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px;">
                         <h3 style="font-size:13px;margin:0 0 8px 0;color:var(--accent);">备份选项</h3>
-                        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                            <input type="checkbox" id="backup-include-attachments" style="width:auto;" checked>
-                            <span style="font-size:13px;">包含附件</span>
-                            <input type="checkbox" id="backup-send-email" style="width:auto;margin-left:16px;" checked>
-                            <span style="font-size:13px;">邮件通知</span>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input type="checkbox" id="backup-include-attachments" style="width:auto;" checked>
+                                <span style="font-size:13px;">包含附件</span>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input type="checkbox" id="backup-send-email" style="width:auto;" checked>
+                                <span style="font-size:13px;">邮件通知</span>
+                            </div>
                         </div>
-                        <input type="email" id="backup-email-address" placeholder="your@email.com" autocomplete="email" style="padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
+                    </div>
+
+                    <!-- 数据类型选择 -->
+                    <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px;">
+                        <h3 style="font-size:13px;margin:0 0 8px 0;color:var(--accent);">数据类型</h3>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input type="checkbox" id="backup-include-calendar" style="width:auto;" checked>
+                                <span style="font-size:13px;">📅 日历事件</span>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input type="checkbox" id="backup-include-todos" style="width:auto;" checked>
+                                <span style="font-size:13px;">✓ 待办事项</span>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input type="checkbox" id="backup-include-contacts" style="width:auto;" checked>
+                                <span style="font-size:13px;">👤 联系人</span>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <input type="checkbox" id="backup-include-reminders" style="width:auto;" checked>
+                                <span style="font-size:13px;">🔔 提醒设置</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 邮件配置 -->
+                    <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:12px;">
+                        <input type="email" id="backup-email-address" placeholder="your@email.com" autocomplete="email" style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;">
                     </div>
 
                     <!-- 操作按钮 -->

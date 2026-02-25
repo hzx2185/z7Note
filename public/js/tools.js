@@ -685,6 +685,10 @@ async function loadBackupConfig() {
             'backup-webdav-username': { type: 'value', value: config.webdavUsername || '' },
             'backup-webdav-password': { type: 'value', value: config.webdavPassword || '' },
             'backup-include-attachments': { type: 'checkbox', value: config.includeAttachments },
+            'backup-include-calendar': { type: 'checkbox', value: config.includeCalendar },
+            'backup-include-todos': { type: 'checkbox', value: config.includeTodos },
+            'backup-include-contacts': { type: 'checkbox', value: config.includeContacts },
+            'backup-include-reminders': { type: 'checkbox', value: config.includeReminders },
             'backup-send-email': { type: 'checkbox', value: config.sendEmail },
             'backup-email-address': { type: 'value', value: config.emailAddress || '' }
         };
@@ -761,13 +765,19 @@ async function saveBackupConfig(event) {
     const webdavUsernameEl = document.getElementById('backup-webdav-username');
     const webdavPasswordEl = document.getElementById('backup-webdav-password');
     const includeAttachmentsEl = document.getElementById('backup-include-attachments');
+    const includeCalendarEl = document.getElementById('backup-include-calendar');
+    const includeTodosEl = document.getElementById('backup-include-todos');
+    const includeContactsEl = document.getElementById('backup-include-contacts');
+    const includeRemindersEl = document.getElementById('backup-include-reminders');
     const sendEmailEl = document.getElementById('backup-send-email');
     const emailAddressEl = document.getElementById('backup-email-address');
 
     // 检查元素是否存在
 
     if (!enabledEl || !scheduleEl || !webdavUrlEl || !webdavUsernameEl ||
-        !webdavPasswordEl || !includeAttachmentsEl || !sendEmailEl || !emailAddressEl) {
+        !webdavPasswordEl || !includeAttachmentsEl || !includeCalendarEl ||
+        !includeTodosEl || !includeContactsEl || !includeRemindersEl ||
+        !sendEmailEl || !emailAddressEl) {
         ui.showToast('表单元素未找到', false);
         return;
     }
@@ -779,6 +789,10 @@ async function saveBackupConfig(event) {
         webdavUsername: webdavUsernameEl.value.trim(),
         webdavPassword: webdavPasswordEl.value,
         includeAttachments: includeAttachmentsEl.checked,
+        includeCalendar: includeCalendarEl.checked,
+        includeTodos: includeTodosEl.checked,
+        includeContacts: includeContactsEl.checked,
+        includeReminders: includeRemindersEl.checked,
         sendEmail: sendEmailEl.checked,
         emailAddress: emailAddressEl.value.trim()
     };
@@ -979,6 +993,10 @@ async function backupNow() {
             webdavUsername: document.getElementById('backup-webdav-username').value,
             webdavPassword: document.getElementById('backup-webdav-password').value,
             includeAttachments: document.getElementById('backup-include-attachments').checked,
+            includeCalendar: document.getElementById('backup-include-calendar').checked,
+            includeTodos: document.getElementById('backup-include-todos').checked,
+            includeContacts: document.getElementById('backup-include-contacts').checked,
+            includeReminders: document.getElementById('backup-include-reminders').checked,
             sendEmail: document.getElementById('backup-send-email').checked,
             emailAddress: document.getElementById('backup-email-address').value
         };
@@ -989,6 +1007,10 @@ async function backupNow() {
             webdavUsername: formOverrides.webdavUsername || savedConfig.webdavUsername,
             webdavPassword: formOverrides.webdavPassword || savedConfig.webdavPassword,
             includeAttachments: formOverrides.includeAttachments !== undefined ? formOverrides.includeAttachments : savedConfig.includeAttachments,
+            includeCalendar: formOverrides.includeCalendar !== undefined ? formOverrides.includeCalendar : savedConfig.includeCalendar,
+            includeTodos: formOverrides.includeTodos !== undefined ? formOverrides.includeTodos : savedConfig.includeTodos,
+            includeContacts: formOverrides.includeContacts !== undefined ? formOverrides.includeContacts : savedConfig.includeContacts,
+            includeReminders: formOverrides.includeReminders !== undefined ? formOverrides.includeReminders : savedConfig.includeReminders,
             sendEmail: formOverrides.sendEmail !== undefined ? formOverrides.sendEmail : savedConfig.sendEmail,
             emailAddress: formOverrides.emailAddress || savedConfig.emailAddress
         };

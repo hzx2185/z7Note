@@ -180,6 +180,7 @@ app.use('/api/calendar-subscriptions', calendarSubscriptionsRoutes);
 app.use('/api/reminders', remindersRoutes);
 app.use('/api/2fa', tfaRoutes);
 app.use('/api/contacts', contactsRoutes);
+app.use('/api/user/backup', auth, userBackupRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {

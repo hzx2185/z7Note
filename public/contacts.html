@@ -2,776 +2,359 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
   <title>联系人 - z7Note</title>
-  <link rel="stylesheet" href="/css/variables.css">
   <link rel="stylesheet" href="/css/app.css">
   <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; overflow: auto; }
+    :root { --row-h: 32px; }
+    body { background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
+    .header { height: 40px; padding: 0 8px; flex-shrink: 0; background: var(--side); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 4px; gap: 4px; }
+    .toolbar { display: flex; gap: 4px; align-items: center; background: var(--side); padding: 4px; border-radius: 4px; border: 1px solid var(--border); }
+    .search-input { flex: 1; height: 26px; padding: 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); outline: none; font-size: 12px; }
+    
+    .table-container { flex: 1; background: var(--side); border: 1px solid var(--border); border-radius: 4px; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th { position: sticky; top: 0; background: var(--side); z-index: 10; text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); color: var(--gray); font-size: 12px; }
+    td { padding: 2px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: var(--row-h); }
+    tr:hover { background: rgba(128,128,128,0.05); cursor: pointer; }
+    tr.selected { background: rgba(37,99,235,0.1); }
+    
+    .col-cb { width: 28px; text-align: center; }
+    .col-name { width: 80px; color: var(--accent); font-weight: 500; }
+    .col-tel { width: 100px; }
+    .col-email { width: 130px; }
+    .col-org { width: 90px; }
+    
+    @media (max-width: 600px) { .col-org, .col-email { display: none; } .col-tel { width: auto; } .header b span { display: none; } }
 
-    .contacts-app { display: flex; flex-direction: column; height: 100vh; }
+    .modal-content { max-width: 360px; }
+    .form-group { margin-bottom: 6px; }
+    .form-group label { font-size: 11px; color: var(--gray); display: block; margin-bottom: 2px; }
+    input, textarea, select { width: 100%; padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; }
+    
+    .multi-item { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
+    .multi-item select { width: 65px; flex-shrink: 0; height: 26px; font-size: 11px; padding: 0 4px; }
+    .multi-item input { flex: 1; height: 26px; font-size: 12px; }
+    
+    .modal-actions-full { display: flex; gap: 8px; padding: 10px 0 0; }
+    .modal-actions-full .btn { flex: 1; min-height: 32px; font-size: 13px; border-radius: 4px; }
+    .btn-xs { padding: 2px 6px; font-size: 11px; height: 24px; min-width: auto; border-radius: 3px; }
+    .tool-btn { min-width: auto; padding: 0 6px; height: 28px; font-size: 12px; }
 
-    /* 顶部导航 */
-    .contacts-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 16px;
-      background: var(--bg-secondary, #f5f5f5);
-      border-bottom: 1px solid var(--border-color, #ddd);
-    }
-
-    .contacts-nav-left, .contacts-nav-right { display: flex; align-items: center; gap: 8px; }
-    .contacts-title { font-size: 16px; font-weight: 600; }
-
-    .search-input {
-      padding: 6px 10px;
-      border: 1px solid var(--border-color, #ddd);
-      border-radius: 4px;
-      width: 180px;
-      font-size: 13px;
-      background: var(--bg);
-      color: var(--text);
-    }
-
-    /* 主体区域 */
-    .contacts-main { display: flex; flex: 1; overflow: hidden; }
-
-    /* 联系人列表 */
-    .contacts-list {
-      width: 260px;
-      border-right: 1px solid var(--border-color, #ddd);
-      overflow-y: auto;
-      background: #fff;
-    }
-
-    .contact-item {
-      display: flex;
-      align-items: center;
-      padding: 8px 12px;
-      cursor: pointer;
-      border-bottom: 1px solid var(--border-color, #eee);
-      transition: background 0.2s;
-    }
-
-    .contact-item:hover { background: var(--bg-hover, #f0f0f0); }
-    .contact-item.active { background: var(--bg-active, #e3f2fd); }
-
-    .contact-avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: var(--primary-color, #2563eb);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      font-size: 14px;
-      margin-right: 10px;
-      flex-shrink: 0;
-    }
-
-    .contact-info { flex: 1; min-width: 0; }
-    .contact-name { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .contact-org { font-size: 11px; color: var(--text-secondary, #666); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    /* 联系人详情 */
-    .contact-detail {
-      flex: 1;
-      padding: 16px;
-      overflow-y: auto;
-      background: #fff;
-    }
-
-    .detail-header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border-color, #eee);
-    }
-
-    .detail-avatar {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      background: var(--primary-color, #2563eb);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      font-weight: 600;
-      margin-right: 16px;
-    }
-
-    .detail-title { flex: 1; }
-    .detail-name { font-size: 20px; font-weight: 600; margin-bottom: 2px; }
-    .detail-org { font-size: 13px; color: var(--text-secondary, #666); }
-    .detail-actions { display: flex; gap: 6px; }
-
-    .detail-section { margin-bottom: 16px; }
-    .detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-secondary, #666); margin-bottom: 8px; text-transform: uppercase; }
-
-    .detail-row { display: flex; align-items: center; padding: 4px 0; }
-    .detail-label { width: 60px; color: var(--text-secondary, #666); font-size: 13px; }
-    .detail-value { flex: 1; font-size: 13px; }
-    .detail-value a { color: var(--primary-color, #2563eb); text-decoration: none; }
-    .detail-value a:hover { text-decoration: underline; }
-
-    /* 空状态 */
-    .empty-state {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--text-secondary, #666);
-    }
-
-    .empty-icon { font-size: 36px; margin-bottom: 12px; }
-    .empty-text { font-size: 14px; }
-
-    /* 电话/邮箱列表 */
-    .multi-input-list { margin-bottom: 6px; }
-    .multi-input-item { display: flex; gap: 6px; margin-bottom: 6px; }
-    .multi-input-item select { width: 80px; }
-    .multi-input-item input { flex: 1; }
-    .multi-input-item button { padding: 6px 10px; }
-
-    .add-item-btn {
-      background: none;
-      border: 1px dashed var(--border-color, #ddd);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      color: var(--text-secondary, #666);
-      width: 100%;
-      font-size: 13px;
-    }
-    .add-item-btn:hover { border-color: var(--primary-color, #2563eb); color: var(--primary-color, #2563eb); }
-
-    /* 返回按钮 */
-    .back-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 13px;
-      color: var(--text-secondary, #666);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .back-btn:hover { color: var(--primary-color, #2563eb); }
-
-    /* 模态框样式 - 覆盖全局样式 */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: none;
-      justify-content: center;
-      align-items: flex-start;
-      padding-top: 5vh;
-      z-index: 10000;
-      overflow-y: auto;
-    }
-    .modal-overlay.show { display: flex !important; }
-
-    /* 覆盖 base.css 中的 .modal 样式 */
-    .modal-overlay > .modal {
-      display: block !important;
-      position: relative !important;
-      inset: auto !important;
-      z-index: auto !important;
-      background: var(--bg, #fff) !important;
-      padding: 12px;
-      border-radius: 6px;
-      width: 380px;
-      max-width: 94vw;
-      max-height: 85vh;
-      overflow-y: auto;
-      box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.3);
-      margin-bottom: 5vh;
-    }
-
-    .modal-overlay .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      padding: 0;
-      border: none;
-      background: transparent;
-    }
-
-    .modal-overlay .modal-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text, #333);
-      margin: 0;
-    }
-
-    .modal-overlay .modal-close {
-      background: none;
-      border: none;
-      color: var(--text-secondary, #666);
-      cursor: pointer;
-      font-size: 18px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      line-height: 1;
-    }
-    .modal-overlay .modal-close:hover { background: var(--bg-secondary, #f0f0f0); }
-
-    .modal-overlay .modal-body { font-size: 13px; padding: 0; }
-
-    .modal-overlay .modal-footer {
-      display: flex !important;
-      justify-content: flex-end;
-      gap: 6px;
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid var(--border-color, #ddd);
-    }
-
-    .form-group { margin-bottom: 8px; }
-    .form-label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 4px; color: var(--text-secondary, #666); }
-    .form-input, .form-textarea {
-      width: 100%;
-      padding: 6px 8px;
-      border: 1px solid var(--border-color, #ddd);
-      border-radius: 4px;
-      font-size: 13px;
-      background: var(--bg);
-      color: var(--text);
-    }
-    .form-textarea { min-height: 60px; resize: vertical; }
-    .form-row { display: flex; gap: 8px; }
-    .form-row .form-group { flex: 1; }
-
-    /* 暗色主题 */
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg-primary: #1a1a1a;
-        --bg-secondary: #2d2d2d;
-        --bg-hover: #3d3d3d;
-        --bg-active: #1e3a5f;
-        --text-primary: #e5e5e5;
-        --text-secondary: #999;
-        --border-color: #444;
-      }
-      .contacts-list, .contact-detail, .contacts-header { background: var(--bg); }
-    }
-
-    /* 移动端响应式 */
-    @media (max-width: 768px) {
-      .contacts-header { flex-wrap: wrap; padding: 8px; }
-      .contacts-nav-left { width: 100%; justify-content: space-between; margin-bottom: 8px; }
-      .contacts-nav-right { width: 100%; flex-wrap: wrap; gap: 6px; }
-      .search-input { width: 100%; order: -1; margin-bottom: 6px; }
-      .contacts-nav-right .btn { flex: 1; min-width: 50px; font-size: 12px; padding: 6px 8px; }
-      .contacts-main { flex-direction: column; }
-      .contacts-list { width: 100%; height: 40vh; border-right: none; border-bottom: 1px solid var(--border-color, #ddd); }
-      .contact-detail { height: 60vh; padding: 12px; }
-      .detail-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-      .detail-actions { width: 100%; justify-content: space-between; }
-      .detail-actions .btn { flex: 1; }
-      .multi-input-item { flex-direction: column; }
-      .multi-input-item select { width: 100%; }
-    }
+    /* 查重表头与行对齐 */
+    .dup-group { padding: 4px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; background: var(--bg); }
+    .dup-row { display: flex; align-items: center; gap: 4px; padding: 4px 0; font-size: 11px; color: var(--text); }
+    .dup-row:not(:last-child) { border-bottom: 1px solid rgba(128,128,128,0.05); }
+    .dup-header { color: var(--gray); font-weight: 500; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px; }
+    
+    .dup-col-sel { width: 24px; flex-shrink: 0; text-align: center; }
+    .dup-col-name { width: 60px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dup-col-info { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hl { color: var(--accent); font-weight: bold; }
   </style>
 </head>
 <body>
-  <div class="contacts-app">
-    <!-- 顶部导航 -->
-    <div class="contacts-header">
-      <div class="contacts-nav-left">
-        <button class="back-btn" onclick="location.href='/'">← 返回</button>
-        <span class="contacts-title">联系人</span>
-      </div>
-      <div class="contacts-nav-right">
-        <input type="text" class="search-input" id="search-input" placeholder="搜索联系人...">
-        <button class="btn btn-secondary" id="import-btn">📥 导入</button>
-        <button class="btn btn-secondary" id="export-btn">📤 导出</button>
-        <button class="btn btn-primary" id="add-btn">➕ 添加</button>
-      </div>
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:6px">
+      <button onclick="location.href='/'" class="tool-btn">☰</button>
+      <b style="font-size:14px">联系人 <span id="count-info" style="font-weight:normal;color:var(--gray);font-size:11px"></span></b>
     </div>
-
-    <!-- 主体区域 -->
-    <div class="contacts-main">
-      <div class="contacts-list" id="contacts-list"></div>
-      <div class="contact-detail" id="contact-detail">
-        <div class="empty-state">
-          <div class="empty-icon">👤</div>
-          <div class="empty-text">选择联系人查看详情</div>
-        </div>
-      </div>
+    <div style="display:flex;gap:3px">
+      <button class="tool-btn" style="color:var(--red)" onclick="batchDelete()">删除</button>
+      <button class="tool-btn" style="color:var(--accent)" onclick="batchMerge()">合并</button>
+      <button class="tool-btn" onclick="openModal()">添加</button>
+      <button class="tool-btn" onclick="$('import-modal').classList.add('show')">导入</button>
+      <button class="tool-btn" onclick="location.href='/api/contacts/export'">导出</button>
+      <button class="tool-btn" onclick="smartFindDuplicates()">查重</button>
     </div>
   </div>
 
-  <!-- 添加/编辑模态框 -->
-  <div class="modal-overlay" id="contact-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 class="modal-title" id="modal-title">添加联系人</h3>
-        <button class="modal-close" id="modal-close">×</button>
+  <div class="main">
+    <div class="toolbar">
+      <input type="text" class="search-input" id="search-input" placeholder="搜索姓名、电话、邮箱..." oninput="onSearch()">
+      <div id="pagination" style="display:none;gap:4px;align-items:center">
+        <button class="tool-btn btn-xs" onclick="changePage(-1)">‹</button>
+        <span id="page-info" style="font-size:11px;color:var(--gray)"></span>
+        <button class="tool-btn btn-xs" onclick="changePage(1)">›</button>
       </div>
-      <form id="contact-form">
-        <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">姓</label>
-              <input type="text" class="form-input" name="n_family" placeholder="姓">
-            </div>
-            <div class="form-group">
-              <label class="form-label">名 *</label>
-              <input type="text" class="form-input" name="n_given" placeholder="名" required>
-            </div>
-          </div>
+    </div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-cb"><input type="checkbox" id="sel-all" onclick="toggleAll(this.checked)"></th>
+            <th class="col-name">姓名</th><th class="col-tel">电话</th><th class="col-email">邮箱</th><th class="col-org">公司</th>
+          </tr>
+        </thead>
+        <tbody id="list"></tbody>
+      </table>
+    </div>
+  </div>
 
-          <div class="form-group">
-            <label class="form-label">全名 *</label>
-            <input type="text" class="form-input" name="fn" placeholder="全名" required>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">电话</label>
-            <div class="multi-input-list" id="tel-list"></div>
-            <button type="button" class="add-item-btn" onclick="addTelItem()">+ 添加电话</button>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">邮箱</label>
-            <div class="multi-input-list" id="email-list"></div>
-            <button type="button" class="add-item-btn" onclick="addEmailItem()">+ 添加邮箱</button>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">公司</label>
-              <input type="text" class="form-input" name="org" placeholder="公司">
-            </div>
-            <div class="form-group">
-              <label class="form-label">职位</label>
-              <input type="text" class="form-input" name="title" placeholder="职位">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">网址</label>
-            <input type="url" class="form-input" name="url" placeholder="https://">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">生日</label>
-            <input type="date" class="form-input" name="bday">
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">备注</label>
-            <textarea class="form-textarea" name="note" placeholder="备注信息"></textarea>
-          </div>
+  <!-- 编辑 -->
+  <div class="modal" id="edit-modal">
+    <div class="modal-content">
+      <div class="modal-header"><h3 id="modal-title">联系人</h3><button onclick="closeModal()">×</button></div>
+      <form id="contact-form" onsubmit="saveContact(event)" class="modal-body">
+        <div style="display:flex;gap:6px">
+          <div class="form-group" style="flex:2"><label>名*</label><input name="n_given" required></div>
+          <div class="form-group" style="flex:1"><label>姓</label><input name="n_family"></div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" id="modal-cancel">取消</button>
+        <div class="form-group"><label>全名*</label><input name="fn" id="fn-input" required></div>
+        <div class="form-group"><label>电话</label><div id="tel-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('tel')">+ 添加号码</button></div>
+        <div class="form-group"><label>邮箱</label><div id="email-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('email')">+ 添加邮箱</button></div>
+        <div style="display:flex;gap:6px">
+          <div class="form-group"><label>公司</label><input name="org"></div>
+          <div class="form-group"><label>职位</label><input name="title"></div>
+        </div>
+        <div class="modal-actions-full">
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+          <button type="button" class="btn btn-secondary" id="history-btn" onclick="showHistory()" style="display:none">历史</button>
           <button type="submit" class="btn btn-primary">保存</button>
         </div>
+        <button type="button" class="btn btn-xs" style="width:100%;margin-top:10px;color:var(--red);background:none;border:none" id="del-contact-btn" onclick="deleteSingle()">删除此联系人</button>
       </form>
     </div>
   </div>
 
-  <!-- 导入模态框 -->
-  <div class="modal-overlay" id="import-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 class="modal-title">导入联系人</h3>
-        <button class="modal-close" id="import-modal-close">×</button>
-      </div>
+  <!-- 导入 -->
+  <div class="modal" id="import-modal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>导入</h3><button onclick="$('import-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label">vCard 内容</label>
-          <textarea class="form-textarea" id="vcard-content" placeholder="粘贴 vCard 内容..." style="min-height: 120px;"></textarea>
-        </div>
-        <p style="font-size: 11px; color: var(--text-secondary, #666); margin: 6px 0;">
-          支持粘贴 vCard 格式或上传 .vcf 文件
-        </p>
-        <input type="file" id="vcf-file" accept=".vcf">
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="import-cancel">取消</button>
-        <button type="button" class="btn btn-primary" id="import-confirm">导入</button>
+        <textarea id="vcard-text" placeholder="粘贴 vCard 内容..." rows="5" style="font-family:monospace;font-size:11px"></textarea>
+        <input type="file" accept=".vcf" onchange="readVcf(this)" style="margin-top:6px;font-size:11px">
+        <div class="modal-actions-full"><button class="btn btn-primary" onclick="doImport()">开始导入</button></div>
       </div>
     </div>
   </div>
 
-  <!-- 确认删除模态框 -->
-  <div class="modal-overlay" id="confirm-modal">
-    <div class="modal" style="width: 320px;">
-      <div class="modal-header">
-        <h3 class="modal-title">确认删除</h3>
-        <button class="modal-close" id="confirm-modal-close">×</button>
-      </div>
+  <!-- 查重 -->
+  <div class="modal" id="dup-modal">
+    <div class="modal-content" style="max-width:440px">
+      <div class="modal-header"><h3>清理重复</h3><button onclick="$('dup-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <p id="confirm-message" style="margin: 0; line-height: 1.5;"></p>
+        <!-- 批量合并表头 -->
+        <div class="dup-row dup-header" style="padding-left:4px">
+          <div class="dup-col-sel" title="勾选组进行合并"><input type="checkbox" id="dup-sel-all" checked onclick="toggleAllDups(this.checked)"></div>
+          <div class="dup-col-sel" title="选择保留哪一行">留</div>
+          <div class="dup-col-name">姓名</div>
+          <div class="dup-col-info">电话 / 邮箱</div>
+        </div>
+        <div id="dup-list" style="max-height:60vh;overflow-y:auto"></div>
+        <div class="modal-actions-full">
+          <button class="btn btn-secondary" onclick="$('dup-modal').classList.remove('show')">取消</button>
+          <button class="btn btn-primary" onclick="batchMergeGroups()">合并选中组</button>
+        </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="confirm-cancel">取消</button>
-        <button type="button" class="btn btn-danger" id="confirm-ok">删除</button>
+    </div>
+  </div>
+
+  <!-- 历史记录 -->
+  <div class="modal" id="history-modal">
+    <div class="modal-content" style="max-width:440px">
+      <div class="modal-header"><h3>修改历史</h3><button onclick="$('history-modal').classList.remove('show')">×</button></div>
+      <div class="modal-body">
+        <div id="history-list" style="max-height:60vh;overflow-y:auto"></div>
+        <div class="modal-actions-full">
+          <button class="btn btn-secondary" onclick="$('history-modal').classList.remove('show')">关闭</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    let contacts = [];
-    let currentContact = null;
-    let editingId = null;
-    let confirmCallback = null;
+    const $ = id => document.getElementById(id);
+    const esc = t => (t||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = 100, total = 0, query = '', currentDups = [];
 
-    // 加载联系人列表
-    async function loadContacts(search = '') {
-      try {
-        const url = search ? `/api/contacts?search=${encodeURIComponent(search)}` : '/api/contacts';
-        const res = await fetch(url, { credentials: 'same-origin' });
+    if (localStorage.getItem('p-theme') === 'dark') document.documentElement.classList.add('dark-mode');
 
-        if (!res.ok) {
-          if (res.status === 401) {
-            contacts = [];
-            renderContactsList();
-            document.getElementById('contact-detail').innerHTML = `
-              <div class="empty-state">
-                <div class="empty-icon">🔒</div>
-                <div class="empty-text">请先登录</div>
-                <a href="/login.html" style="margin-top: 8px; color: var(--accent, #2563eb);">去登录</a>
-              </div>
-            `;
-            return;
-          }
-          throw new Error('加载失败');
+    async function load() {
+      const res = await fetch(`/api/contacts?limit=${pageSize}&offset=${(page-1)*pageSize}${query?`&search=${encodeURIComponent(query)}`:''}`);
+      const data = await res.json();
+      contacts = data.contacts || []; total = data.total || 0; render();
+    }
+
+    function render() {
+      $('list').innerHTML = contacts.map(c => {
+        let tels = [], emails = []; try { tels = JSON.parse(c.tel||'[]'); emails = JSON.parse(c.email||'[]'); } catch(e){}
+        const tel = tels[0]?.value || ''; const email = emails[0]?.value || '';
+        return `<tr class="${selected.has(c.id)?'selected':''}" onclick="onRowClick('${c.id}', event)">
+          <td class="col-cb" onclick="event.stopPropagation()"><input type="checkbox" ${selected.has(c.id)?'checked':''} onchange="toggleSel('${c.id}', this.checked)"></td>
+          <td class="col-name">${esc(c.fn||'未命名')}</td>
+          <td class="col-tel">${esc(tel)}</td>
+          <td class="col-email">${esc(email)}</td>
+          <td class="col-org">${esc(c.org||'-')}</td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>';
+      $('count-info').textContent = `(${total}${selected.size?`/选${selected.size}`:''})`;
+      $('pagination').style.display = total > pageSize ? 'flex' : 'none';
+      $('page-info').textContent = `${page}/${Math.ceil(total/pageSize)}`;
+    }
+
+    function onSearch() { clearTimeout(this.t); this.t = setTimeout(() => { query = $('search-input').value; page = 1; load(); }, 300); }
+    function changePage(d) { if (page+d > 0 && page+d <= Math.ceil(total/pageSize)) { page += d; load(); } }
+    function toggleSel(id, checked) { checked ? selected.add(id) : selected.delete(id); render(); }
+    function toggleAll(checked) { contacts.forEach(c => checked ? selected.add(c.id) : selected.delete(c.id)); render(); }
+    function onRowClick(id, e) { if (e.target.tagName !== 'INPUT') openModal(id); }
+
+    function openModal(id = null) {
+      curId = id; const f = $('contact-form'); f.reset(); $('tel-list').innerHTML = ''; $('email-list').innerHTML = '';
+      $('modal-title').textContent = id ? '编辑联系人' : '添加联系人';
+      $('del-contact-btn').style.display = id ? 'block' : 'none';
+      $('history-btn').style.display = id ? 'block' : 'none';
+      if (id) {
+        const c = contacts.find(x => x.id === id);
+        if (c) {
+          ['n_family','n_given','fn','org','title'].forEach(k => f[k].value = c[k]||'');
+          try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
+          try { JSON.parse(c.email||'[]').forEach(m => addItem('email', m.type, m.value)); } catch(e){}
         }
+      } else addItem('tel', 'CELL');
+      $('edit-modal').classList.add('show');
+    }
+    function closeModal() { $('edit-modal').classList.remove('show'); }
 
-        contacts = await res.json();
-        renderContactsList();
-      } catch (e) {
-        console.error('加载联系人失败', e);
-        contacts = [];
-        renderContactsList();
-      }
+    function addItem(k, type = '', val = '') {
+      const d = document.createElement('div'); d.className = 'multi-item';
+      const os = k === 'tel' ? [['CELL','手机'],['WORK','工作'],['HOME','住宅']] : [['INTERNET','邮箱'],['WORK','工作'],['HOME','个人']];
+      d.innerHTML = `<select>${os.map(o => `<option value="${o[0]}" ${type===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
+        <input type="${k==='tel'?'tel':'email'}" value="${esc(val)}" placeholder="${k==='tel'?'号码':'邮箱'}">
+        <button type="button" class="tool-btn" onclick="this.parentElement.remove()">×</button>`;
+      $(k + '-list').appendChild(d);
     }
 
-    // 渲染联系人列表
-    function renderContactsList() {
-      const list = document.getElementById('contacts-list');
+    async function saveContact(e) {
+      e.preventDefault(); const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
+      data.tel = [...$('tel-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
+      data.email = [...$('email-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
+      const res = await fetch(curId?`/api/contacts/${curId}`:`/api/contacts`,{method:curId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      if (res.ok) { closeModal(); load(); }
+    }
 
-      if (!contacts.length) {
-        list.innerHTML = '<div class="empty-state" style="height: 100%;"><div class="empty-icon">👤</div><div class="empty-text">暂无联系人</div></div>';
-        return;
-      }
+    async function deleteSingle() { if (confirm('确定删除此联系人?')) { await fetch(`/api/contacts/${curId}`,{method:'DELETE'}); closeModal(); load(); } }
+    async function batchDelete() { 
+      if (!selected.size) return alert('请先选择要删除的联系人');
+      if (confirm(`确定删除选中的 ${selected.size} 个联系人?`)) { await fetch('/api/contacts/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})}); selected.clear(); load(); } 
+    }
+    async function batchMerge() { 
+      if (selected.size < 2) return alert('请至少选择两个联系人进行合并');
+      if (confirm(`确定合并选中的 ${selected.size} 个联系人?`)) { const ids=[...selected]; await fetch('/api/contacts/merge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keepId:ids[0],mergeIds:ids.slice(1)})}); selected.clear(); load(); }
+    }
 
-      list.innerHTML = contacts.map(c => `
-        <div class="contact-item ${currentContact?.id === c.id ? 'active' : ''}" onclick="selectContact('${c.id}')">
-          <div class="contact-avatar">${getInitial(c.fn || c.n_given || '?')}</div>
-          <div class="contact-info">
-            <div class="contact-name">${escapeHtml(c.fn || '未命名')}</div>
-            <div class="contact-org">${escapeHtml(c.org || '')}</div>
+    function readVcf(i) { const f = i.files[0]; if (f) { const r = new FileReader(); r.onload = e => $('vcard-text').value = e.target.result; r.readAsText(f); } }
+    async function doImport() { const v = $('vcard-text').value; if (v.trim()) { const res = await fetch('/api/contacts/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vcard:v})}); if (res.ok) { $('import-modal').classList.remove('show'); $('vcard-text').value=''; load(); } } }
+
+    async function smartFindDuplicates() {
+      const data = await (await fetch('/api/contacts/smart-duplicates')).json();
+      currentDups = [...data.duplicates.byName, ...data.duplicates.byPhone, ...data.duplicates.byEmail];
+      $('dup-list').innerHTML = currentDups.map((g, i) => {
+        return `<div class="dup-group">
+          <div class="dup-row" style="background:rgba(128,128,128,0.03);font-weight:bold">
+            <div class="dup-col-sel"><input type="checkbox" class="dup-group-cb" checked></div>
+            <div class="dup-col-sel"></div>
+            <div colspan="2" style="flex:1;color:var(--accent)">原因: ${g.field} 重复 (${esc(g.value)})</div>
           </div>
-        </div>
-      `).join('');
+          ${g.contacts.map((c, ci) => {
+            let tel = '', email = '';
+            try { 
+              const tels = JSON.parse(c.tel||'[]'); tel = tels[0]?.value || '';
+              const emails = JSON.parse(c.email||'[]'); email = emails[0]?.value || '';
+            } catch(e){}
+            const info = tel + (tel && email ? ' / ' : '') + email;
+            const isMatch = (g.type==='name'&&c.fn===g.value) || (g.type==='phone'&&tel===g.value) || (g.type==='email'&&email===g.value);
+
+            return `<div class="dup-row">
+              <div class="dup-col-sel"></div>
+              <div class="dup-col-sel"><input type="radio" name="keep_${i}" value="${c.id}" ${ci===0?'checked':''}></div>
+              <div class="dup-col-name">${esc(c.fn)}</div>
+              <div class="dup-col-info ${isMatch?'hl':''}">${esc(info)}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">未发现明显重复</div>';
+      $('dup-modal').classList.add('show');
     }
 
-    // 选择联系人
-    async function selectContact(id) {
-      try {
-        const res = await fetch(`/api/contacts/${id}`, { credentials: 'same-origin' });
-        currentContact = await res.json();
-        renderContactDetail();
-        renderContactsList();
-      } catch (e) {
-        console.error('加载联系人详情失败', e);
-      }
-    }
+    function toggleAllDups(c) { document.querySelectorAll('.dup-group-cb').forEach(cb => cb.checked = c); }
 
-    // 渲染联系人详情
-    function renderContactDetail() {
-      const detail = document.getElementById('contact-detail');
-      const c = currentContact;
-
-      if (!c) {
-        detail.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">选择联系人查看详情</div></div>';
-        return;
-      }
-
-      let tels = [], emails = [];
-      try { tels = JSON.parse(c.tel || '[]'); } catch(e) {}
-      try { emails = JSON.parse(c.email || '[]'); } catch(e) {}
-
-      detail.innerHTML = `
-        <div class="detail-header">
-          <div class="detail-avatar">${getInitial(c.fn || c.n_given || '?')}</div>
-          <div class="detail-title">
-            <div class="detail-name">${escapeHtml(c.fn || '未命名')}</div>
-            <div class="detail-org">${escapeHtml(c.org || '')}${c.title ? ' · ' + escapeHtml(c.title) : ''}</div>
-          </div>
-          <div class="detail-actions">
-            <button class="btn btn-secondary" onclick="editContact()">编辑</button>
-            <button class="btn btn-secondary" onclick="exportContact()">导出</button>
-            <button class="btn btn-danger" onclick="deleteContact()">删除</button>
-          </div>
-        </div>
-        ${tels.length ? `<div class="detail-section"><div class="detail-section-title">电话</div>${tels.map(t => `<div class="detail-row"><div class="detail-label">${escapeHtml(t.type || '电话')}</div><div class="detail-value"><a href="tel:${escapeHtml(t.value)}">${escapeHtml(t.value)}</a></div></div>`).join('')}</div>` : ''}
-        ${emails.length ? `<div class="detail-section"><div class="detail-section-title">邮箱</div>${emails.map(e => `<div class="detail-row"><div class="detail-label">${escapeHtml(e.type || '邮箱')}</div><div class="detail-value"><a href="mailto:${escapeHtml(e.value)}">${escapeHtml(e.value)}</a></div></div>`).join('')}</div>` : ''}
-        ${c.url ? `<div class="detail-section"><div class="detail-section-title">网址</div><div class="detail-row"><div class="detail-label">网址</div><div class="detail-value"><a href="${escapeHtml(c.url)}" target="_blank">${escapeHtml(c.url)}</a></div></div></div>` : ''}
-        ${c.bday ? `<div class="detail-section"><div class="detail-section-title">生日</div><div class="detail-row"><div class="detail-label">生日</div><div class="detail-value">${escapeHtml(c.bday)}</div></div></div>` : ''}
-        ${c.note ? `<div class="detail-section"><div class="detail-section-title">备注</div><div class="detail-row"><div class="detail-value" style="white-space: pre-wrap;">${escapeHtml(c.note)}</div></div></div>` : ''}
-      `;
-    }
-
-    function getInitial(name) { return name ? name.charAt(0).toUpperCase() : '?'; }
-
-    function escapeHtml(text) {
-      if (!text) return '';
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    function openAddModal() {
-      editingId = null;
-      document.getElementById('modal-title').textContent = '添加联系人';
-      document.getElementById('contact-form').reset();
-      document.getElementById('tel-list').innerHTML = '';
-      document.getElementById('email-list').innerHTML = '';
-      document.getElementById('contact-modal').classList.add('show');
-    }
-
-    function editContact() {
-      if (!currentContact) return;
-      editingId = currentContact.id;
-      document.getElementById('modal-title').textContent = '编辑联系人';
-
-      const form = document.getElementById('contact-form');
-      form.n_family.value = currentContact.n_family || '';
-      form.n_given.value = currentContact.n_given || '';
-      form.fn.value = currentContact.fn || '';
-      form.org.value = currentContact.org || '';
-      form.title.value = currentContact.title || '';
-      form.url.value = currentContact.url || '';
-      form.bday.value = currentContact.bday || '';
-      form.note.value = currentContact.note || '';
-
-      let tels = [], emails = [];
-      try { tels = JSON.parse(currentContact.tel || '[]'); } catch(e) {}
-      try { emails = JSON.parse(currentContact.email || '[]'); } catch(e) {}
-
-      const telList = document.getElementById('tel-list');
-      const emailList = document.getElementById('email-list');
-      telList.innerHTML = '';
-      emailList.innerHTML = '';
-
-      tels.forEach(t => addTelItem(t.type, t.value));
-      emails.forEach(e => addEmailItem(e.type, e.value));
-
-      document.getElementById('contact-modal').classList.add('show');
-    }
-
-    function addTelItem(type = 'CELL', value = '') {
-      const list = document.getElementById('tel-list');
-      const div = document.createElement('div');
-      div.className = 'multi-input-item';
-      div.innerHTML = `
-        <select>
-          <option value="CELL" ${type === 'CELL' ? 'selected' : ''}>手机</option>
-          <option value="HOME" ${type === 'HOME' ? 'selected' : ''}>家庭</option>
-          <option value="WORK" ${type === 'WORK' ? 'selected' : ''}>工作</option>
-        </select>
-        <input type="tel" value="${escapeHtml(value)}" placeholder="电话号码">
-        <button type="button" class="btn btn-secondary" onclick="this.parentElement.remove()">×</button>
-      `;
-      list.appendChild(div);
-    }
-
-    function addEmailItem(type = 'INTERNET', value = '') {
-      const list = document.getElementById('email-list');
-      const div = document.createElement('div');
-      div.className = 'multi-input-item';
-      div.innerHTML = `
-        <select>
-          <option value="INTERNET" ${type === 'INTERNET' ? 'selected' : ''}>邮箱</option>
-          <option value="HOME" ${type === 'HOME' ? 'selected' : ''}>家庭</option>
-          <option value="WORK" ${type === 'WORK' ? 'selected' : ''}>工作</option>
-        </select>
-        <input type="email" value="${escapeHtml(value)}" placeholder="邮箱地址">
-        <button type="button" class="btn btn-secondary" onclick="this.parentElement.remove()">×</button>
-      `;
-      list.appendChild(div);
-    }
-
-    function closeModal() {
-      document.getElementById('contact-modal').classList.remove('show');
-    }
-
-    // 显示确认对话框
-    function showConfirm(message, callback) {
-      document.getElementById('confirm-message').textContent = message;
-      confirmCallback = callback;
-      document.getElementById('confirm-modal').classList.add('show');
-    }
-
-    function closeConfirmModal() {
-      document.getElementById('confirm-modal').classList.remove('show');
-      confirmCallback = null;
-    }
-
-    // 确认对话框事件
-    document.getElementById('confirm-modal-close').addEventListener('click', closeConfirmModal);
-    document.getElementById('confirm-cancel').addEventListener('click', closeConfirmModal);
-    document.getElementById('confirm-ok').addEventListener('click', async () => {
-      if (confirmCallback) {
-        await confirmCallback();
-      }
-      closeConfirmModal();
-    });
-
-    // 保存联系人
-    document.getElementById('contact-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const form = e.target;
-
-      const tels = [...document.querySelectorAll('#tel-list .multi-input-item')].map(item => ({
-        type: item.querySelector('select').value,
-        value: item.querySelector('input').value
-      })).filter(t => t.value);
-
-      const emails = [...document.querySelectorAll('#email-list .multi-input-item')].map(item => ({
-        type: item.querySelector('select').value,
-        value: item.querySelector('input').value
-      })).filter(e => e.value);
-
-      const data = {
-        n_family: form.n_family.value,
-        n_given: form.n_given.value,
-        fn: form.fn.value,
-        tel: tels,
-        email: emails,
-        org: form.org.value,
-        title: form.title.value,
-        url: form.url.value,
-        bday: form.bday.value,
-        note: form.note.value
-      };
-
-      try {
-        const url = editingId ? `/api/contacts/${editingId}` : '/api/contacts';
-        const method = editingId ? 'PUT' : 'POST';
-
-        const res = await fetch(url, {
-          credentials: 'same-origin',
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
-        if (res.ok) {
-          closeModal();
-          loadContacts();
-          if (editingId) selectContact(editingId);
-        } else {
-          const err = await res.json();
-          alert(err.error || '保存失败');
-        }
-      } catch (e) {
-        console.error('保存联系人失败', e);
-        alert('保存失败');
-      }
-    });
-
-    async function deleteContact() {
-      if (!currentContact) return;
-
-      showConfirm(`确定删除联系人 "${currentContact.fn}" 吗？`, async () => {
-        try {
-          const res = await fetch(`/api/contacts/${currentContact.id}`, { method: 'DELETE', credentials: 'same-origin' });
-          if (res.ok) {
-            currentContact = null;
-            loadContacts();
-            renderContactDetail();
-          }
-        } catch (e) {
-          console.error('删除联系人失败', e);
+    async function batchMergeGroups() {
+      const groups = document.querySelectorAll('.dup-group');
+      const mergeList = [];
+      groups.forEach((group, i) => {
+        if (group.querySelector('.dup-group-cb').checked) {
+          const keepId = group.querySelector('input[type="radio"]:checked').value;
+          const allIds = [...group.querySelectorAll('input[type="radio"]')].map(r => r.value);
+          const mergeIds = allIds.filter(id => id !== keepId);
+          if (mergeIds.length) mergeList.push({ keepId, mergeIds });
         }
       });
-    }
 
-    function exportContact() {
-      if (currentContact) window.location.href = `/api/contacts/export/${currentContact.id}`;
-    }
-
-    document.getElementById('export-btn').addEventListener('click', () => {
-      window.location.href = '/api/contacts/export';
-    });
-
-    document.getElementById('import-btn').addEventListener('click', () => {
-      document.getElementById('import-modal').classList.add('show');
-    });
-
-    document.getElementById('import-modal-close').addEventListener('click', () => {
-      document.getElementById('import-modal').classList.remove('show');
-    });
-
-    document.getElementById('import-cancel').addEventListener('click', () => {
-      document.getElementById('import-modal').classList.remove('show');
-    });
-
-    document.getElementById('import-confirm').addEventListener('click', async () => {
-      const vcardContent = document.getElementById('vcard-content').value;
-      if (!vcardContent.trim()) {
-        alert('请输入 vCard 内容');
-        return;
+      if (!mergeList.length) return alert('未选中任何组或无需合并');
+      if (confirm(`确定合并选中的 ${mergeList.length} 组联系人？`)) {
+        const res = await fetch('/api/contacts/merge-batch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mergeList }) });
+        if (res.ok) { $('dup-modal').classList.remove('show'); load(); alert('合并完成'); }
       }
+    }
 
+    // 显示历史记录
+    async function showHistory() {
+      if (!curId) return;
       try {
-        const res = await fetch('/api/contacts/import', {
-          credentials: 'same-origin',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vcard: vcardContent })
-        });
+        const res = await fetch(`/api/contacts/${curId}/history`);
+        const data = await res.json();
+        const history = data.history || [];
 
-        if (res.ok) {
-          document.getElementById('import-modal').classList.remove('show');
-          document.getElementById('vcard-content').value = '';
-          loadContacts();
+        if (history.length === 0) {
+          $('history-list').innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray)">暂无修改记录</div>';
         } else {
-          const err = await res.json();
-          alert(err.error || '导入失败');
+          $('history-list').innerHTML = history.map(h => {
+            const time = new Date(h.created_at * 1000).toLocaleString('zh-CN');
+            let actionText = '';
+            let actionColor = 'var(--text)';
+
+            switch (h.action) {
+              case 'create':
+                actionText = `<span style="color:var(--accent)">创建联系人</span>`;
+                break;
+              case 'update':
+                actionText = `<span style="color:var(--accent)">修改</span> ${esc(h.field || '')}`;
+                if (h.old_value && h.new_value) {
+                  actionText += `<br><span style="color:var(--red)">- ${esc(h.old_value)}</span>`;
+                  actionText += `<br><span style="color:var(--accent)">+ ${esc(h.new_value)}</span>`;
+                } else if (h.new_value) {
+                  actionText += `<br><span style="color:var(--accent)">+ ${esc(h.new_value)}</span>`;
+                } else if (h.old_value) {
+                  actionText += `<br><span style="color:var(--red)">- ${esc(h.old_value)}</span>`;
+                }
+                break;
+              case 'delete':
+                actionText = `<span style="color:var(--red)">删除联系人</span>`;
+                break;
+              default:
+                actionText = esc(h.action);
+            }
+
+            return `<div style="padding:8px;border-bottom:1px solid var(--border);font-size:12px">
+              <div style="color:var(--gray);font-size:11px;margin-bottom:4px">${time}</div>
+              <div>${actionText}</div>
+            </div>`;
+          }).join('');
         }
+
+        $('history-modal').classList.add('show');
       } catch (e) {
-        console.error('导入联系人失败', e);
-        alert('导入失败');
+        alert('获取历史记录失败');
       }
-    });
+    }
 
-    document.getElementById('vcf-file').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        document.getElementById('vcard-content').value = event.target.result;
-      };
-      reader.readAsText(file);
-    });
-
-    document.getElementById('search-input').addEventListener('input', (e) => {
-      loadContacts(e.target.value);
-    });
-
-    document.getElementById('add-btn').addEventListener('click', openAddModal);
-    document.getElementById('modal-close').addEventListener('click', closeModal);
-    document.getElementById('modal-cancel').addEventListener('click', closeModal);
-
-    loadContacts();
+    $('contact-form').n_given.oninput = $('contact-form').n_family.oninput = function() {
+      const f = $('contact-form'); if (!$('fn-input').value || $('fn-input').dataset.auto !== 'false') { $('fn-input').value = (f.n_family.value + f.n_given.value).trim(); $('fn-input').dataset.auto = 'true'; }
+    };
+    $('fn-input').oninput = () => $('fn-input').dataset.auto = 'false';
+    load();
   </script>
 </body>
 </html>
