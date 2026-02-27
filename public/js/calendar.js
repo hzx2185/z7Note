@@ -2550,28 +2550,10 @@ if (elements.sidebarSearch) {
     if (newEventBtn) newEventBtn.addEventListener('click', handlers.openEventModal);
     if (subscriptionBtn) subscriptionBtn.addEventListener('click', handlers.openSubscriptionModal);
     if (exportBtn) exportBtn.addEventListener('click', handlers.exportCalendar);
-    if (importBtn) importBtn.addEventListener('click', () => icsFileInput.click());
-        // 绑定手机端折叠切换按钮
-        const sidebarToggle = document.getElementById('sidebar-toggle');
-        if (sidebarToggle) {
-          console.log('[CalendarApp] 绑定手机端折叠切换按钮');
-          sidebarToggle.addEventListener('click', () => {
-            document.querySelector('.month-view').classList.toggle('collapsed');
-          });
-        }
+    if (icsFileInput) icsFileInput.addEventListener('change', handlers.importCalendar);
     
-        console.log('[CalendarApp] 初始化完成');
-    
-        // 异步加载天气 (非阻塞)
-        const weatherEl = document.getElementById('sidebar-weather');
-        if (weatherEl) {
-          handlers.updateWeather();
-          weatherEl.addEventListener('click', () => {
-            weatherEl.textContent = '...';
-            handlers.updateWeather();
-          });
-        }
-      }    const jumpBtn = document.getElementById('jump-btn');
+    // 绑定跳转按钮
+    const jumpBtn = document.getElementById('jump-btn');
     const jumpYear = document.getElementById('jump-year');
     const jumpMonth = document.getElementById('jump-month');
 
