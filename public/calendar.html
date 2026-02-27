@@ -276,14 +276,16 @@
       </div>
       
       <!-- 统计数据面板 -->
-      <div id="sidebar-stats" style="padding: 6px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--gray);">
+      <div id="sidebar-stats" style="padding: 4px 8px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--gray);">
         <div style="display:flex; align-items: center; justify-content: space-between;">
-          <div style="display:flex; flex-wrap: wrap; gap: 8px;">
-            <span><span style="color:var(--green)">事</span> <span id="stats-events" style="color:var(--text); font-weight:bold;">-</span></span>
-            <span><span style="color:var(--accent)">待</span> <span id="stats-todos" style="color:var(--text); font-weight:bold;">-</span></span>
-            <span><span style="color:var(--gray)">笔</span> <span id="stats-notes" style="color:var(--text); font-weight:bold;">-</span></span>
+          <div style="display:flex; flex-wrap: wrap; gap: 4px;">
+            <span>事<span id="stats-events" style="color:var(--text); margin-left:2px">-</span></span>
+            <span style="opacity:0.3">|</span>
+            <span>待<span id="stats-todos" style="color:var(--text); margin-left:2px">-</span></span>
+            <span style="opacity:0.3">|</span>
+            <span>笔<span id="stats-notes" style="color:var(--text); margin-left:2px">-</span></span>
           </div>
-          <span style="font-size: 9px; opacity: 0.7; white-space: nowrap;">(月/年/总)</span>
+          <span style="font-size: 9px; opacity: 0.5; white-space: nowrap;">(月/年/总)</span>
         </div>
       </div>
 

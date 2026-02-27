@@ -1079,9 +1079,9 @@ if (elements.sidebarSearch) {
           const todosEl = document.getElementById('stats-todos');
           const notesEl = document.getElementById('stats-notes');
           
-          if (eventsEl) eventsEl.textContent = `${data.month.events}/${data.year.events}/${data.total.events}`;
-          if (todosEl) todosEl.textContent = `${data.month.todos}/${data.year.todos}/${data.total.todos}`;
-          if (notesEl) notesEl.textContent = `${data.month.notes}/${data.year.notes}/${data.total.notes}`;
+          if (eventsEl) eventsEl.textContent = `${data.month.events}·${data.year.events}·${data.total.events}`;
+          if (todosEl) todosEl.textContent = `${data.month.todos}·${data.year.todos}·${data.total.todos}`;
+          if (notesEl) notesEl.textContent = `${data.month.notes}·${data.year.notes}·${data.total.notes}`;
         }
       } catch (e) {
         console.error('加载统计失败:', e);
