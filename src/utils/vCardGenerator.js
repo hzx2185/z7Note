@@ -40,14 +40,16 @@ class VCardGenerator {
           tels.forEach(tel => {
             if (tel.value) {
               const type = tel.type ? `TYPE=${tel.type.toUpperCase()}` : 'TYPE=CELL';
-              lines.push(`TEL;${type}:${tel.value}`);
+              const normalizedVal = typeof tel.value === 'string' ? tel.value.replace(/\s+/g, '') : tel.value;
+              lines.push(`TEL;${type}:${normalizedVal}`);
             }
           });
         }
       } catch (e) {
         // 如果解析失败，直接作为字符串处理
         if (contact.tel) {
-          lines.push(`TEL;TYPE=CELL:${contact.tel}`);
+          const normalizedVal = typeof contact.tel === 'string' ? contact.tel.replace(/\s+/g, '') : contact.tel;
+          lines.push(`TEL;TYPE=CELL:${normalizedVal}`);
         }
       }
     }

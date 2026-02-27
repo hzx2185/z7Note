@@ -231,10 +231,12 @@ router.get('/smart-duplicates', async (req, res) => {
         const tels = JSON.parse(contact.tel || '[]');
         for (const tel of tels) {
           if (tel.value) {
-            if (!phoneMap.has(tel.value)) {
-              phoneMap.set(tel.value, []);
+            // 规范化电话号码：去掉所有非数字字符
+            const normalizedPhone = tel.value.replace(/\D/g, '');
+            if (!phoneMap.has(normalizedPhone)) {
+              phoneMap.set(normalizedPhone, []);
             }
-            phoneMap.get(tel.value).push({
+            phoneMap.get(normalizedPhone).push({
               id: contact.id,
               fn: contact.fn,
               tel: contact.tel,
@@ -324,12 +326,21 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: '姓名不能为空' });
     }
 
+    // 规范化电话号码：去掉所有非数字字符（保留 + 号）
+    let normalizedTel = tel;
+    if (Array.isArray(tel)) {
+      normalizedTel = tel.map(t => ({
+        ...t,
+        value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
+      }));
+    }
+
     const id = generateId();
     const uid = id;
     const now = Math.floor(Date.now() / 1000);
 
     // 生成 vCard
-    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname, uid };
+    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel: normalizedTel, email, adr, org, title, url, photo, note, bday, nickname, uid };
     const vcard = VCardGenerator.contactToVCard(contactData);
 
     await getConnection().run(
@@ -340,7 +351,7 @@ router.post('/', async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, req.user, uid, fn, n_family || '', n_given || '', n_middle || '', n_prefix || '', n_suffix || '',
-        tel ? JSON.stringify(tel) : null,
+        normalizedTel ? JSON.stringify(normalizedTel) : null,
         email ? JSON.stringify(email) : null,
         adr ? JSON.stringify(adr) : null,
         org || '', title || '', url || '', photo || '', note || '', bday || '', nickname || '',
@@ -369,6 +380,15 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: '姓名不能为空' });
     }
 
+    // 规范化电话号码：去掉所有非数字字符（保留 + 号）
+    let normalizedTel = tel;
+    if (Array.isArray(tel)) {
+      normalizedTel = tel.map(t => ({
+        ...t,
+        value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
+      }));
+    }
+
     const existing = await getConnection().get(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
       [req.params.id, req.user]
@@ -380,7 +400,7 @@ router.put('/:id', async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
 
     // 生成 vCard
-    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname };
+    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel: normalizedTel, email, adr, org, title, url, photo, note, bday, nickname };
     const vcard = VCardGenerator.contactToVCard(contactData);
 
     await getConnection().run(
@@ -391,7 +411,7 @@ router.put('/:id', async (req, res) => {
       WHERE id = ? AND username = ?`,
       [
         fn, n_family || '', n_given || '', n_middle || '', n_prefix || '', n_suffix || '',
-        tel ? JSON.stringify(tel) : null,
+        normalizedTel ? JSON.stringify(normalizedTel) : null,
         email ? JSON.stringify(email) : null,
         adr ? JSON.stringify(adr) : null,
         org || '', title || '', url || '', photo || '', note || '', bday || '', nickname || '',
@@ -403,7 +423,7 @@ router.put('/:id', async (req, res) => {
     // 记录字段变更历史
     await recordFieldChanges(req.user, req.params.id, existing, {
       fn, n_family, n_given, n_middle, n_prefix, n_suffix,
-      tel: tel ? JSON.stringify(tel) : null,
+      tel: normalizedTel ? JSON.stringify(normalizedTel) : null,
       email: email ? JSON.stringify(email) : null,
       adr: adr ? JSON.stringify(adr) : null,
       org, title, url, photo, note, bday, nickname
@@ -509,12 +529,20 @@ router.post('/merge', async (req, res) => {
       try {
         const contactTels = JSON.parse(contact.tel || '[]');
         contactTels.forEach(t => {
-          if (!tels.find(existing => existing.value === t.value)) {
-            tels.push(t);
+          // 规范化要合并的电话号码
+          const normalizedVal = typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value;
+          if (!tels.find(existing => (typeof existing.value === 'string' ? existing.value.replace(/[^\d+]/g, '') : existing.value) === normalizedVal)) {
+            tels.push({ ...t, value: normalizedVal });
           }
         });
       } catch(e) {}
     }
+
+    // 再次规范化所有的电话
+    tels = tels.map(t => ({
+      ...t,
+      value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
+    }));
 
     // 合并邮箱
     let emails = [];
@@ -625,12 +653,20 @@ router.post('/merge-batch', async (req, res) => {
         try {
           const contactTels = JSON.parse(contact.tel || '[]');
           contactTels.forEach(t => {
-            if (!tels.find(existing => existing.value === t.value)) {
-              tels.push(t);
+            // 规范化要合并的电话号码
+            const normalizedVal = typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value;
+            if (!tels.find(existing => (typeof existing.value === 'string' ? existing.value.replace(/[^\d+]/g, '') : existing.value) === normalizedVal)) {
+              tels.push({ ...t, value: normalizedVal });
             }
           });
         } catch(e) {}
       }
+
+      // 再次规范化所有的电话
+      tels = tels.map(t => ({
+        ...t,
+        value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
+      }));
 
       // 合并邮箱
       let emails = [];

@@ -12,15 +12,27 @@ const { basicAuthMiddleware } = require('../middleware/basicAuth');
 
 const router = express.Router();
 
-// 生成唯一ID
-function generateId() {
-  return 'contact_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+// XML 转义
+function esc(str) {
+  if (!str) return '';
+  return str.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
-// 全局中间件，用于日志记录
+// URL 编码
+function urlEsc(str) {
+  return encodeURIComponent(str).replace(/%2F/g, '/');
+}
+
+// 全局中间件，用于日志记录和 CORS
 router.use((req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
   console.log(`[CardDAV] ${req.method} ${req.path} - User-Agent: ${userAgent}`);
+  
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, PROPPATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, If-Match, If-None-Match, X-Requested-With');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag, DAV, Allow');
+  
   const originalSend = res.send;
   res.send = function(data) {
     console.log(`[CardDAV] Response: ${res.statusCode} for ${req.method} ${req.path}`);
@@ -49,7 +61,7 @@ router.propfind('/', basicAuthMiddleware, async (req, res) => {
     <D:propstat>
       <D:prop>
         <D:current-user-principal>
-          <D:href>/carddav/principals/${username}/</D:href>
+          <D:href>/carddav/principals/${urlEsc(username)}/</D:href>
         </D:current-user-principal>
         <D:resourcetype><D:collection/></D:resourcetype>
       </D:prop>
@@ -72,30 +84,24 @@ router.propfind('/principals/:username/', basicAuthMiddleware, async (req, res) 
     const xml = `<?xml version="1.0" encoding="utf-8" ?>
 <D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
   <D:response>
-    <D:href>/carddav/principals/${username}/</D:href>
+    <D:href>/carddav/principals/${urlEsc(username)}/</D:href>
     <D:propstat>
       <D:prop>
         <D:resourcetype><D:principal/></D:resourcetype>
-        <D:displayname>${username}</D:displayname>
+        <D:displayname>${esc(username)}</D:displayname>
         <D:principal-URL>
-          <D:href>/carddav/principals/${username}/</D:href>
+          <D:href>/carddav/principals/${urlEsc(username)}/</D:href>
         </D:principal-URL>
         <C:addressbook-home-set>
-          <D:href>/carddav/${username}/</D:href>
+          <D:href>/carddav/${urlEsc(username)}/</D:href>
         </C:addressbook-home-set>
         <D:current-user-privilege-set>
           <D:privilege><D:all/></D:privilege>
         </D:current-user-privilege-set>
         <D:supported-report-set>
-          <D:report-set-item>
-            <D:report><D:expand-property/></D:report>
-          </D:report-set-item>
-          <D:report-set-item>
-            <D:report><D:principal-property-search/></D:report>
-          </D:report-set-item>
-          <D:report-set-item>
-            <D:report><D:principal-search-property-set/></D:report>
-          </D:report-set-item>
+          <D:report-set-item><D:report><D:expand-property/></D:report></D:report-set-item>
+          <D:report-set-item><D:report><D:principal-property-search/></D:report></D:report-set-item>
+          <D:report-set-item><D:report><D:principal-search-property-set/></D:report></D:report-set-item>
         </D:supported-report-set>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
@@ -117,33 +123,29 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     if (username !== req.user) return res.status(403).send();
 
     const depth = req.header('Depth') || '0';
-    let ctag = 0;
+    let ctag = 1;
     let itemsXml = '';
 
+    const contacts = await getConnection().all('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username]);
+    
+    // 计算最新的 updatedAt 作为 ctag
+    if (contacts.length > 0) {
+      ctag = Math.max(...contacts.map(c => c.updatedAt || 0));
+    }
+    
     if (depth === '1') {
-        const [notes, contacts] = await Promise.all([
-          getConnection().all('SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 0', [username]),
-          getConnection().all('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username])
-        ]);
-      
-      // 计算最新的 updatedAt 作为 ctag
-      if (contacts.length > 0) {
-        ctag = Math.max(...contacts.map(c => c.updatedAt || 0));
-      }
-      
       log('INFO', 'CardDAV PROPFIND depth=1', {
         username,
         contactsCount: contacts.length
       });
       
-      const allItems = [...notes, ...contacts];
-        allItems.forEach(item => {
+      contacts.forEach(item => {
         itemsXml += `
     <D:response>
-      <D:href>/carddav/${username}/${item.id}.vcf</D:href>
+      <D:href>/carddav/${urlEsc(username)}/${urlEsc(item.id)}.vcf</D:href>
       <D:propstat>
         <D:prop>
-          <D:displayname>${item.title || item.fn || 'Unnamed'}</D:displayname>
+          <D:displayname>${esc(item.fn || 'Unnamed')}</D:displayname>
           <D:getetag>"${item.updatedAt}"</D:getetag>
           <D:getcontenttype>text/vcard; charset=utf-8</D:getcontenttype>
           <D:resourcetype/>
@@ -155,17 +157,21 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     }
 
     const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav" xmlns:CS="http://calendarserver.org/ns/">
   <D:response>
-    <D:href>/carddav/${username}/</D:href>
+    <D:href>/carddav/${urlEsc(username)}/</D:href>
     <D:propstat>
       <D:prop>
         <D:resourcetype><D:collection/><C:addressbook/></D:resourcetype>
-        <D:displayname>${username}</D:displayname>
+        <D:displayname>${esc(username)}</D:displayname>
         <C:supported-address-data>
           <C:address-data-type content-type="text/vcard" version="3.0"/>
         </C:supported-address-data>
-        <D:getctag>"${ctag}"</D:getctag>
+        <CS:getctag>"${ctag}"</CS:getctag>
+        <D:supported-report-set>
+          <D:report-set-item><D:report><C:addressbook-query/></D:report></D:report-set-item>
+          <D:report-set-item><D:report><C:addressbook-multiget/></D:report></D:report-set-item>
+        </D:supported-report-set>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -214,80 +220,64 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
     const { username } = req.params;
     if (username !== req.user) return res.status(403).send();
 
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        log('INFO', 'CardDAV REPORT 请求', { username, body: body.substring(0, 500) });
+    const body = (typeof req.body === 'string' ? req.body : '') || '';
+    log('INFO', 'CardDAV REPORT 请求', { username, bodyLength: body.length });
 
-        // 解析请求的 href
-        const hrefMatches = body.match(/<D:href>([^<]+)<\/D:href>/g);
-        const requestedHrefs = hrefMatches 
-          ? hrefMatches.map(m => m.replace(/<\/?D:href>/g, ''))
-          : [];
-
-        // 获取请求的联系人
-        let contacts;
-        if (requestedHrefs.length > 0) {
-          // 提取 ID
-          const ids = requestedHrefs
-            .map(href => {
-              const match = href.match(/\/([^\/]+)\.vcf$/);
-              return match ? match[1] : null;
-            })
-            .filter(id => id);
-
-          if (ids.length > 0) {
-            const placeholders = ids.map(() => '?').join(',');
-            contacts = await getConnection().all(
-              `SELECT * FROM contacts WHERE username = ? AND id IN (${placeholders})`,
-              [username, ...ids]
-            );
-          } else {
-            contacts = [];
+    let contacts = [];
+    if (body.includes('addressbook-multiget')) {
+      // 解析请求的 href
+      const ids = [];
+      const hrefMatches = body.match(/<[a-zA-Z0-9_:]*href[^>]*>([^<]+)/g) || [];
+      hrefMatches.forEach(h => {
+        const match = h.match(/\/([^\/]+)\.vcf$/);
+        if (match) {
+          try {
+            ids.push(decodeURIComponent(match[1]));
+          } catch (e) {
+            ids.push(match[1]);
           }
-        } else {
-          // 获取所有联系人
-          contacts = await getConnection().all(
-            'SELECT * FROM contacts WHERE username = ?',
-            [username]
-          );
         }
+      });
 
-        // 生成响应
-        let responsesXml = '';
-        contacts.forEach(contact => {
-          const vcard = VCardGenerator.contactToVCard(contact);
-          responsesXml += `
+      if (ids.length > 0) {
+        const placeholders = ids.map(() => '?').join(',');
+        contacts = await getConnection().all(
+          `SELECT * FROM contacts WHERE username = ? AND id IN (${placeholders})`,
+          [username, ...ids]
+        );
+      }
+    } else {
+      // addressbook-query 或其他，默认返回所有
+      contacts = await getConnection().all(
+        'SELECT * FROM contacts WHERE username = ?',
+        [username]
+      );
+    }
+
+    // 生成响应
+    let responsesXml = '';
+    contacts.forEach(contact => {
+      const vcard = VCardGenerator.contactToVCard(contact);
+      responsesXml += `
   <D:response>
-    <D:href>/carddav/${username}/${contact.id}.vcf</D:href>
+    <D:href>/carddav/${urlEsc(username)}/${urlEsc(contact.id)}.vcf</D:href>
     <D:propstat>
       <D:prop>
-        <C:address-data>${escapeXml(vcard)}</C:address-data>
+        <C:address-data>${esc(vcard)}</C:address-data>
         <D:getetag>"${contact.updatedAt}"</D:getetag>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
   </D:response>`;
-          log('INFO', 'CardDAV REPORT 返回VCard内容', {
-            username,
-            contactId: contact.id,
-            contactFn: contact.fn
-          });
-        });
+    });
 
-        const xml = `<?xml version="1.0" encoding="utf-8" ?>
+    const xml = `<?xml version="1.0" encoding="utf-8" ?>
 <D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
 ${responsesXml}
 </D:multistatus>`;
 
-        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-        res.status(207).send(xml);
-      } catch (error) {
-        log('ERROR', 'CardDAV REPORT 处理失败', { error: error.message });
-        res.status(500).send();
-      }
-    });
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.status(207).send(xml);
   } catch (error) {
     log('ERROR', 'CardDAV REPORT 失败', { error: error.message });
     res.status(500).send();
@@ -295,10 +285,15 @@ ${responsesXml}
 });
 
 // GET /:username/:id.vcf - 获取单个联系人
-router.get('/:username/:id.vcf', basicAuthMiddleware, async (req, res) => {
+router.get('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => {
   try {
-    const { username, id } = req.params;
+    const { username, filename } = req.params;
     if (username !== req.user) return res.status(403).send();
+
+    let id = filename;
+    try {
+      id = decodeURIComponent(id);
+    } catch (e) {}
 
     const contact = await getConnection().get(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
@@ -320,103 +315,100 @@ router.get('/:username/:id.vcf', basicAuthMiddleware, async (req, res) => {
 });
 
 // PUT /:username/:id.vcf - 创建或更新联系人
-router.put('/:username/:id.vcf', basicAuthMiddleware, async (req, res) => {
+router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => {
   try {
-    const { username, id } = req.params;
+    const { username, filename } = req.params;
     if (username !== req.user) return res.status(403).send();
 
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        log('INFO', 'CardDAV PUT 请求', { username, id, bodyLength: body.length });
+    let id = filename;
+    try {
+      id = decodeURIComponent(id);
+    } catch (e) {}
 
-        // 解析 vCard
-        const contactData = VCardParser.parse(body);
-        const now = Math.floor(Date.now() / 1000);
+    const body = (typeof req.body === 'string' ? req.body : '') || '';
+    log('INFO', 'CardDAV PUT 请求', { username, id, bodyLength: body.length });
 
-        // 检查是否存在
-        const existing = await getConnection().get(
-          'SELECT id FROM contacts WHERE id = ? AND username = ?',
-          [id, username]
-        );
+    // 解析 vCard
+    const contactData = VCardParser.parse(body);
+    const now = Math.floor(Date.now() / 1000);
 
-        if (existing) {
-          // 更新
-          await getConnection().run(
-            `UPDATE contacts SET 
-              fn = ?, n_family = ?, n_given = ?, n_middle = ?, n_prefix = ?, n_suffix = ?,
-              tel = ?, email = ?, adr = ?, org = ?, title = ?, url = ?, photo = ?, note = ?,
-              bday = ?, nickname = ?, vcard = ?, updatedAt = ?
-            WHERE id = ? AND username = ?`,
-            [
-              contactData.fn || '',
-              contactData.n_family || '',
-              contactData.n_given || '',
-              contactData.n_middle || '',
-              contactData.n_prefix || '',
-              contactData.n_suffix || '',
-              contactData.tel || null,
-              contactData.email || null,
-              contactData.adr || null,
-              contactData.org || '',
-              contactData.title || '',
-              contactData.url || '',
-              contactData.photo || '',
-              contactData.note || '',
-              contactData.bday || '',
-              contactData.nickname || '',
-              body,
-              now,
-              id,
-              username
-            ]
-          );
-          log('INFO', 'CardDAV 联系人已更新', { username, id, fn: contactData.fn });
-        } else {
-          // 创建
-          const uid = contactData.uid || id;
-          await getConnection().run(
-            `INSERT INTO contacts (
-              id, username, uid, fn, n_family, n_given, n_middle, n_prefix, n_suffix,
-              tel, email, adr, org, title, url, photo, note, bday, nickname, vcard,
-              createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              id,
-              username,
-              uid,
-              contactData.fn || '',
-              contactData.n_family || '',
-              contactData.n_given || '',
-              contactData.n_middle || '',
-              contactData.n_prefix || '',
-              contactData.n_suffix || '',
-              contactData.tel || null,
-              contactData.email || null,
-              contactData.adr || null,
-              contactData.org || '',
-              contactData.title || '',
-              contactData.url || '',
-              contactData.photo || '',
-              contactData.note || '',
-              contactData.bday || '',
-              contactData.nickname || '',
-              body,
-              now,
-              now
-            ]
-          );
-          log('INFO', 'CardDAV 联系人已创建', { username, id, fn: contactData.fn });
-        }
+    // 检查是否存在
+    const existing = await getConnection().get(
+      'SELECT id FROM contacts WHERE id = ? AND username = ?',
+      [id, username]
+    );
 
-        res.setHeader('ETag', `"${now}"`);
-        res.status(existing ? 204 : 201).send();
-      } catch (error) {
-        log('ERROR', 'CardDAV PUT 处理失败', { error: error.message });
-        res.status(500).send();
-      }
-    });
+    if (existing) {
+      // 更新
+      await getConnection().run(
+        `UPDATE contacts SET 
+          fn = ?, n_family = ?, n_given = ?, n_middle = ?, n_prefix = ?, n_suffix = ?,
+          tel = ?, email = ?, adr = ?, org = ?, title = ?, url = ?, photo = ?, note = ?,
+          bday = ?, nickname = ?, vcard = ?, updatedAt = ?
+        WHERE id = ? AND username = ?`,
+        [
+          contactData.fn || '',
+          contactData.n_family || '',
+          contactData.n_given || '',
+          contactData.n_middle || '',
+          contactData.n_prefix || '',
+          contactData.n_suffix || '',
+          contactData.tel || null,
+          contactData.email || null,
+          contactData.adr || null,
+          contactData.org || '',
+          contactData.title || '',
+          contactData.url || '',
+          contactData.photo || '',
+          contactData.note || '',
+          contactData.bday || '',
+          contactData.nickname || '',
+          body,
+          now,
+          id,
+          username
+        ]
+      );
+      log('INFO', 'CardDAV 联系人已更新', { username, id, fn: contactData.fn });
+    } else {
+      // 创建
+      const uid = contactData.uid || id;
+      await getConnection().run(
+        `INSERT INTO contacts (
+          id, username, uid, fn, n_family, n_given, n_middle, n_prefix, n_suffix,
+          tel, email, adr, org, title, url, photo, note, bday, nickname, vcard,
+          createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          username,
+          uid,
+          contactData.fn || '',
+          contactData.n_family || '',
+          contactData.n_given || '',
+          contactData.n_middle || '',
+          contactData.n_prefix || '',
+          contactData.n_suffix || '',
+          contactData.tel || null,
+          contactData.email || null,
+          contactData.adr || null,
+          contactData.org || '',
+          contactData.title || '',
+          contactData.url || '',
+          contactData.photo || '',
+          contactData.note || '',
+          contactData.bday || '',
+          contactData.nickname || '',
+          body,
+          now,
+          now
+        ]
+      );
+      log('INFO', 'CardDAV 联系人已创建', { username, id, fn: contactData.fn });
+    }
+
+    res.setHeader('ETag', `"${now}"`);
+    res.status(existing ? 204 : 201).send();
   } catch (error) {
     log('ERROR', 'CardDAV PUT 失败', { error: error.message });
     res.status(500).send();
@@ -424,10 +416,15 @@ router.put('/:username/:id.vcf', basicAuthMiddleware, async (req, res) => {
 });
 
 // DELETE /:username/:id.vcf - 删除联系人
-router.delete('/:username/:id.vcf', basicAuthMiddleware, async (req, res) => {
+router.delete('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => {
   try {
-    const { username, id } = req.params;
+    const { username, filename } = req.params;
     if (username !== req.user) return res.status(403).send();
+
+    let id = filename;
+    try {
+      id = decodeURIComponent(id);
+    } catch (e) {}
 
     const result = await getConnection().run(
       'DELETE FROM contacts WHERE id = ? AND username = ?',
@@ -445,16 +442,5 @@ router.delete('/:username/:id.vcf', basicAuthMiddleware, async (req, res) => {
     res.status(500).send();
   }
 });
-
-// 辅助函数：转义 XML
-function escapeXml(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
 
 module.exports = router;

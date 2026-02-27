@@ -161,10 +161,11 @@
     function render() {
       $('list').innerHTML = contacts.map(c => {
         let tels = [], emails = []; try { tels = JSON.parse(c.tel||'[]'); emails = JSON.parse(c.email||'[]'); } catch(e){}
+        const firstTel = (tels[0]?.value || '').replace(/[^\d+]/g, '');
         return `<tr class="${selected.has(c.id)?'selected':''}" onclick="onRowClick('${c.id}', event)">
           <td class="col-cb" onclick="event.stopPropagation()"><input type="checkbox" ${selected.has(c.id)?'checked':''} onchange="toggleSel('${c.id}', this.checked)"></td>
           <td class="col-name">${esc(c.fn||'未命名')}</td>
-          <td class="col-tel">${esc(tels[0]?.value || '')}</td>
+          <td class="col-tel">${esc(firstTel)}</td>
           <td class="col-email">${esc(emails[0]?.value || '')}</td>
           <td class="col-org">${esc(c.org||'-')}</td>
         </tr>`;
@@ -180,13 +181,14 @@
     function toggleAll(checked) { contacts.forEach(c => checked ? selected.add(c.id) : selected.delete(c.id)); render(); }
     function onRowClick(id, e) { if (e.target.tagName !== 'INPUT') openModal(id); }
 
-    function openModal(id = null) {
+    async function openModal(id = null) {
       curId = id; const f = $('contact-form'); f.reset(); $('tel-list').innerHTML = ''; $('email-list').innerHTML = '';
       $('modal-title').textContent = id ? '编辑联系人' : '添加联系人';
       $('del-contact-btn').style.display = id ? 'block' : 'none';
       $('history-btn').style.display = id ? 'block' : 'none';
       if (id) {
-        const c = contacts.find(x => x.id === id);
+        const res = await fetch(`/api/contacts/${id}`);
+        const c = await res.json();
         if (c) {
           ['n_family','n_given','fn','org','title'].forEach(k => f[k].value = c[k]||'');
           try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
@@ -210,6 +212,12 @@
       e.preventDefault(); const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
       data.tel = [...$('tel-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
       data.email = [...$('email-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
+      
+      // 前端也做一次清洗，提升即时感
+      if (Array.isArray(data.tel)) {
+        data.tel = data.tel.map(t => ({...t, value: t.value.replace(/[^\d+]/g, '')}));
+      }
+
       const res = await fetch(curId?`/api/contacts/${curId}`:`/api/contacts`,{method:curId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
       if (res.ok) { closeModal(); load(); }
     }
@@ -229,17 +237,21 @@
 
     async function smartFindDuplicates() {
       const data = await (await fetch('/api/contacts/smart-duplicates')).json();
-      const allDups = [...data.duplicates.byName, ...data.duplicates.byPhone, ...data.duplicates.byEmail];
+      const allDups = [
+        ...data.duplicates.byName.map(g => ({...g, field: '姓名'})),
+        ...data.duplicates.byPhone.map(g => ({...g, field: '电话'})),
+        ...data.duplicates.byEmail.map(g => ({...g, field: '邮箱'}))
+      ];
       $('dup-list').innerHTML = allDups.map((g, i) => `
-        <div class="item-card">
-          <div class="dup-row" style="color:var(--accent);font-weight:bold;margin-bottom:4px">
+        <div class="item-card" style="margin-bottom:12px;padding:10px;border:1px solid var(--border);border-radius:6px">
+          <div class="dup-row" style="color:var(--accent);font-weight:bold;margin-bottom:4px;display:flex;align-items:center;gap:6px">
             <input type="checkbox" class="dup-group-cb" checked> ${g.field}重复: ${esc(g.value)}
           </div>
           ${g.contacts.map((c, ci) => `
-            <div class="dup-row">
-              <div class="col-sel"></div>
+            <div class="dup-row" style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:13px">
+              <div style="width:20px"></div>
               <div class="col-sel"><input type="radio" name="keep_${i}" value="${c.id}" ${ci===0?'checked':''}></div>
-              <div style="flex:1">${esc(c.fn)}</div>
+              <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.fn || '未命名')}</div>
             </div>
           `).join('')}
         </div>
@@ -249,12 +261,16 @@
 
     async function batchMergeGroups() {
       const mergeList = [];
-      document.querySelectorAll('.item-card').forEach(card => {
-        if (card.querySelector('.dup-group-cb').checked) {
-          const keepId = card.querySelector('input[type="radio"]:checked').value;
-          const allIds = [...card.querySelectorAll('input[type="radio"]')].map(r => r.value);
-          const mergeIds = allIds.filter(id => id !== keepId);
-          if (mergeIds.length) mergeList.push({ keepId, mergeIds });
+      document.querySelectorAll('#dup-list .item-card').forEach(card => {
+        const cb = card.querySelector('.dup-group-cb');
+        if (cb && cb.checked) {
+          const checkedRadio = card.querySelector('input[type="radio"]:checked');
+          if (checkedRadio) {
+            const keepId = checkedRadio.value;
+            const allIds = [...card.querySelectorAll('input[type="radio"]')].map(r => r.value);
+            const mergeIds = allIds.filter(id => id !== keepId);
+            if (mergeIds.length) mergeList.push({ keepId, mergeIds });
+          }
         }
       });
       if (!mergeList.length) return alert('未选中任何组或无需合并');

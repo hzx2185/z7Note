@@ -206,13 +206,15 @@ if (config.caldav.enabled) {
   });
 }
 
-  // CardDAV 路由（使用 Basic Auth）
+// CardDAV 路由（使用 Basic Auth）
+  // 为 CardDAV 提供原始 body（避免 JSON 解析干扰）
+  app.use('/carddav', express.text({ type: '*/*', limit: '50mb' }));
   app.use('/carddav', carddavRoutes);
   console.log('[CardDAV] CardDAV 服务已启用 (Basic Auth)');
 
   // .well-known/carddav 支持（用于自动发现）
   app.use('/.well-known/carddav', (req, res) => {
-    res.redirect(302, '/carddav/');
+    res.redirect(301, '/carddav/');
   });
 
   // WebDAV 路由（使用 Basic Auth）
