@@ -434,6 +434,16 @@ const UIManager = {
         this._lastPreviewContent = txt;
 
         let html = marked.parse(txt);
+        
+        // 使用 DOMPurify 净化 HTML，防止 XSS 攻击
+        if (typeof DOMPurify !== 'undefined') {
+            html = DOMPurify.sanitize(html, {
+                ALLOWED_TAGS: ['a', 'b', 'i', 'em', 'strong', 'code', 'pre', 'p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'br', 'hr', 'input', 'del', 's', 'u', 'sup', 'sub'],
+                ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'name', 'type', 'checked', 'disabled', 'width', 'height', 'target', 'rel'],
+                ALLOW_DATA_ATTR: false
+            });
+        }
+        
         html = html.replace(/(src|href)=["']\/api\/uploads\/([^"']+)["']/ig, (m, p1, p2) => {
             return `${p1}="/api/attachments/raw/${encodeURIComponent(p2)}"`;
         });

@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
+const { isUsernameSafe } = require('../middleware/validateUser');
 
 const router = express.Router();
 
@@ -87,6 +88,11 @@ router.post('/api/user/editor-type', async (req, res) => {
 // 导出用户数据
 router.get('/api/export', async (req, res) => {
   try {
+    // 验证用户名，防止路径遍历
+    if (!isUsernameSafe(req.user)) {
+      return res.status(400).json({ error: 'Invalid username' });
+    }
+    
     const notes = await getConnection().all('SELECT * FROM notes WHERE username = ?', [req.user]);
     const userDir = path.join(process.cwd(), 'data', 'uploads', req.user);
     let attachments = [];
@@ -139,6 +145,11 @@ router.post('/api/import', async (req, res) => {
       }
     }
     if (attachments && Array.isArray(attachments)) {
+      // 验证用户名，防止路径遍历
+      if (!isUsernameSafe(req.user)) {
+        return res.status(400).json({ error: 'Invalid username' });
+      }
+      
       const userDir = path.join(process.cwd(), 'data', 'uploads', req.user);
       await fs.mkdir(userDir, { recursive: true });
       for (const att of attachments) {

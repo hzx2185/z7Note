@@ -11,6 +11,7 @@ const { getSystemConfig, getAllowedFileTypes, getMaxFileSize } = require('../ser
 const { compressImage } = require('../services/imageCompression');
 const chunkUploadService = require('../services/chunkUpload');
 const log = require('../utils/logger');
+const { isUsernameSafe } = require('../middleware/validateUser');
 
 const router = express.Router();
 
@@ -32,7 +33,13 @@ async function fileFilter(req, file, cb) {
 
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const p = path.join(config.paths.uploads, req.user || 'temp');
+    // 验证用户名，防止路径遍历攻击
+    const username = req.user || 'temp';
+    if (!isUsernameSafe(username)) {
+      return cb(new Error('Invalid username: path traversal detected'), false);
+    }
+    
+    const p = path.join(config.paths.uploads, username);
     await fs.mkdir(p, { recursive: true });
     cb(null, p);
   },

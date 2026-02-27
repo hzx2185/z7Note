@@ -103,7 +103,15 @@ const config = {
 
   // JWT 配置 (用于2FA临时令牌)
   jwt: {
-    secret: process.env.JWT_SECRET || 'default_secret_for_2fa_please_change_me_in_production',
+    secret: process.env.JWT_SECRET || (() => {
+      // 生成随机密钥并警告用户
+      const crypto = require('crypto');
+      const randomSecret = crypto.randomBytes(64).toString('hex');
+      console.warn('\n⚠️  警告: 未设置 JWT_SECRET 环境变量，已生成随机密钥。');
+      console.warn('⚠️  这意味着重启服务后，所有2FA临时令牌将失效。');
+      console.warn('⚠️  强烈建议在生产环境中设置固定的 JWT_SECRET 环境变量。\n');
+      return randomSecret;
+    })(),
     expiresIn: '2h'
   },
   
@@ -123,6 +131,12 @@ const config = {
     const missingEnvVars = requiredEnvVars.filter(v => !process.env[v]);
     if (missingEnvVars.length > 0) {
       console.warn(`警告: 缺少以下环境变量: ${missingEnvVars.join(', ')}，邮件功能可能无法正常工作`);
+    }
+    
+    // 检查 JWT_SECRET
+    if (!process.env.JWT_SECRET) {
+      console.warn('⚠️  警告: 未设置 JWT_SECRET 环境变量，使用随机生成的密钥。');
+      console.warn('⚠️  服务重启后，所有2FA临时令牌将失效，用户需要重新登录。');
     }
   }
 };
