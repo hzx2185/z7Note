@@ -1602,16 +1602,23 @@ if (elements.sidebarSearch) {
       const weatherEl = document.getElementById('sidebar-weather');
       if (!weatherEl) return;
 
+      // 创建一个 AbortController 用于设置超时
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒超时
+
       try {
-        // 使用 wttr.in 获取天气 (支持自动定位，返回简洁文本)
-        // format=%c+%t: 符号 + 温度
-        const response = await fetch('https://wttr.in/?format=%c%t');
+        // 使用 wttr.in 获取天气 (增加 ?m 强制公制)
+        const response = await fetch('https://wttr.in/?format=%c%t', {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
         if (response.ok) {
           const text = await response.text();
           weatherEl.textContent = text.trim();
         }
       } catch (e) {
-        console.error('获取天气失败:', e);
+        clearTimeout(timeoutId);
+        console.warn('获取天气跳过 (超时或连接关闭)');
         weatherEl.textContent = '';
       }
     },
@@ -2544,20 +2551,27 @@ if (elements.sidebarSearch) {
     if (subscriptionBtn) subscriptionBtn.addEventListener('click', handlers.openSubscriptionModal);
     if (exportBtn) exportBtn.addEventListener('click', handlers.exportCalendar);
     if (importBtn) importBtn.addEventListener('click', () => icsFileInput.click());
-    if (icsFileInput) icsFileInput.addEventListener('change', handlers.importCalendar);
+        // 绑定手机端折叠切换按钮
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        if (sidebarToggle) {
+          console.log('[CalendarApp] 绑定手机端折叠切换按钮');
+          sidebarToggle.addEventListener('click', () => {
+            document.querySelector('.month-view').classList.toggle('collapsed');
+          });
+        }
     
-    // 初始化天气
-    const weatherEl = document.getElementById('sidebar-weather');
-    if (weatherEl) {
-      handlers.updateWeather();
-      weatherEl.addEventListener('click', () => {
-        weatherEl.textContent = '...';
-        handlers.updateWeather();
-      });
-    }
+        console.log('[CalendarApp] 初始化完成');
     
-    // 绑定跳转按钮
-    const jumpBtn = document.getElementById('jump-btn');
+        // 异步加载天气 (非阻塞)
+        const weatherEl = document.getElementById('sidebar-weather');
+        if (weatherEl) {
+          handlers.updateWeather();
+          weatherEl.addEventListener('click', () => {
+            weatherEl.textContent = '...';
+            handlers.updateWeather();
+          });
+        }
+      }    const jumpBtn = document.getElementById('jump-btn');
     const jumpYear = document.getElementById('jump-year');
     const jumpMonth = document.getElementById('jump-month');
 
@@ -2768,6 +2782,16 @@ if (elements.sidebarSearch) {
     }
 
     console.log('[CalendarApp] 初始化完成');
+
+    // 异步加载天气 (非阻塞)
+    const weatherEl = document.getElementById('sidebar-weather');
+    if (weatherEl) {
+      handlers.updateWeather();
+      weatherEl.addEventListener('click', () => {
+        weatherEl.textContent = '...';
+        handlers.updateWeather();
+      });
+    }
   }
 
   // ==================== 公开API ====================
