@@ -118,24 +118,54 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
-    // 删除订阅
-    const result = await getConnection().run(
-      'DELETE FROM calendar_subscriptions WHERE id = ? AND username = ?',
+    const db = getConnection();
+    const now = Math.floor(Date.now() / 1000);
+
+    // 1. 获取该订阅的所有事件ID，以便记录删除供同步使用
+    const events = await db.all(
+      'SELECT id FROM events WHERE subscriptionId = ? AND username = ?',
       [req.params.id, req.user]
     );
 
-    if (result.changes === 0) {
-      return res.status(404).json({ error: '订阅不存在' });
+    await db.run('BEGIN TRANSACTION');
+    try {
+      // 2. 删除订阅
+      const result = await db.run(
+        'DELETE FROM calendar_subscriptions WHERE id = ? AND username = ?',
+        [req.params.id, req.user]
+      );
+
+      if (result.changes === 0) {
+        await db.run('ROLLBACK');
+        return res.status(404).json({ error: '订阅不存在' });
+      }
+
+      // 3. 记录删除历史记录供 CalDAV 同步 (Tombstones)
+      for (const event of events) {
+        await db.run(
+          'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
+          [Date.now() + Math.random().toString(), req.user, event.id, 'event', now]
+        );
+      }
+
+      // 4. 删除该订阅的所有事件
+      await db.run(
+        'DELETE FROM events WHERE subscriptionId = ? AND username = ?',
+        [req.params.id, req.user]
+      );
+
+      await db.run('COMMIT');
+
+      // 5. 广播通知客户端
+      const { broadcast } = require('./ws');
+      broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+
+      log('INFO', '删除订阅及其事件', { username: req.user, subscriptionId: req.params.id, eventCount: events.length });
+      res.json({ status: 'ok' });
+    } catch (err) {
+      await db.run('ROLLBACK');
+      throw err;
     }
-
-    // 删除该订阅的所有事件
-    await getConnection().run(
-      'DELETE FROM events WHERE subscriptionId = ? AND username = ?',
-      [req.params.id, req.user]
-    );
-
-    log('INFO', '删除订阅', { username: req.user, subscriptionId: req.params.id });
-    res.json({ status: 'ok' });
   } catch (e) {
     log('ERROR', '删除订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
     res.status(500).json({ error: '删除失败' });
