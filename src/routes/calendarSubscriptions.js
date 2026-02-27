@@ -159,7 +159,8 @@ router.post('/:id/sync', async (req, res) => {
     // 获取ICS内容
     const response = await fetch(subscription.url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; z7Note Calendar Sync)'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/calendar, text/plain, */*'
       },
       timeout: 30000
     });
@@ -222,7 +223,8 @@ router.post('/:id/sync', async (req, res) => {
       imported: importedCount
     });
   } catch (e) {
-    log('ERROR', '同步订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
+    console.error('[Sync Error]', e);
+    log('ERROR', '同步订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message, stack: e.stack });
     res.status(500).json({ error: '同步失败: ' + e.message });
   }
 });
