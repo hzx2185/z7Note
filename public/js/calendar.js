@@ -1597,32 +1597,6 @@ if (elements.sidebarSearch) {
 
   // ==================== 事件处理 ====================
   const handlers = {
-    // 获取并更新天气信息
-    async updateWeather() {
-      const weatherEl = document.getElementById('sidebar-weather');
-      if (!weatherEl) return;
-
-      // 创建一个 AbortController 用于设置超时
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3秒超时
-
-      try {
-        // 使用 wttr.in 获取天气 (增加 ?m 强制公制)
-        const response = await fetch('https://wttr.in/?format=%c%t', {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (response.ok) {
-          const text = await response.text();
-          weatherEl.textContent = text.trim();
-        }
-      } catch (e) {
-        clearTimeout(timeoutId);
-        console.warn('获取天气跳过 (超时或连接关闭)');
-        weatherEl.textContent = '';
-      }
-    },
-
     // 批量选择相关方法
     toggleBatchSelect() {
       state.batchSelect.enabled = !state.batchSelect.enabled;
@@ -2764,16 +2738,6 @@ if (elements.sidebarSearch) {
     }
 
     console.log('[CalendarApp] 初始化完成');
-
-    // 异步加载天气 (非阻塞)
-    const weatherEl = document.getElementById('sidebar-weather');
-    if (weatherEl) {
-      handlers.updateWeather();
-      weatherEl.addEventListener('click', () => {
-        weatherEl.textContent = '...';
-        handlers.updateWeather();
-      });
-    }
   }
 
   // ==================== 公开API ====================

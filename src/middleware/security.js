@@ -29,7 +29,7 @@ function securityHeaders(req, res, next) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: http:",
     "font-src 'self'",
-    "connect-src 'self' https://wttr.in",
+    "connect-src 'self'",
     "frame-src 'self'", // 允许同源iframe
     "worker-src 'self' blob:",
     "manifest-src 'self'"
