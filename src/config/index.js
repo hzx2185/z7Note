@@ -17,10 +17,13 @@ const config = {
   // 服务器配置
   port: process.env.PORT || 3000,
   host: process.env.HOST || '0.0.0.0',
+  nodeEnv: process.env.NODE_ENV || 'development',
 
   // Cookie配置
   cookieName: 'z7note_user_session',
   cookieMaxAge: 2592000000, // 30天
+  cookieDomain: process.env.COOKIE_DOMAIN || undefined,
+  cookieSecure: process.env.NODE_ENV === 'production',
 
   // 配额配置
   defaultNoteLimit: parseInt(process.env.DEFAULT_NOTE_LIMIT) || 10,

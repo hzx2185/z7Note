@@ -34,8 +34,10 @@ router.post('/api/register', async (req, res) => {
     res.cookie(config.cookieName, sanitizedUser, { 
       maxAge: config.cookieMaxAge, 
       httpOnly: true, 
+      secure: config.cookieSecure,
+      sameSite: 'strict',
       path: '/', 
-      sameSite: 'lax' 
+      domain: config.cookieDomain
     });
     res.json({ status: "ok" });
     log('INFO', '用户注册成功', { username: sanitizedUser });
@@ -74,8 +76,10 @@ router.post('/api/login', async (req, res) => {
         res.cookie(config.cookieName, row.username, { 
           maxAge: config.cookieMaxAge, 
           httpOnly: true, 
+          secure: config.cookieSecure,
+          sameSite: 'strict',
           path: '/', 
-          sameSite: 'lax' 
+          domain: config.cookieDomain
         });
         return res.json({ status: "ok" });
       }
@@ -162,8 +166,10 @@ router.post('/api/verify-tfa', async (req, res) => {
       res.cookie(config.cookieName, username, { 
         maxAge: config.cookieMaxAge, 
         httpOnly: true, 
+        secure: config.cookieSecure,
+        sameSite: 'strict',
         path: '/', 
-        sameSite: 'lax' 
+        domain: config.cookieDomain 
       });
       return res.json({ status: "ok", usedBackupCode });
     } else {
