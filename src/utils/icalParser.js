@@ -3,6 +3,7 @@
  */
 
 const log = require('./logger');
+const ICalGenerator = require('./icalGenerator');
 
 class ICalParser {
   /**
@@ -18,12 +19,13 @@ class ICalParser {
     try {
       // 预处理：移除换行转义
       const lines = icalContent
-        .replace(/\r\n /g, '') // 折行的内容合并
+        .replace(/\r?\n /g, '') // 折行的内容合并 (RFC 5545: 换行后接空格)
         .split(/\r?\n/);      // 按行分割
 
       let currentComponent = null;
       let currentItem = {};
       let componentStack = []; // 组件栈,用于处理嵌套组件
+      let inAlarm = false; // 是否在 VALARM 组件内
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -34,55 +36,82 @@ class ICalParser {
         // 解析键值对
         // 格式: "DTSTART;VALUE=DATE:20260212" 或 "DTSTART:20260212"
         const colonIndex = line.indexOf(':');
-        const semicolonIndex = line.indexOf(';');
+        if (colonIndex === -1) continue;
 
-        let key, value;
-        if (colonIndex === -1) {
-          continue; // 无效行,跳过
+        const keyPart = line.substring(0, colonIndex).toUpperCase();
+        const value = line.substring(colonIndex + 1);
+
+        // 分离属性名和参数
+        const semicolonIndex = keyPart.indexOf(';');
+        const key = semicolonIndex > 0 ? keyPart.substring(0, semicolonIndex) : keyPart;
+        const params = {};
+
+        if (semicolonIndex > 0) {
+          const paramString = keyPart.substring(semicolonIndex + 1);
+          // 改进参数解析，处理带引号的情况
+          const paramRegex = /([^=;]+)=([^;"]+|"[^"]*")/g;
+          let match;
+          while ((match = paramRegex.exec(paramString)) !== null) {
+            let pVal = match[2];
+            if (pVal.startsWith('"') && pVal.endsWith('"')) {
+              pVal = pVal.substring(1, pVal.length - 1);
+            }
+            params[match[1].toUpperCase()] = pVal;
+          }
         }
-
-        // key是冒号之前的所有内容(包括参数)
-        key = line.substring(0, colonIndex).toUpperCase();
-        value = line.substring(colonIndex + 1);
-
-        // 移除转义
-        value = this.unescapeText(value);
 
         // 处理组件开始
         if (key === 'BEGIN') {
-          if (value === 'VEVENT') {
+          const componentName = value.toUpperCase();
+          if (componentName === 'VEVENT') {
             currentComponent = 'event';
-            currentItem = {};
-          } else if (value === 'VTODO') {
+            currentItem = { alarms: [] };
+          } else if (componentName === 'VTODO') {
             currentComponent = 'todo';
             currentItem = {};
+          } else if (componentName === 'VJOURNAL') {
+            currentComponent = 'note';
+            currentItem = {};
+          } else if (componentName === 'VALARM') {
+            inAlarm = true;
           }
-          componentStack.push(value);
+          componentStack.push(componentName);
           continue;
         }
 
         // 处理组件结束
         if (key === 'END') {
+          const componentName = value.toUpperCase();
           componentStack.pop();
-          if (value === 'VEVENT' && currentComponent === 'event') {
+          
+          if (componentName === 'VEVENT' && currentComponent === 'event') {
             result.events.push(this.parseEvent(currentItem));
-            if (componentStack.length === 0) {
-              currentComponent = null;
-              currentItem = {};
-            }
-          } else if (value === 'VTODO' && currentComponent === 'todo') {
+          } else if (componentName === 'VTODO' && currentComponent === 'todo') {
             result.todos.push(this.parseTodo(currentItem));
-            if (componentStack.length === 0) {
-              currentComponent = null;
-              currentItem = {};
+          } else if (componentName === 'VJOURNAL' && currentComponent === 'note') {
+            result.notes.push(this.parseNote(currentItem));
+          } else if (componentName === 'VALARM') {
+            inAlarm = false;
+            if (currentComponent === 'event') {
+              currentItem.alarms.push(true);
             }
+          }
+          
+          if (componentStack.length === 0) {
+            currentComponent = null;
+            currentItem = {};
           }
           continue;
         }
 
-        // 解析属性 - 只在event或todo组件中解析
-        if ((currentComponent === 'event' || currentComponent === 'todo') && currentItem) {
-          this.parseProperty(key, value, currentItem);
+        // 解析属性 - 只在主组件中解析，且不在闹钟组件内
+        if (currentComponent && currentItem && !inAlarm) {
+          const unescapedValue = this.unescapeText(value);
+          if (['DTSTART', 'DTEND', 'DUE', 'CREATED', 'LAST-MODIFIED'].includes(key)) {
+            currentItem[key] = { value: value, params }; // 日期保留原始字符串供进一步解析
+          } else {
+            currentItem[key] = unescapedValue;
+          }
         }
       }
 
@@ -118,22 +147,34 @@ class ICalParser {
         : this.parseDateTime(endTime),
       allDay: this.isAllDay(item['DTSTART']),
       color: item['X-APPLE-CALENDAR-COLOR'] || '#2563eb',
+      reminderCaldav: item.alarms && item.alarms.length > 0 ? 1 : 0,
       createdAt: Math.floor(Date.now() / 1000),
       updatedAt: Math.floor(Date.now() / 1000)
     };
 
-    // 处理全天事件
-    if (event.allDay && event.endTime) {
-      // 全天事件的结束时间通常是第二天，需要减去一天，让start和end指向同一天
-      // 使用 UTC 方法避免服务器本地时区问题
-      const endDate = new Date(event.endTime * 1000);
-      endDate.setUTCDate(endDate.getUTCDate() - 1);
-      event.endTime = Math.floor(endDate.getTime() / 1000);
+    // 时区漂移容错：如果时间恰好是 16:00 (UTC 00:00)，且客户端未明确指定时区，尝试将其视为本地 00:00 的全天事件
+    if (!event.allDay && event.startTime % 86400 === 57600) { // 57600 是 16:00 的秒数
+        // 这是一个可疑的漂移项，但我们保持原始数据，仅在 ID 匹配或特定条件下处理
     }
 
-    // 如果全天事件的 endTime 不存在，设置为和 startTime 一样
-    if (event.allDay && !event.endTime) {
-      event.endTime = event.startTime;
+    // 处理全天事件
+    if (event.allDay) {
+      if (event.endTime) {
+        const span = event.endTime - event.startTime;
+        // 如果结束时间等于开始时间，或者明显没跨天，强补一天
+        if (span <= 0) {
+            event.endTime = event.startTime + 86400;
+        } else if (span > 86400 && span % 86400 !== 0) {
+            // 如果不是整天，向上取整到下一天凌晨
+            const endDate = new Date(event.endTime * 1000);
+            endDate.setUTCHours(0,0,0,0);
+            endDate.setUTCDate(endDate.getUTCDate() + 1);
+            event.endTime = Math.floor(endDate.getTime() / 1000);
+        }
+      } else {
+        // 没有 endTime 时，默认加一天
+        event.endTime = event.startTime + 86400;
+      }
     }
 
     // 解析时区ID (TZID)
@@ -225,8 +266,8 @@ class ICalParser {
       title: item.SUMMARY,
       description: item.DESCRIPTION,
       dueDate: dueDate && typeof dueDate === 'object'
-        ? this.parseDate(dueDate.value)
-        : this.parseDate(dueDate),
+        ? this.parseDateTime(dueDate.value, dueDate.params)
+        : this.parseDateTime(dueDate),
       priority: ICalGenerator.mapPriorityFromICal(item.PRIORITY || 5),
       completed: item.STATUS === 'COMPLETED',
       createdAt: Math.floor(Date.now() / 1000),

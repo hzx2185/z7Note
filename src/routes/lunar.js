@@ -41,6 +41,8 @@ router.get('/:date', async (req, res) => {
       lunarMonthCn: lunarInfo.monthCn,
       lunarDayCn: lunarInfo.dayCn,
       fullText: lunarInfo.fullText,
+      yi: lunarInfo.yi,
+      ji: lunarInfo.ji,
       festival: festivalInfo ? festivalInfo.name : null
     };
 

@@ -6,6 +6,49 @@ const log = require('../utils/logger');
 
 const router = express.Router();
 
+// 获取用户统计信息
+router.get('/api/user/stats', async (req, res) => {
+  try {
+    const db = getConnection();
+    const username = req.user;
+    if (!username) return res.status(401).json({ error: "未登录" });
+    
+    // 获取当前年/月的起始时间戳
+    const now = new Date();
+    const startOfYear = Math.floor(new Date(now.getFullYear(), 0, 1).getTime() / 1000);
+    const startOfMonth = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000);
+    
+    // 笔记的时间戳是毫秒，需要处理
+    const startOfYearMs = startOfYear * 1000;
+    const startOfMonthMs = startOfMonth * 1000;
+
+    const stats = {
+      total: {},
+      year: {},
+      month: {}
+    };
+
+    // 1. 总计
+    stats.total.events = (await db.get('SELECT COUNT(*) as c FROM events WHERE username = ?', [username])).c;
+    stats.total.todos = (await db.get('SELECT COUNT(*) as c FROM todos WHERE username = ?', [username])).c;
+    stats.total.notes = (await db.get('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0', [username])).c;
+
+    // 2. 本年
+    stats.year.events = (await db.get('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfYear])).c;
+    stats.year.todos = (await db.get('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfYear, startOfYear])).c;
+    stats.year.notes = (await db.get('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfYearMs])).c;
+
+    // 3. 本月
+    stats.month.events = (await db.get('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfMonth])).c;
+    stats.month.todos = (await db.get('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfMonth, startOfMonth])).c;
+    stats.month.notes = (await db.get('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfMonthMs])).c;
+
+    res.json(stats);
+  } catch (e) {
+    res.status(500).json({ error: '获取统计失败: ' + e.message });
+  }
+});
+
 // 获取用户博客配置
 router.get('/api/user/blog-config/:username', async (req, res) => {
   try {

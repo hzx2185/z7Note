@@ -2,124 +2,291 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
   <title>日历 - z7Note</title>
-  <link rel="stylesheet" href="/css/variables.css">
   <link rel="stylesheet" href="/css/app.css">
-  <link rel="stylesheet" href="/css/calendar.css">
+  <style>
+    body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
+    .tool-btn { position: relative; }
+    .main { flex: 1; display: flex; overflow: hidden; margin-top: 40px; }
+    
+    /* 月视图 */
+    .month-view { flex: 1; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--border); }
+    .month-view-headers { display: flex; border-bottom: 1px solid var(--border); background: var(--side); }
+    .month-day-header { flex: 1; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--gray); border-right: 1px solid var(--border); }
+    .month-view-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; background: var(--border); gap: 1px; overflow: auto; }
+    
+    .month-day { background: var(--bg); padding: 4px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; cursor: pointer; transition: background 0.1s; position: relative; }
+    .month-day:hover { background: rgba(128,128,128,0.05); }
+    .month-day.other-month { opacity: 0.4; background: var(--side); }
+    .month-day.today { background: rgba(37, 99, 235, 0.05); }
+    .month-day.today .month-day-number { color: var(--accent); font-weight: bold; }
+    .month-day.selected { background: rgba(37, 99, 235, 0.1); outline: 1px solid var(--accent); z-index: 1; }
+    
+    .month-day-number { font-size: 14px; font-weight: 500; }
+    .day-lunar { font-size: 10px; color: var(--gray); }
+    .day-lunar.day-festival { color: var(--accent); }
+    
+    .day-summary { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
+    .day-badge { font-size: 9px; padding: 0 2px; border-radius: 2px; }
+    .badge-todo { color: var(--accent); }
+    .badge-event { color: var(--green); }
+    
+    .day-content { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+    .day-preview-item { font-size: 10px; padding: 1px 3px; border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .day-preview-item.event { background: rgba(34,197,94,0.1); color: var(--green); }
+    .day-preview-item.todo { background: rgba(37,99,235,0.1); color: var(--accent); }
+
+    /* 侧边栏 */
+    .sidebar { width: 300px; display: flex; flex-direction: column; background: var(--side); flex-shrink: 0; }
+    .sidebar-header { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .sidebar-title { font-weight: bold; font-size: 14px; }
+    .sidebar-search { padding: 6px 12px; border-bottom: 1px solid var(--border); }
+    .sidebar-search input { width: 100%; height: 26px; padding: 0 8px; font-size: 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--text); outline: none; }
+    
+    .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .sidebar-tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; cursor: pointer; color: var(--gray); position: relative; }
+    .sidebar-tab:hover { background: rgba(128,128,128,0.05); }
+    .sidebar-tab.active { color: var(--accent); font-weight: bold; border-bottom: 2px solid var(--accent); }
+    
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 0; }
+    .date-group-header { padding: 6px 12px; background: var(--side); font-size: 11px; color: var(--gray); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
+    
+    /* 列表项样式 (事件, 待办, 笔记) */
+    .todo-item, .event-item, .note-item { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; background: var(--bg); transition: background 0.1s; cursor: pointer; }
+    .todo-item:hover, .event-item:hover, .note-item:hover { background: rgba(128,128,128,0.05); }
+    
+    .todo-checkbox { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: var(--accent); }
+    .todo-content, .event-content { flex: 1; min-width: 0; }
+    .todo-title, .event-title, .note-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .todo-title.completed { text-decoration: line-through; color: var(--gray); }
+    .todo-meta, .event-time { font-size: 10px; color: var(--gray); margin-top: 2px; }
+    
+    .event-item { border-left: 3px solid var(--accent); }
+    .recurrence-badge { font-size: 9px; color: var(--accent); background: rgba(37,99,235,0.1); padding: 0 3px; border-radius: 2px; margin-left: 4px; }
+    
+    .todo-priority { font-size: 9px; padding: 0 4px; border-radius: 2px; margin-right: 4px; }
+    .priority-3 { background: rgba(239,68,68,0.1); color: var(--red); }
+    .priority-2 { background: rgba(245,158,11,0.1); color: var(--orange); }
+    .priority-1 { background: rgba(34,197,94,0.1); color: var(--green); }
+
+    .todo-actions, .event-actions { display: none; gap: 4px; }
+    .todo-item:hover .todo-actions, .event-item:hover .event-actions { display: flex; }
+    .edit-btn, .delete-btn { background: none; border: none; cursor: pointer; padding: 2px 4px; font-size: 14px; color: var(--gray); border-radius: 3px; }
+    .edit-btn:hover { background: rgba(128,128,128,0.1); color: var(--accent); }
+    .delete-btn:hover { background: rgba(239,68,68,0.1); color: var(--red); }
+
+    .load-more-indicator { text-align: center; padding: 10px; color: var(--gray); font-size: 11px; cursor: pointer; }
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--gray); }
+
+    /* 统一紧凑模态框 */
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal.show { display: flex; }
+    .modal-content { max-width: 340px; width: 95vw; max-height: 90vh; overflow-y: auto; padding: 12px; border-radius: 6px; background: var(--bg); box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: none; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border); background: none; }
+    .modal-header h3 { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); }
+    .modal-header button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray); padding: 0 4px; }
+    
+    .modal-body { padding: 0; }
+    .form-group { margin-bottom: 10px; }
+    .form-group label { display: block; font-size: 11px; color: var(--gray); margin-bottom: 4px; }
+    
+    /* 强制模态框内的行不换行，但允许 JavaScript 控制隐藏 */
+    .modal .form-row { 
+      display: flex; 
+      flex-direction: row !important; 
+      flex-wrap: nowrap !important; 
+      gap: 8px !important; 
+    }
+    /* 仅当 display 不是 none 时应用 flex */
+    .modal .form-row[style*="display: none"] {
+      display: none !important;
+    }
+    .modal .form-row > .form-group { 
+      flex: 1 !important; 
+      min-width: 0 !important; 
+    }
+    
+    input, textarea, select { width: 100%; padding: 6px 8px; background: var(--side); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 13px; outline: none; box-sizing: border-box; }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+    
+    /* 极致压缩时间输入框 */
+    input[type="datetime-local"], input[type="date"] { 
+      font-size: 11px !important; 
+      padding: 4px 2px !important; 
+      min-width: 0 !important;
+      letter-spacing: -0.5px;
+    }
+
+    .reminder-options { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+    .reminder-option { font-size: 11px; display: flex; align-items: center; gap: 3px; cursor: pointer; color: var(--text); white-space: nowrap; }
+    .reminder-option input { width: auto; margin: 0; }
+
+    /* 强制按钮在任何宽度下都并排 */
+    .modal-actions { 
+      display: flex !important; 
+      flex-direction: row !important; 
+      gap: 8px !important; 
+      margin-top: 16px !important; 
+      border: none !important; 
+      padding: 0 !important; 
+    }
+    .modal-actions .btn { 
+      flex: 1 !important; 
+      height: 32px !important; 
+      border-radius: 4px !important; 
+      font-size: 13px !important; 
+      cursor: pointer !important; 
+      display: flex !important; 
+      align-items: center !important; 
+      justify-content: center !important; 
+      border: 1px solid var(--border) !important; 
+      background: var(--side) !important; 
+      color: var(--text) !important; 
+      width: auto !important;
+    }
+    .modal-actions .btn-primary { background: var(--accent); color: white; border: none; }
+    .modal-actions .btn:hover { opacity: 0.9; }
+    
+    /* 响应式调整 */
+    @media (max-width: 480px) {
+      .modal-content { padding: 10px; }
+      .reminder-option { font-size: 10px; gap: 2px; }
+    }
+
+    .subscription-item { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; background: var(--bg); }
+    .sub-actions { display: flex; gap: 4px; }
+    .sub-actions button { padding: 3px 6px; font-size: 11px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); background: var(--side); color: var(--text); }
+    .sub-actions .btn-sync { background: var(--accent); color: white; border: none; }
+    .sub-actions .btn-delete { color: var(--red); border-color: rgba(239,68,68,0.2); }
+
+    /* 未登录提示 */
+    #login-required { display: none; position: fixed; inset: 0; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
+    #login-required.show { display: flex; }
+
+    @media (max-width: 768px) {
+      .main { flex-direction: column; overflow-y: auto; }
+      .sidebar { width: 100%; flex-shrink: 0; height: auto; border-top: 1px solid var(--border); }
+      .month-view { flex-shrink: 0; height: 380px; }
+      .month-day { height: auto; min-height: 45px; padding: 2px; }
+      .month-day-number { font-size: 12px; }
+      .day-lunar { font-size: 9px; transform: scale(0.9); transform-origin: left; }
+      .modal-content { max-width: 95vw; }
+    }
+  </style>
 </head>
 <body>
-  <div id="calendar-app">
-    <!-- 顶部导航 -->
-    <div class="calendar-header">
-      <div class="calendar-nav calendar-nav-left">
-        <button class="secondary" id="prev-month">←</button>
-        <span class="calendar-title" id="current-month"></span>
-        <button class="secondary" id="next-month">→</button>
-        <button class="secondary" id="today-btn">今天</button>
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:4px">
+      <button onclick="location.href='/'" class="tool-btn">☰</button>
+      <button class="tool-btn" id="prev-month">‹</button>
+      <div style="display:flex;align-items:center;gap:2px">
+        <input type="number" id="jump-year" style="width:50px;height:24px;padding:2px;font-size:11px;text-align:center" placeholder="年">
+        <input type="number" id="jump-month" style="width:30px;height:24px;padding:2px;font-size:11px;text-align:center" placeholder="月" min="1" max="12">
+        <button id="jump-btn" style="height:24px;padding:0 4px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--side);color:var(--text);border-radius:3px">转到</button>
       </div>
-      <div class="calendar-nav calendar-nav-right">
-        <button class="secondary" id="subscription-btn" title="订阅">📅</button>
-        <button class="secondary" id="export-btn" title="导出">📤</button>
-        <button class="secondary" id="import-btn" title="导入">📥</button>
-        <button class="secondary" id="reminder-toggle-btn" title="提醒开关">🔔</button>
-        <button class="add-btn" id="new-event-btn">➕</button>
-      </div>
+      <b style="font-size:14px;min-width:60px;text-align:center;display:none" id="current-month"></b>
+      <button class="tool-btn" id="next-month">›</button>
+      <button class="tool-btn" id="today-btn" style="font-size:11px">今天</button>
     </div>
-
-    <!-- 主体区域 -->
-    <div class="calendar-main">
-      <!-- 月视图 -->
-      <div class="month-view" id="month-view">
-        <div class="month-view-headers">
-          <div class="month-day-header">日</div>
-          <div class="month-day-header">一</div>
-          <div class="month-day-header">二</div>
-          <div class="month-day-header">三</div>
-          <div class="month-day-header">四</div>
-          <div class="month-day-header">五</div>
-          <div class="month-day-header">六</div>
-        </div>
-        <div class="month-view-grid" id="month-view-grid"></div>
-      </div>
-
-      <!-- 侧边栏 -->
-      <div class="sidebar">
-        <div class="sidebar-header">
-          <span class="sidebar-title" id="sidebar-date">选择日期</span>
-          <div class="sidebar-header-actions">
-            <button class="icon-btn" id="todo-add-btn" title="添加待办">☑</button>
-            <button class="icon-btn" id="event-add-btn" title="添加事件">📅</button>
-          </div>
-        </div>
-        <input type="text" id="sidebar-search" class="sidebar-search" placeholder="搜索...">
-        <div class="sidebar-tabs">
-          <button class="sidebar-tab active" data-tab="all">全部</button>
-          <button class="sidebar-tab" data-tab="event">事件</button>
-          <button class="sidebar-tab" data-tab="todo">待办</button>
-          <button class="sidebar-tab" data-tab="note">笔记</button>
-        </div>
-        <div class="sidebar-content" id="sidebar-content"></div>
-      </div>
-    </div>
-
-    <!-- 未登录提示 -->
-    <div id="login-required">
-      <h2>需要登录</h2>
-      <p>请登录后查看日历内容</p>
-      <a href="/">返回首页登录</a>
+    <div style="display:flex;gap:2px">
+      <button class="tool-btn" id="subscription-btn" title="订阅">📅</button>
+      <button class="tool-btn" id="export-btn" title="导出">📤</button>
+      <button class="tool-btn" id="import-btn" title="导入">📥</button>
+      <button class="tool-btn" id="new-event-btn" style="color:var(--accent)">➕</button>
     </div>
   </div>
 
-  <!-- 待办模态框 -->
-  <div class="modal-overlay" id="todo-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 class="modal-title">添加待办</h3>
-        <button class="modal-close todo-modal-close">×</button>
+  <div class="main">
+    <div class="month-view" id="month-view">
+      <div class="month-view-headers">
+        <div class="month-day-header">日</div><div class="month-day-header">一</div><div class="month-day-header">二</div>
+        <div class="month-day-header">三</div><div class="month-day-header">四</div><div class="month-day-header">五</div>
+        <div class="month-day-header">六</div>
       </div>
-      <form id="todo-form">
-        <div class="form-group">
-          <label class="form-label">标题 *</label>
-          <input type="text" class="form-input" name="title" required placeholder="输入待办事项标题">
+      <div class="month-view-grid" id="month-view-grid"></div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-header" style="flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px;">
+        <div style="display:flex; justify-content: space-between; width: 100%; align-items: center;">
+          <div style="display:flex; align-items: baseline; gap: 6px;">
+            <span class="sidebar-title" id="sidebar-date" style="font-size: 16px;">选择日期</span>
+            <span id="sidebar-lunar" style="font-size: 12px; color: var(--gray);"></span>
+          </div>
+          <div style="display:flex; gap: 4px;">
+            <button class="tool-btn" id="todo-add-btn" title="添加待办">☑</button>
+            <button class="tool-btn" id="event-add-btn" title="添加事件">📅</button>
+            <button class="tool-btn" id="batch-select-btn" title="批量选择">✓</button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">描述</label>
-          <textarea class="form-textarea" name="description" placeholder="添加详细描述（可选）"></textarea>
+        <div id="sidebar-yiji" style="font-size: 11px; color: var(--gray); line-height: 1.4; width: 100%;">
+          <div id="yiji-content" style="display:none;">
+            <span style="color:var(--green)">宜:</span> <span id="yiji-yi"></span>
+            <span style="color:var(--red); margin-left:8px">忌:</span> <span id="yiji-ji"></span>
+          </div>
         </div>
+      </div>
+      
+      <!-- 统计数据面板 -->
+      <div id="sidebar-stats" style="padding: 6px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--gray);">
+        <div style="display:flex; align-items: center; justify-content: space-between;">
+          <div style="display:flex; flex-wrap: wrap; gap: 8px;">
+            <span><span style="color:var(--green)">事</span> <span id="stats-events" style="color:var(--text); font-weight:bold;">-</span></span>
+            <span><span style="color:var(--accent)">待</span> <span id="stats-todos" style="color:var(--text); font-weight:bold;">-</span></span>
+            <span><span style="color:var(--gray)">笔</span> <span id="stats-notes" style="color:var(--text); font-weight:bold;">-</span></span>
+          </div>
+          <span style="font-size: 9px; opacity: 0.7; white-space: nowrap;">(月/年/总)</span>
+        </div>
+      </div>
+
+      <div class="sidebar-search"><input type="text" id="sidebar-search" placeholder="搜索..."></div>
+      <div class="sidebar-tabs">
+        <div class="sidebar-tab active" data-tab="all">全部</div>
+        <div class="sidebar-tab" data-tab="event">事件</div>
+        <div class="sidebar-tab" data-tab="todo">
+          待办
+          <span id="incomplete-count" style="position: absolute; top: -2px; right: -2px; background: var(--red); color: white; border-radius: 50%; width: 14px; height: 14px; font-size: 10px; display: flex; align-items: center; justify-content: center;">0</span>
+        </div>
+        <div class="sidebar-tab" data-tab="note">笔记</div>
+      </div>
+      <!-- 批量操作工具栏 -->
+      <div class="batch-actions-bar" id="batch-actions-bar" style="display:none; padding: 6px 8px; background: var(--side); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 4px; font-size: 11px;">
+        <input type="checkbox" id="select-all-checkbox" style="accent-color: var(--accent); width: 13px; height: 13px;">
+        <span id="selected-count" style="color: var(--text); flex: 1; white-space: nowrap; overflow: hidden;">0项</span>
+        <button id="batch-format-btn" style="padding: 2px 5px; font-size: 10px; background: rgba(37,99,235,0.1); color: var(--accent); border: 1px solid rgba(37,99,235,0.2); border-radius: 3px; cursor: pointer;">修复</button>
+        <button id="batch-cleanup-btn" style="padding: 2px 5px; font-size: 10px; background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.2); border-radius: 3px; cursor: pointer;">去重</button>
+        <button id="batch-delete-btn" style="padding: 2px 5px; font-size: 10px; background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); border-radius: 3px; cursor: pointer;">删除</button>
+        <button id="batch-clear-btn" style="padding: 2px 5px; font-size: 10px; background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); border-radius: 3px; cursor: pointer;">清空</button>
+        <button id="cancel-select-btn" style="padding: 2px 5px; font-size: 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 3px; cursor: pointer;">取消</button>
+      </div>
+      <div class="sidebar-content" id="sidebar-content"></div>
+    </div>
+  </div>
+
+  <!-- 未登录提示 -->
+  <div id="login-required">
+    <h2>需要登录</h2>
+    <p style="margin:10px 0 20px;color:var(--gray)">请登录后查看日历内容</p>
+    <button class="btn btn-primary" onclick="location.href='/'">返回首页登录</button>
+  </div>
+
+  <!-- 待办 -->
+  <div class="modal" id="todo-modal">
+    <div class="modal-content">
+      <div class="modal-header"><h3 class="modal-title">添加待办</h3><button class="todo-modal-close">×</button></div>
+      <form id="todo-form" class="modal-body">
+        <div class="form-group"><label>标题 *</label><input name="title" required></div>
+        <div class="form-group"><label>描述</label><textarea name="description" rows="2"></textarea></div>
         <div class="form-row">
-          <div class="form-group form-group-narrow">
-            <label class="form-label">优先级</label>
-            <select class="form-select" name="priority">
-              <option value="1">低</option>
-              <option value="2" selected>中</option>
-              <option value="3">高</option>
-            </select>
-          </div>
-          <div class="form-group form-group-narrow">
-            <label class="form-label">截止日期</label>
-            <input type="date" class="form-input" name="dueDate">
-          </div>
+          <div class="form-group"><label>优先级</label><select name="priority"><option value="1">低</option><option value="2" selected>中</option><option value="3">高</option></select></div>
+          <div class="form-group"><label>截止日期</label><input type="date" name="dueDate"></div>
         </div>
-        <div class="form-row">
-          <div class="form-group form-group-narrow">
-            <label class="form-label">提醒时间</label>
-            <select class="form-select" name="reminderTime">
-              <option value="0,0,15">提前15分钟</option>
-              <option value="0,1,0">提前1小时</option>
-              <option value="0,2,0">提前2小时</option>
-              <option value="1,0,0" selected>提前1天</option>
-              <option value="2,0,0">提前2天</option>
-              <option value="7,0,0">提前7天</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">提醒方式</label>
-            <div class="reminder-options">
-              <label class="reminder-option"><input type="checkbox" name="reminderEmail" value="1" checked> 邮件</label>
-              <label class="reminder-option"><input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知</label>
-              <label class="reminder-option"><input type="checkbox" name="reminderCaldav" value="1"> 日历应用</label>
-            </div>
+        <div class="form-group"><label>提醒方式</label>
+          <select name="reminderTime"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
+          <div class="reminder-options">
+            <label class="reminder-option"><input type="checkbox" name="reminderEmail" value="1" checked> 邮件</label>
+            <label class="reminder-option"><input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知</label>
           </div>
         </div>
         <div class="modal-actions">
@@ -130,80 +297,38 @@
     </div>
   </div>
 
-  <!-- 事件模态框 -->
-  <div class="modal-overlay" id="event-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 class="modal-title">添加事件</h3>
-        <button class="modal-close event-modal-close">×</button>
-      </div>
-      <form id="event-form">
-        <div class="form-group">
-          <label class="form-label">标题 *</label>
-          <input type="text" class="form-input" name="title" required placeholder="输入事件标题">
-        </div>
-        <div class="form-group">
-          <label class="form-label">描述</label>
-          <textarea class="form-textarea" name="description" placeholder="添加详细描述（可选）"></textarea>
-        </div>
-        <div class="form-row">
-          <div class="form-group form-group-half">
-            <label class="form-label">开始时间 *</label>
-            <input type="datetime-local" class="form-input" name="startTime" required>
-          </div>
-          <div class="form-group form-group-half">
-            <label class="form-label">结束时间</label>
-            <input type="datetime-local" class="form-input" name="endTime">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group form-group-narrow">
-            <label class="form-label">全天</label>
-            <select class="form-select" name="allDay">
-              <option value="false">否</option>
-              <option value="true" selected>是</option>
-            </select>
-          </div>
-          <div class="form-group form-group-narrow">
-            <label class="form-label">颜色</label>
-            <input type="color" class="form-input" name="color" value="#2563eb">
-          </div>
-          <div class="form-group">
-            <label class="form-label">重复</label>
-            <select class="form-select" name="recurrence" id="recurrence-select">
-              <option value="">不重复</option>
-              <option value="daily">每天</option>
-              <option value="weekly">每周</option>
-              <option value="monthly">每月(公历)</option>
-              <option value="yearly">每年(公历)</option>
-              <option value="lunar_monthly">每月(农历)</option>
-              <option value="lunar_yearly">每年(农历)</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group" id="recurrence-end-group" style="display: none;">
-          <label class="form-label">重复结束日期</label>
-          <input type="date" class="form-input" name="recurrenceEnd" id="recurrence-end">
-        </div>
-        <div class="form-row">
-          <div class="form-group form-group-narrow">
-            <label class="form-label">提醒时间</label>
-            <select class="form-select" name="reminderTime">
-              <option value="0,0,15">提前15分钟</option>
-              <option value="0,1,0">提前1小时</option>
-              <option value="0,2,0">提前2小时</option>
-              <option value="1,0,0" selected>提前1天</option>
-              <option value="2,0,0">提前2天</option>
-              <option value="7,0,0">提前7天</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">提醒方式</label>
-            <div class="reminder-options">
-              <label class="reminder-option"><input type="checkbox" name="reminderEmail" value="1" checked> 邮件</label>
-              <label class="reminder-option"><input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器通知</label>
-              <label class="reminder-option"><input type="checkbox" name="reminderCaldav" value="1"> 日历应用</label>
+  <!-- 事件 -->
+  <div class="modal" id="event-modal">
+    <div class="modal-content">
+      <div class="modal-header"><h3 class="modal-title">添加事件</h3><button class="event-modal-close">×</button></div>
+      <form id="event-form" class="modal-body">
+        <div class="form-group"><label>标题 *</label><input name="title" required></div>
+        <div class="form-group"><label>描述</label><textarea name="description" rows="2"></textarea></div>
+          <div class="form-row">
+            <div class="form-group"><label>全天</label><select name="allDay" id="allDay-select"><option value="false">否</option><option value="true">是</option></select></div>
+            <div class="form-group"><label>重复</label>
+              <select name="recurrence" id="recurrence-select">
+                <option value="">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option>
+              </select>
             </div>
+          </div>
+          <!-- 非全天事件的时间选择器 -->
+          <div class="form-row" id="datetime-row">
+            <div class="form-group"><label>开始 *</label><input type="datetime-local" name="startTime" required></div>
+            <div class="form-group"><label>结束</label><input type="datetime-local" name="endTime"></div>
+          </div>
+          <!-- 全天事件的日期选择器 -->
+          <div class="form-row" id="date-row" style="display:none">
+            <div class="form-group"><label>开始日期 *</label><input type="date" name="startDate" required></div>
+            <div class="form-group"><label>结束日期</label><input type="date" name="endDate"></div>
+          </div>
+        <div class="form-group" id="recurrence-end-group" style="display:none"><label>结束日期</label><input type="date" name="recurrenceEnd"></div>
+        <div class="form-group"><label>提醒</label>
+          <select name="reminderTime" style="margin-bottom:4px"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
+          <div class="reminder-options">
+            <label class="reminder-option"><input type="checkbox" name="reminderEmail" value="1" checked> 邮件</label>
+            <label class="reminder-option"><input type="checkbox" name="reminderBrowser" value="1" checked> 浏览器</label>
+            <label class="reminder-option"><input type="checkbox" name="reminderCaldav" value="1" checked> 日历应用</label>
           </div>
         </div>
         <div class="modal-actions">
@@ -214,41 +339,25 @@
     </div>
   </div>
 
-  <!-- 订阅管理模态框 -->
-  <div class="modal-overlay" id="subscription-modal">
-    <div class="modal" style="width: 600px;">
-      <div class="modal-header">
-        <h3 class="modal-title">日历订阅管理</h3>
-        <button class="modal-close subscription-modal-close">×</button>
+  <!-- 订阅管理 -->
+  <div class="modal" id="subscription-modal">
+    <div class="modal-content" style="max-width:440px">
+      <div class="modal-header"><h3>订阅管理</h3><button class="subscription-modal-close">×</button></div>
+      <div class="modal-body">
+        <button class="btn btn-primary" id="add-subscription-btn" style="width:100%;margin-bottom:10px;height:32px">添加新订阅</button>
+        <div id="subscription-list" style="max-height:280px;overflow-y:auto"></div>
       </div>
-      <div style="margin-bottom: 16px;">
-        <button type="button" class="btn btn-primary" id="add-subscription-btn">添加订阅</button>
-      </div>
-      <div id="subscription-list" style="max-height: 400px; overflow-y: auto;"></div>
     </div>
   </div>
 
-  <!-- 订阅表单模态框 -->
-  <div class="modal-overlay" id="subscription-form-modal">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 class="modal-title" id="subscription-form-title">添加订阅</h3>
-        <button class="modal-close subscription-form-modal-close">×</button>
-      </div>
-      <form id="subscription-form">
-        <div class="form-group">
-          <label class="form-label">名称 *</label>
-          <input type="text" class="form-input" name="name" required placeholder="例如：中国节假日">
-        </div>
-        <div class="form-group">
-          <label class="form-label">ICS URL *</label>
-          <input type="url" class="form-input" name="url" required placeholder="https://example.com/calendar.ics">
-          <small style="color: var(--text-secondary); font-size: 11px;">支持中国节假日: https://calendar.google.com/calendar/ical/zh.china%23holiday%40group.v.calendar.google.com/public/basic.ics</small>
-        </div>
-        <div class="form-group">
-          <label class="form-label">颜色</label>
-          <input type="color" class="form-input" name="color" value="#6366f1">
-        </div>
+  <!-- 订阅表单 -->
+  <div class="modal" id="subscription-form-modal">
+    <div class="modal-content">
+      <div class="modal-header"><h3 id="subscription-form-title">订阅日历</h3><button class="subscription-form-modal-close">×</button></div>
+      <form id="subscription-form" class="modal-body">
+        <div class="form-group"><label>名称 *</label><input name="name" required></div>
+        <div class="form-group"><label>URL *</label><input type="url" name="url" required></div>
+        <div class="form-group"><label>颜色</label><input type="color" name="color" value="#6366f1" style="height:28px;padding:2px"></div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary subscription-form-cancel">取消</button>
           <button type="submit" class="btn btn-primary">保存</button>
@@ -257,27 +366,13 @@
     </div>
   </div>
 
-  <input type="file" id="ics-file-input" accept=".ics" style="display: none;">
-
-  <script>
-  // 浏览器通知
-  (function() {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-    window.addEventListener('message', function(event) {
-      if (event.data && event.data.type === 'reminder') {
-        const { itemType, item } = event.data;
-        if (Notification.permission === 'granted') {
-          new Notification(itemType === 'event' ? '📅 事件提醒' : '✅ 待办提醒', {
-            body: `${item.title}\n⏰ ${item.timeStr || ''}`,
-            icon: '/favicon.ico'
-          });
-        }
-      }
-    });
-  })();
+  <input type="file" id="ics-file-input" accept=".ics" style="display:none">
+  <script type="module">
+    import wsManager from '/js/websocket.js';
+    window.wsManager = wsManager;
+    wsManager.connect().catch(console.error);
   </script>
-  <script src="/js/calendar.js?v=4"></script>
+  <script src="/js/notification-handler.js?v=1"></script>
+  <script src="/js/calendar.js?v=6"></script>
 </body>
 </html>

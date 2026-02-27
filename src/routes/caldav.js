@@ -1,6 +1,5 @@
 /**
- * CalDAV 服务器路由
- * 实现 RFC 4791 CalDAV 协议
+ * CalDAV 服务器路由 - 兼容性极致修复版 (V2 - 性能与删除优化)
  */
 
 const express = require('express');
@@ -9,556 +8,228 @@ const log = require('../utils/logger');
 const ICalGenerator = require('../utils/icalGenerator');
 const ICalParser = require('../utils/icalParser');
 const { basicAuthMiddleware } = require('../middleware/basicAuth');
+const { broadcast } = require('./ws');
 
 const router = express.Router();
 
-// 全局中间件，用于日志记录
+/**
+ * 优化：防抖广播
+ */
+const debounceBroadcasts = new Map();
+function debouncedBroadcast(username) {
+    if (debounceBroadcasts.has(username)) return;
+    broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
+    const timer = setTimeout(() => {
+        debounceBroadcasts.delete(username);
+        broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
+    }, 2000);
+    debounceBroadcasts.set(username, timer);
+}
+
+// XML 转义
+function esc(str) {
+    if (!str) return '';
+    return str.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+// URL 编码
+function urlEsc(str) {
+    return encodeURIComponent(str).replace(/%2F/g, '/');
+}
+
 router.use((req, res, next) => {
-  const userAgent = req.headers['user-agent'] || '';
-  console.log(`[CalDAV] ${req.method} ${req.path} - User-Agent: ${userAgent}`);
-  // 对于 DELETE 请求,打印更多详细信息
-  if (req.method === 'DELETE') {
-    console.log(`[CalDAV] DELETE 详情 - 路径: ${req.path}, 原始URL: ${req.originalUrl}, 完整路径: ${req.url}`);
-  }
-  const originalSend = res.send;
-  res.send = function(data) {
-    console.log(`[CalDAV] Response: ${res.statusCode} for ${req.method} ${req.path}`);
-    return originalSend.call(this, data);
-  };
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, If-Match, If-None-Match, X-Requested-With');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag, DAV, Allow');
   next();
 });
 
-// OPTIONS - 宣告服务器支持的方法
+// OPTIONS
 router.options('*', (req, res) => {
   res.setHeader('Allow', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH');
-  res.setHeader('DAV', '1, 2, 3, calendar-access, calendar-schedule, sync');
-  res.setHeader('MS-Author-Via', 'DAV');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('DAV', '1, 2, 3, calendar-access, calendar-schedule, calendar-proxy, sync-collection');
   res.status(200).end();
 });
 
-// PROPFIND / - 初始服务发现
+// PROPFIND /
 router.propfind('/', basicAuthMiddleware, async (req, res) => {
-  try {
-    const username = req.user;
-    const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:response>
-    <D:href>/caldav/</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:current-user-principal>
-          <D:href>/caldav/principals/${username}/</D:href>
-        </D:current-user-principal>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>
-</D:multistatus>`;
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.status(207).send(xml);
-  } catch (error) {
-    log('ERROR', 'CalDAV 根路径 PROPFIND 失败', { error: error.message });
-    res.status(500).send();
-  }
-});
-
-// PROPFIND /principals/:username/ - Principal 发现
-router.propfind('/principals/:username/', basicAuthMiddleware, async (req, res) => {
-  try {
-    const { username } = req.params;
-    const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:response>
-    <D:href>/caldav/principals/${username}/</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:resourcetype><D:principal/></D:resourcetype>
-        <D:displayname>${username}</D:displayname>
-        <C:calendar-home-set>
-          <D:href>/caldav/${username}/</D:href>
-        </C:calendar-home-set>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>
-</D:multistatus>`;
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.status(207).send(xml);
-  } catch (error) {
-    log('ERROR', 'CalDAV Principals PROPFIND 失败', { error: error.message });
-    res.status(500).send();
-  }
-});
-
-// PROPFIND /:username/ - 日历主目录发现
-router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
-  try {
-    const { username } = req.params;
-    if (username !== req.user) return res.status(403).send();
-
-    const depth = req.header('Depth') || '0';
-    let ctag = 0;
-    let itemsXml = '';
-
-    if (depth === '1') {
-      const [events, todos, notes] = await Promise.all([
-        getConnection().all('SELECT id, title, updatedAt FROM events WHERE username = ?', [username]),
-          getConnection().all('SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 0', [username]),
-        getConnection().all('SELECT id, title, updatedAt FROM todos WHERE username = ?', [username])
-      ]);
-      const items = [...events, ...todos, ...notes];
-        // 计算最新的 updatedAt 作为 ctag
-        if (items.length > 0) {
-          ctag = Math.max(...items.map(i => i.updatedAt || 0));
-        }
-      const log = require('../utils/logger');
-      log('INFO', 'PROPFIND depth=1', {
-        username,
-        eventsCount: events.length,
-        todosCount: todos.length,
-        totalItems: items.length,
-        sampleItems: items.slice(0, 3).map(i => ({ id: i.id, title: i.title, updatedAt: i.updatedAt }))
-      });
-      items.forEach(item => {
-        itemsXml += `
-  <D:response>
-    <D:href>/caldav/${username}/${item.id}.ics</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:displayname>${item.title}</D:displayname>
-        <D:getetag>"${item.updatedAt}"</D:getetag>
-        <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
-        <D:resourcetype/>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>`;
-      });
-    }
-
-    const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:response>
-    <D:href>/caldav/${username}/</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:resourcetype><D:collection/><C:calendar/></D:resourcetype>
-        <D:displayname>${username}</D:displayname>
-        <C:supported-calendar-component-set>
-          <C:comp name="VEVENT"/>
-          <C:comp name="VTODO"/>
-            <C:comp name="VJOURNAL"/>
-        </C:supported-calendar-component-set>
-        <D:getctag>"${ctag}"</D:getctag>
-        <C:calendar-timezone></C:calendar-timezone>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>
-  ${itemsXml}
-</D:multistatus>`;
-
-    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.status(207).send(xml);
-  } catch (error) {
-    log('ERROR', `CalDAV PROPFIND /:username/ 失败`, { error: error.message });
-    res.status(500).send();
-  }
-});
-
-// MKCALENDAR /:username/:calendar - 创建日历
-router.mkcalendar('/:username/:calendar', basicAuthMiddleware, (req, res) => {
-  if (req.params.username !== req.user) return res.status(403).send();
-  log('INFO', 'CalDAV MKCALENDAR 请求 (虚拟成功)', { username: req.params.username });
-  res.status(201).send();
-});
-
-// PROPPATCH /:username/ - 更新日历属性
-router.proppatch('/:username/', basicAuthMiddleware, (req, res) => {
-  if (req.params.username !== req.user) return res.status(403).send();
-  log('INFO', 'CalDAV PROPPATCH 请求 (虚拟成功)', { username: req.params.username });
-  const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:">
-  <D:response>
-    <D:href>/caldav/${req.params.username}/</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:displayname/>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>
-</D:multistatus>`;
+  const username = req.user;
+  const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/caldav/</D:href><D:propstat><D:prop><D:current-user-principal><D:href>/caldav/principals/${urlEsc(username)}/</D:href></D:current-user-principal><D:resourcetype><D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.status(207).send(xml);
 });
 
-// REPORT /:username/ - 获取日历项
-router.report('/:username/', basicAuthMiddleware, async (req, res) => {
+// PROPFIND /principals/:username/
+router.propfind('/principals/:username/', basicAuthMiddleware, async (req, res) => {
+  const { username } = req.params;
+  const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:response><D:href>/caldav/principals/${urlEsc(username)}/</D:href><D:propstat><D:prop><D:resourcetype><D:principal/></D:resourcetype><D:displayname>${esc(username)}</D:displayname><D:principal-URL><D:href>/caldav/principals/${urlEsc(username)}/</D:href></D:principal-URL><C:calendar-home-set><D:href>/caldav/${urlEsc(username)}/</D:href></C:calendar-home-set></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.status(207).send(xml);
+});
+
+// PROPFIND /:username/ (日历集合)
+router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
   try {
     const { username } = req.params;
     if (username !== req.user) return res.status(403).send();
+    const depth = req.header('Depth') || '0';
 
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
-      try {
-        const log = require('../utils/logger');
-        log('INFO', 'REPORT 请求', {
-          username,
-          bodyPreview: body.substring(0, 500),
-          bodyLength: body.length
-        });
+    const lastUpdate = await getConnection().get(`
+      SELECT MAX(ts) as maxTs FROM (
+        SELECT updatedAt as ts FROM events WHERE username = ?
+        UNION ALL
+        SELECT updatedAt as ts FROM todos WHERE username = ?
+        UNION ALL
+        SELECT deletedAt as ts FROM deleted_items WHERE username = ?
+      )
+    `, [username, username, username]);
+    
+    const ctag = lastUpdate && lastUpdate.maxTs ? Math.floor(lastUpdate.maxTs) : 1;
+    let itemsXml = '';
 
-        // 检查是否是 calendar-multiget 请求
-        const isMultiget = body.includes('calendar-multiget');
-
-        if (isMultiget) {
-          // 从请求体中提取 href 列表
-          const hrefRegex = /<[a-zA-Z0-9_:]*href[^>]*>([^<]+)<\/[a-zA-Z0-9_:]*href>/g;
-          const hrefs = [];
-          let match;
-          while ((match = hrefRegex.exec(body)) !== null) {
-            hrefs.push(match[1]);
-          }
-
-          const ids = hrefs.map(href => href.match(/\/([^\/]+)\.ics$/)?.[1]).filter(Boolean);
-
-          log('INFO', 'calendar-multiget 请求解析', {
-            hrefsCount: hrefs.length,
-            idsCount: ids.length,
-            sampleHrefs: hrefs.slice(0, 3),
-            sampleIds: ids.slice(0, 5)
-          });
-
-          let events = [];
-          let todos = [];
-
-          if (ids.length > 0) {
-            const placeholders = ids.map(() => '?').join(',');
-            [events, todos] = await Promise.all([
-              getConnection().all(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders})`, [username, ...ids]),
-              getConnection().all(`SELECT * FROM todos WHERE username = ? AND id IN (${placeholders})`, [username, ...ids])
-            ]);
-          }
-
-          // 过滤掉数据库中不存在的事件，确保只返回实际存在的事件
-          const existingEventIds = new Set(events.map(e => e.id));
-          const existingTodoIds = new Set(todos.map(t => t.id));
-          const existingIds = new Set([...existingEventIds, ...existingTodoIds]);
-
-          log('INFO', 'calendar-multiget 响应', {
-            eventsCount: events.length,
-            todosCount: todos.length,
-            requestedIds: ids.length,
-            existingIdsCount: existingIds.size
-          });
-
-          // calendar-multiget 应该返回每个请求的href的单独响应
-          let responses = '';
-
-          // 为每个请求的item生成单独的响应
-          for (const id of ids) {
-            const href = `/caldav/${username}/${id}.ics`;
-            
-            // 检查该ID是否在数据库中存在
-            if (existingIds.has(id)) {
-              // 找到对应的事件或待办事项
-              const item = [...events, ...todos].find(i => i.id === id);
-              if (item) {
-                const isEvent = !!item.startTime;
-                const isNote = !!item.content && !item.startTime && !item.dueDate;
-              const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent && !isNote ? [item] : [], username, isNote ? [item] : []);
-                log('INFO', 'REPORT 返回ICS内容', {
-                  username,
-                  itemId: id,
-                  itemTitle: item.title,
-                  icalContent: icalContent
-                });
-                responses += `
-  <D:response>
-    <D:href>${href}</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:getetag>"${item.updatedAt}"</D:getetag>
-        <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
-        <C:calendar-data><![CDATA[${icalContent}]]></C:calendar-data>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>`;
-              }
-            } else {
-              // Item不存在，返回404
-              // 使用一个特殊的ETag来表示"已删除"状态，帮助客户端清除缓存
-              const deletedEtag = `"deleted-${Date.now()}"`;
-              responses += `
-  <D:response>
-    <D:href>${href}</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:getetag>${deletedEtag}</D:getetag>
-        <D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype>
-        <C:calendar-data><![CDATA[END:VCALENDAR]]></C:calendar-data>
-      </D:prop>
-      <D:status>HTTP/1.1 404 Not Found</D:status>
-    </D:propstat>
-  </D:response>`;
-            }
-          }
-
-          const xml = `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-${responses}
-</D:multistatus>`;
-
-          res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-          res.status(207).send(xml);
-          return;
-        }
-
-        // 非calendar-multiget请求暂不支持,返回空响应
-        log('WARN', 'REPORT 不支持的请求类型', { username, bodyPreview: body.substring(0, 200) });
-        res.status(207).send(`<?xml version="1.0" encoding="utf-8" ?><D:multistatus xmlns:D="DAV:"/>`);
-        return;
-      } catch (error) {
-        log('ERROR', 'CalDAV REPORT 内部失败', { error: error.message, stack: error.stack });
-        res.status(500).send();
-      }
-    });
-  } catch (error) {
-    log('ERROR', 'CalDAV REPORT 失败', { error: error.message });
-    res.status(500).send();
-  }
-});
-
-// GET /:username/:filename.ics - 获取单个日历项
-router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
-    try {
-        const { username, filename } = req.params;
-        if (username !== req.user) return res.status(403).send();
-        const item = await getConnection().get('SELECT * FROM events WHERE id = ? AND username = ?', [filename, username]) || 
-                     await getConnection().get('SELECT * FROM todos WHERE id = ? AND username = ?', [filename, username]) ||
-                       await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ? AND deleted = 0', [filename, username]);
-        if (item) {
-            const isEvent = !!item.startTime;
-            const isNote = !!item.content && !item.startTime && !item.dueDate;
-              const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent && !isNote ? [item] : [], username, isNote ? [item] : []);
-            log('INFO', 'CalDAV GET 返回ICS内容', {
-                username,
-                filename,
-                itemTitle: item.title,
-                icalContent: icalContent
-            });
-            res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-            res.setHeader('ETag', `"${item.updatedAt}"`);
-            res.send(icalContent);
-        } else {
-            res.status(404).send('Not Found');
-        }
-    } catch (error) {
-        log('ERROR', 'CalDAV GET .ics 失败', { error: error.message });
-        res.status(500).send();
+    if (depth === '1') {
+      const items = await getConnection().all(`SELECT DISTINCT id, updatedAt FROM (SELECT id, updatedAt FROM events WHERE username = ? UNION ALL SELECT id, updatedAt FROM todos WHERE username = ?) ORDER BY updatedAt DESC`, [username, username]);
+      items.forEach(item => {
+        itemsXml += `<D:response><D:href>/caldav/${urlEsc(username)}/${urlEsc(item.id)}.ics</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
+      });
     }
+
+    const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/"><D:response><D:href>/caldav/${urlEsc(username)}/</D:href><D:propstat><D:prop><D:resourcetype><D:collection/><C:calendar/></D:resourcetype><D:displayname>${esc(username)}</D:displayname><C:supported-calendar-component-set><C:comp name="VEVENT"/><C:comp name="VTODO"/></C:supported-calendar-component-set><CS:getctag>"${ctag}"</CS:getctag><D:sync-token>${ctag}</D:sync-token><D:supported-report-set><D:report-set-item><D:report><C:calendar-multiget/></D:report></D:report-set-item><D:report-set-item><D:report><C:calendar-query/></D:report></D:report-set-item><D:report-set-item><D:report><D:sync-collection/></D:report></D:report-set-item></D:supported-report-set></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>${itemsXml}</D:multistatus>`;
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.status(207).send(xml);
+  } catch (error) { res.status(500).send(); }
 });
 
-// PUT /:username/:filename.ics - 创建或更新日历项
-router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
-    // This logic seems fine, keeping as is
-    try {
-        const { username, filename } = req.params;
-        if (username !== req.user) return res.status(403).send();
-
-        let icalData = '';
-        req.on('data', chunk => icalData += chunk);
-        req.on('end', async () => {
-          let parsed;
-          try {
-            log('INFO', 'CalDAV PUT 收到原始ICS数据', {
-              username,
-              filename,
-              icalData
-            });
-            parsed = ICalParser.parse(icalData);
-            log('INFO', 'CalDAV PUT 解析结果', {
-                username,
-                filename,
-                events: parsed?.events?.length || 0,
-                todos: parsed?.todos?.length || 0
-            });
-            log('INFO', 'CalDAV PUT 解析结果', {
-                events: parsed?.events?.length || 0,
-                todos: parsed?.todos?.length || 0,
-                eventIds: parsed?.events?.map(e => e.id) || [],
-                todoIds: parsed?.todos?.map(t => t.id) || []
-            });
-            if (parsed && parsed.events && parsed.events.length > 0) {
-              log('INFO', 'CalDAV PUT 准备保存事件', {
-                eventCount: parsed.events.length,
-                events: parsed.events.map(ev => ({
-                  id: ev.id,
-                  title: ev.title,
-                  startTime: ev.startTime,
-                  endTime: ev.endTime,
-                  allDay: ev.allDay,
-                  startTimeDate: ev.startTime ? new Date(ev.startTime * 1000).toISOString() : null,
-                  endTimeDate: ev.endTime ? new Date(ev.endTime * 1000).toISOString() : null,
-                  recurrence: ev.recurrence,
-                  recurrenceEnd: ev.recurrenceEnd
-                }))
-              });
-              for (const event of parsed.events) {
-                try {
-                  const existing = await getConnection().get('SELECT id FROM events WHERE id = ? AND username = ?', [event.id, username]);
-                  log('INFO', 'CalDAV PUT 检查事件是否存在', { eventId: event.id, exists: !!existing });
-                  if (existing) {
-                    log('INFO', 'CalDAV PUT 更新事件', { eventId: event.id, title: event.title, recurrence: event.recurrence });
-                    await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, noteId=?, recurrence=?, recurrenceEnd=?, timezone=?, updatedAt=? WHERE id=? AND username=?', [event.title, event.description || '', event.startTime, event.endTime, event.allDay ? 1:0, event.color || '#2563eb', event.noteId || null, event.recurrence ? JSON.stringify(event.recurrence) : null, event.recurrenceEnd || null, event.timezone || null, Math.floor(Date.now()/1000), event.id, username]);
-                  } else {
-                    log('INFO', 'CalDAV PUT 插入事件', { eventId: event.id, title: event.title, recurrence: event.recurrence });
-                    await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, noteId, recurrence, recurrenceEnd, timezone, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [event.id, username, event.title, event.description || '', event.startTime, event.endTime, event.allDay ? 1:0, event.color || '#2563eb', event.noteId || null, event.recurrence ? JSON.stringify(event.recurrence) : null, event.recurrenceEnd || null, event.timezone || null, Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)]);
-                  }
-                  log('INFO', 'CalDAV PUT 事件保存成功', { eventId: event.id, title: event.title });
-                } catch (dbError) {
-                  log('ERROR', 'CalDAV PUT 数据库操作失败', { eventId: event.id, error: dbError.message, stack: dbError.stack });
-                }
-              }
-            }
-            if (parsed && parsed.todos && parsed.todos.length > 0) {
-              for (const todo of parsed.todos) {
-                  const existing = await getConnection().get('SELECT id FROM todos WHERE id = ? AND username = ?', [todo.id, username]);
-                  if (existing) {
-                      await getConnection().run('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, noteId=?, updatedAt=? WHERE id=? AND username=?', [todo.title, todo.description || '', todo.priority || 5, todo.dueDate, todo.completed ? 1:0, todo.noteId || null, Math.floor(Date.now()/1000), todo.id, username]);
-                  } else {
-                      await getConnection().run('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, noteId, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?)', [todo.id, username, todo.title, todo.description || '', todo.priority || 5, todo.dueDate, todo.completed ? 1:0, todo.noteId || null, Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)]);
-                  }
-              }
-            }
-              if (parsed && parsed.notes && parsed.notes.length > 0) {
-                log('INFO', 'CalDAV PUT 准备保存笔记', {
-                  noteCount: parsed.notes.length,
-                  notes: parsed.notes.map(n => ({
-                    id: n.id,
-                    title: n.title,
-                    contentLength: n.content ? n.content.length : 0
-                  }))
-                });
-                for (const note of parsed.notes) {
-                  try {
-                    const existing = await getConnection().get('SELECT id FROM notes WHERE id = ? AND username = ?', [note.id, username]);
-                    log('INFO', 'CalDAV PUT 检查笔记是否存在', { noteId: note.id, exists: !!existing });
-                    if (existing) {
-                      log('INFO', 'CalDAV PUT 更新笔记', { noteId: note.id, title: note.title });
-                      await getConnection().run('UPDATE notes SET title=?, content=?, updatedAt=? WHERE id=? AND username=?', [note.title, note.content || '', Math.floor(Date.now()/1000), note.id, username]);
-                    } else {
-                      log('INFO', 'CalDAV PUT 插入笔记', { noteId: note.id, title: note.title });
-                      await getConnection().run('INSERT INTO notes (id, username, title, content, createdAt, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, ?, 0)', [note.id, username, note.title, note.content || '', Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)]);
-                    }
-                    log('INFO', 'CalDAV PUT 笔记保存成功', { noteId: note.id, title: note.title });
-                  } catch (dbError) {
-                    log('ERROR', 'CalDAV PUT 笔记数据库操作失败', { noteId: note.id, error: dbError.message, stack: dbError.stack });
-                  }
-                }
-              }
-            res.setHeader('ETag', `"${Date.now()}"`);
-            res.status(201).send();
-          } catch (e) {
-            log('ERROR', 'CalDAV PUT 保存失败', {
-              error: e.message,
-              stack: e.stack,
-              parsedEvents: parsed?.events?.map(ev => ({
-                id: ev.id,
-                title: ev.title,
-                startTime: ev.startTime,
-                endTime: ev.endTime,
-                allDay: ev.allDay
-              })) || []
-            });
-            res.status(400).send();
-          }
-        });
-    } catch (error) {
-        log('ERROR', 'CalDAV PUT .ics 失败', { error: error.message });
-        res.status(500).send();
-    }
+// PROPPATCH
+router.proppatch('/:username/', basicAuthMiddleware, async (req, res) => {
+  const { username } = req.params;
+  const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/caldav/${urlEsc(username)}/</D:href><D:propstat><D:prop><D:calendar-color xmlns:apple="http://apple.com/ns/ical/"/><D:displayname/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.status(207).send(xml);
 });
 
-// DELETE /:username/:filename.ics - 删除日历项
-router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
-    try {
-        const { username, filename } = req.params;
-        log('INFO', 'CalDAV DELETE 事件', {
-            username,
-            filename,
-            fullPath: req.path
-        });
-
-        if (username !== req.user) return res.status(403).send();
-        const eventResult = await getConnection().run('DELETE FROM events WHERE id = ? AND username = ?', [filename, username]);
-        log('INFO', 'CalDAV DELETE 结果', {
-            eventsDeleted: eventResult.changes,
-            filename
-        });
-        if (eventResult.changes === 0) {
-            const todoResult = await getConnection().run('DELETE FROM todos WHERE id = ? AND username = ?', [filename, username]);
-            log('INFO', 'CalDAV DELETE TODO 结果', {
-                todosDeleted: todoResult.changes,
-                filename
-            });
-        }
-        res.status(204).send();
-    } catch (error) {
-        log('ERROR', 'CalDAV DELETE .ics 失败', { error: error.message });
-        res.status(500).send();
-    }
-});
-
-// DELETE /:username/ - 阻止删除整个日历目录
-router.delete('/:username/', basicAuthMiddleware, async (req, res) => {
+// REPORT
+router.report('/:username/', basicAuthMiddleware, async (req, res) => {
+  try {
     const { username } = req.params;
-    log('WARN', 'CalDAV 尝试删除日历目录(已阻止)', {
-        username,
-        fullPath: req.path,
-        userAgent: req.headers['user-agent'],
-        reason: '不允许删除整个日历目录，只允许删除单个事件'
-    });
+    const body = (typeof req.body === 'string' ? req.body : '') || '';
+    let items = [], responses = '', newToken = null, seenHrefs = new Set();
 
-    // 返回403 Forbidden，阻止删除整个日历
-    res.status(403).send('Cannot delete entire calendar. Use DELETE /:username/:id.ics to delete individual items.');
+    if (body.includes('calendar-multiget')) {
+      const ids = [];
+      const hrefs = body.match(/<[a-zA-Z0-9_:]*href[^>]*>([^<]+)/g) || [];
+      hrefs.forEach(h => {
+          const match = h.match(/\/([^\/]+)\.ics$/);
+          if (match) { try { ids.push(decodeURIComponent(match[1])); } catch (e) { ids.push(match[1]); } }
+      });
+      if (ids.length > 0) {
+          const CHUNK = 100;
+          for (let i = 0; i < ids.length; i += CHUNK) {
+              const chunk = ids.slice(i, i + CHUNK);
+              const p = chunk.map(() => '?').join(',');
+              const [ev, td] = await Promise.all([
+                  getConnection().all(`SELECT *, 'event' as type FROM events WHERE username = ? AND id IN (${p})`, [username, ...chunk]),
+                  getConnection().all(`SELECT *, 'todo' as type FROM todos WHERE username = ? AND id IN (${p})`, [username, ...chunk])
+              ]);
+              items = items.concat(ev, td);
+          }
+      }
+    } else if (body.includes('calendar-query')) {
+      let start = 0, end = 2147483647;
+      const [ev, td] = await Promise.all([
+          getConnection().all(`SELECT *, 'event' as type FROM events WHERE username = ? LIMIT 10000`, [username]),
+          getConnection().all(`SELECT *, 'todo' as type FROM todos WHERE username = ? LIMIT 10000`, [username])
+      ]);
+      items = [...ev, ...td];
+    } else {
+      let startTs = 0;
+      const tokenMatch = body.match(/<D:sync-token>(\d+)<\/D:sync-token>/i);
+      if (tokenMatch) startTs = parseInt(tokenMatch[1]);
+      const limit = 20000;
+      const [ev, td, del] = await Promise.all([
+          getConnection().all(`SELECT *, 'event' as type FROM events WHERE username = ? AND updatedAt > ? ORDER BY updatedAt ASC LIMIT ?`, [username, startTs, limit]),
+          getConnection().all(`SELECT *, 'todo' as type FROM todos WHERE username = ? AND updatedAt > ? ORDER BY updatedAt ASC LIMIT ?`, [username, startTs, limit]),
+          getConnection().all(`SELECT * FROM deleted_items WHERE username = ? AND deletedAt > ? ORDER BY deletedAt ASC LIMIT ?`, [username, startTs, limit])
+      ]);
+      items = [...ev, ...td].sort((a, b) => a.updatedAt - b.updatedAt).slice(0, limit);
+      del.forEach(d => {
+          const href = `/caldav/${urlEsc(username)}/${urlEsc(d.item_id)}.ics`;
+          if (!seenHrefs.has(href)) {
+              responses += `<D:response><D:href>${href}</D:href><D:status>HTTP/1.1 404 Not Found</D:status></D:response>`;
+              seenHrefs.add(href);
+          }
+      });
+      const lastItemTs = items.length ? items[items.length-1].updatedAt : 0;
+      const lastDelTs = del.length ? del[del.length-1].deletedAt : 0;
+      newToken = Math.max(lastItemTs, lastDelTs, startTs);
+    }
+
+    if (!newToken) {
+        const lastUpdate = await getConnection().get(`SELECT MAX(ts) as maxTs FROM (SELECT updatedAt as ts FROM events WHERE username = ? UNION ALL SELECT updatedAt as ts FROM todos WHERE username = ? UNION ALL SELECT deletedAt as ts FROM deleted_items WHERE username = ?)`, [username, username, username]);
+        newToken = lastUpdate && lastUpdate.maxTs ? Math.floor(lastUpdate.maxTs) : Math.floor(Date.now()/1000);
+    }
+
+    for (const item of items) {
+      const href = `/caldav/${urlEsc(username)}/${urlEsc(item.id)}.ics`;
+      if (seenHrefs.has(href)) continue;
+      seenHrefs.add(href);
+      let ical = ICalGenerator.generateCalendar(item.type === 'event' ? [item] : [], item.type === 'todo' ? [item] : [], username, []).replace(/]]>/g, ']] >');
+      responses += `<D:response><D:href>${href}</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><C:calendar-data><![CDATA[${ical}]]></C:calendar-data></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
+    }
+    
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.status(207).send(`<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:sync-token>${newToken}</D:sync-token>${responses}</D:multistatus>`);
+  } catch (error) { log('ERROR', 'CalDAV REPORT 失败', { error: error.message }); res.status(500).send(); }
 });
 
-// Helper function to generate response for REPORT
-async function generateMultiStatusResponseWithData(username, events, todos) {
-  let responses = '';
-  const items = [...events, ...todos, ...notes];
-        // 计算最新的 updatedAt 作为 ctag
-        if (items.length > 0) {
-          ctag = Math.max(...items.map(i => i.updatedAt || 0));
+router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
+    const { username, filename } = req.params;
+    let id = filename.replace(/\.ics$/i, '');
+    try { id = decodeURIComponent(id); } catch(e) {}
+    const item = await getConnection().get('SELECT *, "event" as type FROM events WHERE id = ? AND username = ?', [id, username]) ||
+                 await getConnection().get('SELECT *, "todo" as type FROM todos WHERE id = ? AND username = ?', [id, username]);
+    if (!item) return res.status(404).end();
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('ETag', `"${item.updatedAt}"`);
+    res.send(ICalGenerator.generateCalendar(item.type==='event'?[item]:[],item.type==='todo'?[item]:[],username,[]));
+});
+
+router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
+    try {
+        const { username, filename } = req.params;
+        let id = filename.replace(/\.ics$/i, '');
+        try { id = decodeURIComponent(id); } catch(e) {}
+        const parsed = ICalParser.parse(req.body || '');
+        const now = Math.floor(Date.now() / 1000);
+        for (const e of parsed.events) {
+            const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
+            const ex = await getConnection().get('SELECT id FROM events WHERE id = ? AND username = ?', [e.id, username]);
+            if (ex) await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, e.id, username]);
+            else await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [e.id, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, now]);
         }
+        for (const t of parsed.todos) {
+            const ex = await getConnection().get('SELECT id FROM todos WHERE id = ? AND username = ?', [t.id, username]);
+            if (ex) await getConnection().run('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?', [t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, t.id, username]);
+            else await getConnection().run('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [t.id, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
+        }
+        res.setHeader('ETag', `"${now}"`);
+        res.status(201).end();
+        debouncedBroadcast(username);
+    } catch (e) { res.status(500).end(); }
+});
 
-  for (const item of items) {
-    const isEvent = !!item.startTime;
-    const href = `/caldav/${username}/${item.id}.ics`;
-    const isNote = !!item.content && !item.startTime && !item.dueDate;
-              const icalContent = ICalGenerator.generateCalendar(isEvent ? [item] : [], !isEvent && !isNote ? [item] : [], username, isNote ? [item] : []);
-    responses += `
-  <D:response>
-    <D:href>${href}</D:href>
-    <D:propstat>
-      <D:prop>
-        <D:getetag>"${item.updatedAt}"</D:getetag>
-        <C:calendar-data><![CDATA[${icalContent}]]></C:calendar-data>
-      </D:prop>
-      <D:status>HTTP/1.1 200 OK</D:status>
-    </D:propstat>
-  </D:response>`;
-  }
+router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
+    const { username, filename } = req.params;
+    let id = filename.replace(/\.ics$/i, '');
+    try { id = decodeURIComponent(id); } catch(e) {}
+    await getConnection().run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now() + Math.random().toString(), username, id, 'event', Math.floor(Date.now() / 1000)]);
+    await getConnection().run('DELETE FROM events WHERE id = ? AND username = ?', [id, username]);
+    await getConnection().run('DELETE FROM todos WHERE id = ? AND username = ?', [id, username]);
+    res.status(204).end();
+    debouncedBroadcast(username);
+});
 
-  return `<?xml version="1.0" encoding="utf-8" ?>
-<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-${responses}
-</D:multistatus>`;
-}
+router.mkcalendar('/:username/:calendar', basicAuthMiddleware, (req, res) => res.status(201).end());
 
 module.exports = router;

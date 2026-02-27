@@ -22,7 +22,9 @@ function solarToLunar(solarDate) {
     yearCn: lunar.getYearInChinese(),
     monthCn: lunar.getMonthInChinese(),
     dayCn: lunar.getDayInChinese(),
-    fullText: `${lunar.getYearInChinese()}年${lunar.getMonthInChinese()}${lunar.getDayInChinese()}`
+    fullText: `${lunar.getYearInChinese()}年${lunar.getMonthInChinese()}${lunar.getDayInChinese()}`,
+    yi: lunar.getDayYi(),
+    ji: lunar.getDayJi()
   };
 }
 

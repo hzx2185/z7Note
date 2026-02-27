@@ -1,400 +1,227 @@
 /**
- * iCal/ICS 文件生成工具
+ * iCal/ICS 文件生成工具 (重构版)
+ * 统一使用本地时区格式,确保跨客户端兼容性
  */
 
 const log = require('./logger');
+const TimeHelper = require('./timeHelper');
 
 class ICalGenerator {
-  /**
-   * 将事件转换为 iCal 格式
-   */
   static eventToICal(event) {
     const lines = [];
-
-    // VEVENT 开始
     lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${event.id}`);
+    lines.push(`DTSTAMP:${TimeHelper.toIcalUTC(event.updatedAt || event.createdAt || Date.now()/1000)}`);
 
-    // UID（唯一标识符）
-      // UID（唯一标识符）- 直接使用event.id，不添加后缀
-      // 注意：event.id应该包含完整的UID（如果客户端发送了完整UID）
-      lines.push(`UID:${event.id}`);
+    const tzid = event.timezone || 'Asia/Shanghai';
 
-    // DTSTAMP（创建时间）
-    const created = event.createdAt || event.updatedAt || Date.now();
-    const createdDate = new Date(created * 1000);
-    lines.push(`DTSTAMP:${this.formatDateTime(createdDate)}`);
-
-      // DTSTART（开始时间）
-      const startDate = new Date(event.startTime * 1000);
-      if (event.allDay) {
-        lines.push(`DTSTART;VALUE=DATE:${this.formatDate(startDate)}`);
-      } else if (event.timezone) {
-        // 如果有时区信息，输出带TZID的本地时间
-        lines.push(`DTSTART;TZID=${event.timezone}:${this.formatDateTimeWithTimezone(startDate, event.timezone)}`);
-      } else {
-        lines.push(`DTSTART:${this.formatDateTime(startDate)}`);
+    if (event.allDay) {
+      lines.push(`DTSTART;VALUE=DATE:${TimeHelper.toIcalDate(event.startTime)}`);
+      // 全天事件规范：DTEND 必须晚于 DTSTART。如果是一天，则 DTEND 是下一天的日期。
+      let endTs = event.endTime || event.startTime;
+      if (endTs <= event.startTime) {
+          endTs = event.startTime + 86400; // 默认加一天
       }
-      
-      // DTEND（结束时间）
+      lines.push(`DTEND;VALUE=DATE:${TimeHelper.toIcalDate(endTs)}`);
+    } else {
+      // 使用本地时间格式 (带时区信息)
+      lines.push(`DTSTART;TZID=${tzid}:${this.formatLocalTime(event.startTime)}`);
       if (event.endTime) {
-        const endDate = new Date(event.endTime * 1000);
-        if (event.allDay) {
-          // 全天事件的结束时间需要加一天
-          endDate.setUTCDate(endDate.getUTCDate() + 1);
-          lines.push(`DTEND;VALUE=DATE:${this.formatDate(endDate)}`);
-        } else if (event.timezone) {
-          // 如果有时区信息，输出带TZID的本地时间
-          lines.push(`DTEND;TZID=${event.timezone}:${this.formatDateTimeWithTimezone(endDate, event.timezone)}`);
-        } else {
-          lines.push(`DTEND:${this.formatDateTime(endDate)}`);
-        }
+        lines.push(`DTEND;TZID=${tzid}:${this.formatLocalTime(event.endTime)}`);
       }
-      
-
-    // SUMMARY（标题）
-    if (event.title) {
-      lines.push(`SUMMARY:${this.escapeText(event.title)}`);
     }
 
-    // DESCRIPTION（描述）
-    if (event.description) {
-      lines.push(`DESCRIPTION:${this.escapeText(event.description)}`);
+    if (event.title) lines.push(`SUMMARY:${this.escapeText(event.title)}`);
+    if (event.description) lines.push(`DESCRIPTION:${this.escapeText(event.description)}`);
+
+    // 添加重复规则
+    if (event.recurrence) {
+      try {
+        const r = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
+        let rrule = `FREQ=${r.type.toUpperCase()}`;
+        if (r.interval && r.interval > 1) rrule += `;INTERVAL=${r.interval}`;
+        if (r.daysOfWeek && r.daysOfWeek.length > 0) {
+          const days = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+          rrule += `;BYDAY=${r.daysOfWeek.map(d => days[d]).join(',')}`;
+        }
+        if (r.dayOfMonth) rrule += `;BYMONTHDAY=${r.dayOfMonth}`;
+        if (r.monthOfYear) rrule += `;BYMONTH=${r.monthOfYear}`;
+        
+        if (event.recurrenceEnd) {
+          rrule += `;UNTIL=${TimeHelper.toIcalUTC(event.recurrenceEnd)}`;
+        } else if (r.count) {
+          rrule += `;COUNT=${r.count}`;
+        }
+        lines.push(`RRULE:${rrule}`);
+      } catch (e) {
+        log('WARN', '生成 RRULE 失败', { error: e.message, recurrence: event.recurrence });
+      }
     }
 
-    // LOCATION（位置，如果有）
-    // 目前没有位置字段，预留
-
-    // ORGANIZER（组织者）
-    lines.push(`ORGANIZER:MAILTO:${event.username}@z7note`);
-
-    // STATUS（状态）
+    lines.push(`ORGANIZER:MAILTO:${event.username || 'user'}@z7note`);
     lines.push('STATUS:CONFIRMED');
-
-    // TRANSP（透明度）
     lines.push('TRANSP:OPAQUE');
+    lines.push(`SEQUENCE:${Math.floor(event.updatedAt || 0)}`);
 
-    // SEQUENCE（序列号，用于同步）
-    lines.push(`SEQUENCE:${Math.floor((event.updatedAt || event.createdAt || 0) / 1000)}`);
-
-    // LAST-MODIFIED（最后修改时间）
-    const modified = event.updatedAt || event.createdAt || Date.now();
-    const modifiedDate = new Date(modified * 1000);
-    lines.push(`LAST-MODIFIED:${this.formatDateTime(modifiedDate)}`);
-
-    // COLOR（颜色，非标准，但很多客户端支持）
-    if (event.color) {
-      lines.push(`X-APPLE-CALENDAR-COLOR:${event.color}`);
+    // 提醒 (VALARM)
+    if (event.reminderEmail || event.reminderBrowser || event.reminderCaldav) {
+      lines.push('BEGIN:VALARM');
+      lines.push(`X-WR-ALARMUID:ALARM-${event.id}`);
+      lines.push('ACTION:DISPLAY');
+      lines.push(`DESCRIPTION:Reminder: ${this.escapeText(event.title || 'Event')}`);
+      lines.push('TRIGGER:-PT15M');
+      lines.push('END:VALARM');
     }
 
-    // VEVENT 结束
     lines.push('END:VEVENT');
-
-    return lines.join('\r\n');
+    return this.foldLines(lines.join('\r\n'));
   }
 
-  /**
-   * 将待办事项转换为 iCal VTODO 格式
-   */
   static todoToICal(todo) {
     const lines = [];
-
-    // VTODO 开始
     lines.push('BEGIN:VTODO');
-
-    // UID
-    lines.push(`UID:${todo.id}@z7note`);
-
-    // DTSTAMP
-    const created = todo.createdAt || todo.updatedAt || Date.now();
-    const createdDate = new Date(created * 1000);
-    lines.push(`DTSTAMP:${this.formatDateTime(createdDate)}`);
-
-    // DUE（截止日期）
+    lines.push(`UID:${todo.id}`);
+    lines.push(`DTSTAMP:${TimeHelper.toIcalUTC(todo.updatedAt || todo.createdAt || Date.now()/1000)}`);
+    
     if (todo.dueDate) {
-      const dueDate = new Date(todo.dueDate * 1000);
-      lines.push(`DUE;VALUE=DATE:${this.formatDate(dueDate)}`);
+      lines.push(`DUE;TZID=Asia/Shanghai:${this.formatLocalTime(todo.dueDate)}`);
     }
-
-    // SUMMARY
-    if (todo.title) {
-      lines.push(`SUMMARY:${this.escapeText(todo.title)}`);
-    }
-
-    // DESCRIPTION
-    if (todo.description) {
-      lines.push(`DESCRIPTION:${this.escapeText(todo.description)}`);
-    }
-
-    // PRIORITY（优先级）
-    // iCal 优先级：1-9（1最高），转换为：z7Note的1-3（1最低）
-    const icalPriority = this.mapPriority(todo.priority);
-    lines.push(`PRIORITY:${icalPriority}`);
-
-    // STATUS（状态）
+    
+    if (todo.title) lines.push(`SUMMARY:${this.escapeText(todo.title)}`);
+    if (todo.description) lines.push(`DESCRIPTION:${this.escapeText(todo.description)}`);
+    
+    lines.push(`PRIORITY:${this.mapPriorityToICal(todo.priority || 5)}`);
+    lines.push(`STATUS:${todo.completed ? 'COMPLETED' : 'NEEDS-ACTION'}`);
     if (todo.completed) {
-      lines.push('STATUS:COMPLETED');
-      // COMPLETED（完成时间）
-      const completedTime = todo.updatedAt || Date.now();
-      const completedDate = new Date(completedTime * 1000);
-      lines.push(`COMPLETED:${this.formatDateTime(completedDate)}`);
+        lines.push(`COMPLETED:${TimeHelper.toIcalUTC(todo.updatedAt || Date.now()/1000)}`);
+        lines.push('PERCENT-COMPLETE:100');
     } else {
-      lines.push('STATUS:NEEDS-ACTION');
+        lines.push('PERCENT-COMPLETE:0');
     }
-
-    // PERCENT-COMPLETE（完成百分比）
-    lines.push(`PERCENT-COMPLETE:${todo.completed ? 100 : 0}`);
-
-    // SEQUENCE
-    lines.push(`SEQUENCE:${Math.floor((todo.updatedAt || todo.createdAt || 0) / 1000)}`);
-
-    // LAST-MODIFIED
-    const modified = todo.updatedAt || todo.createdAt || Date.now();
-    const modifiedDate = new Date(modified * 1000);
-    lines.push(`LAST-MODIFIED:${this.formatDateTime(modifiedDate)}`);
-
-    // VTODO 结束
+    
+    lines.push(`SEQUENCE:${Math.floor(todo.updatedAt || 0)}`);
     lines.push('END:VTODO');
-
-    return lines.join('\r\n');
+    return this.foldLines(lines.join('\r\n'));
   }
 
-  
-  /**
-   * 将笔记转换为 iCal 格式（VJOURNAL - 备忘录）
-   */
   static noteToICal(note) {
     const lines = [];
-
-    // VJOURNAL 开始
     lines.push('BEGIN:VJOURNAL');
-
-    // UID
-    lines.push(`UID:${note.id}@z7note`);
-
-    // DTSTAMP（创建时间）
-    const created = note.createdAt || note.updatedAt || Date.now();
-    const createdDate = new Date(created * 1000);
-    lines.push(`DTSTAMP:${this.formatDateTime(createdDate)}`);
-
-    // DTSTART（创建日期）
-    lines.push(`DTSTART;VALUE=DATE:${this.formatDate(createdDate)}`);
-
-    // SUMMARY（标题）
-    if (note.title) {
-      lines.push(`SUMMARY:${this.escapeText(note.title)}`);
-    }
-
-    // DESCRIPTION（内容）
-    if (note.content) {
-      lines.push(`DESCRIPTION:${this.escapeText(note.content)}`);
-    }
-
-    // SEQUENCE（版本号）
-    lines.push(`SEQUENCE:${Math.floor((note.updatedAt || note.createdAt || 0) / 1000)}`);
-
-    // VJOURNAL 结束
+    lines.push(`UID:${note.id}`);
+    lines.push(`DTSTAMP:${TimeHelper.toIcalUTC(note.updatedAt || note.createdAt || Date.now()/1000)}`);
+    lines.push(`DTSTART;TZID=Asia/Shanghai:${this.formatLocalTime(note.updatedAt || note.createdAt || Date.now()/1000)}`);
+    
+    if (note.title) lines.push(`SUMMARY:${this.escapeText(note.title)}`);
+    if (note.content) lines.push(`DESCRIPTION:${this.escapeText(note.content)}`);
+    
+    lines.push('STATUS:FINAL');
+    lines.push(`SEQUENCE:${Math.floor(note.updatedAt || 0)}`);
     lines.push('END:VJOURNAL');
-
-    return lines.join('\r\n');
+    return this.foldLines(lines.join('\r\n'));
   }
-  /**
-   * 生成完整的 iCal 日历文件
-   */
-  static generateCalendar(events, todos, username, notes = []) {
-    const lines = [];
 
-    // VCALENDAR 开始
+  static generateCalendar(events = [], todos = [], username = 'user', notes = []) {
+    const lines = [];
     lines.push('BEGIN:VCALENDAR');
+    // ... 略 ...
+    
+    // 在返回前，确保内容中没有破坏 CDATA 的序列
+    // 实际的 generateCalendar 逻辑中，我们需要在包装 XML 时处理此问题
+    // 这里的函数仅生成 ICS 文本内容
+
     lines.push('VERSION:2.0');
     lines.push('PRODID:-//z7Note//CalDAV Server//CN');
     lines.push('CALSCALE:GREGORIAN');
     lines.push('METHOD:PUBLISH');
     lines.push(`X-WR-CALNAME:${username}@z7note`);
     lines.push('X-WR-TIMEZONE:Asia/Shanghai');
-    lines.push('X-WR-CALDESC:z7Note Calendar');
 
-    // 时区信息
+    // 添加 VTIMEZONE 提升跨客户端兼容性
     lines.push('BEGIN:VTIMEZONE');
     lines.push('TZID:Asia/Shanghai');
-    lines.push('BEGIN:DAYLIGHT');
-    lines.push('TZOFFSETFROM:+0800');
-    lines.push('TZOFFSETTO:+0900');
-    lines.push('DTSTART:20070311T020000');
-    lines.push('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU');
-    lines.push('TZNAME:中国夏令时');
-    lines.push('END:DAYLIGHT');
     lines.push('BEGIN:STANDARD');
-    lines.push('TZOFFSETFROM:+0900');
+    lines.push('DTSTART:19700101T000000');
+    lines.push('TZOFFSETFROM:+0800');
     lines.push('TZOFFSETTO:+0800');
-    lines.push('DTSTART:20071111T020000');
-    lines.push('RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU');
-    lines.push('TZNAME:中国标准时间');
+    lines.push('TZNAME:CST');
     lines.push('END:STANDARD');
     lines.push('END:VTIMEZONE');
 
-    // 添加事件
+    const calendarContent = lines.join('\r\n');
+    const parts = [this.foldLines(calendarContent)];
+
     if (events && events.length > 0) {
-      events.forEach(event => {
-        lines.push(this.eventToICal(event));
-      });
+      events.forEach(e => parts.push(this.eventToICal(e)));
     }
-
-    // 添加待办事项
+    
     if (todos && todos.length > 0) {
-      todos.forEach(todo => {
-        lines.push(this.todoToICal(todo));
-      });
+      todos.forEach(t => parts.push(this.todoToICal(t)));
     }
-  
-      // 添加笔记（备忘录）
-      if (notes && notes.length > 0) {
-        notes.forEach(note => {
-          lines.push(this.noteToICal(note));
-        });
-      }
 
-    // VCALENDAR 结束
-    lines.push('END:VCALENDAR');
-
-    return lines.join('\r\n');
-  }
-
-  /**
-   * 格式化日期时间（YYYYMMDDTHHMMSSZ）
-   */
-  static formatDateTime(date) {
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const hours = String(date.getUTCHours()).padStart(2, '0');
-    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
-    return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
-  }
-
-  /**
-   * 格式化日期时间（带时区，YYYYMMDDTHHMMSS）
-   * 将UTC时间转换为指定时区的本地时间
-   */
-  static formatDateTimeWithTimezone(date, timezone) {
-    // 获取时区偏移
-    const offset = this.getTimezoneOffset(timezone);
-    if (offset === null) {
-      // 如果无法识别时区，返回UTC时间
-      return this.formatDateTime(date);
+    if (notes && notes.length > 0) {
+      notes.forEach(n => parts.push(this.noteToICal(n)));
     }
-    
-    // 将UTC时间转换为本地时间
-    const localTime = new Date(date.getTime() + (offset * 60 * 60 * 1000));
-    
-    const year = localTime.getUTCFullYear();
-    const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(localTime.getUTCDate()).padStart(2, '0');
-    const hours = String(localTime.getUTCHours()).padStart(2, '0');
-    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
-    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+
+    parts.push('END:VCALENDAR');
+    return parts.join('\r\n');
   }
 
-  /**
-   * 获取时区偏移（小时）
-   * @param {string} timezone - 时区ID，如 'Asia/Shanghai'
-   * @returns {number|null} - 相对于UTC的偏移小时数，东时区为正
-   */
-  static getTimezoneOffset(timezone) {
-    // 常见时区映射表
-    const timezoneMap = {
-      'Asia/Shanghai': 8,
-      'Asia/Chongqing': 8,
-      'Asia/Hong_Kong': 8,
-      'Asia/Taipei': 8,
-      'Asia/Singapore': 8,
-      'Asia/Tokyo': 9,
-      'Asia/Seoul': 9,
-      'Asia/Dubai': 4,
-      'Asia/Kolkata': 5.5,
-      'Europe/London': 0,
-      'Europe/Paris': 1,
-      'Europe/Berlin': 1,
-      'Europe/Moscow': 3,
-      'America/New_York': -5,
-      'America/Chicago': -6,
-      'America/Denver': -7,
-      'America/Los_Angeles': -8,
-      'America/Sao_Paulo': -3,
-      'Australia/Sydney': 10,
-      'Pacific/Auckland': 12
-    };
-    
-    return timezoneMap[timezone] !== undefined ? timezoneMap[timezone] : null;
-  }
-
-  /**
-   * 格式化日期（YYYYMMDD）
-   */
-  static formatDate(date) {
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    return `${year}${month}${day}`;
-  }
-
-  /**
-   * 转义 iCal 文本中的特殊字符
-   */
   static escapeText(text) {
     if (!text) return '';
-    
-    // 转义特殊字符
-    text = text.replace(/\\/g, '\\\\'); // 反斜杠
-    text = text.replace(/;/g, '\\;');   // 分号
-    text = text.replace(/,/g, '\\,');   // 逗号
-    text = text.replace(/\n/g, '\\n');  // 换行
-    
-    // 处理长行（超过75字符需要折行）
-    const maxLength = 75;
-    if (text.length <= maxLength) {
-      return text;
-    }
-
-    // 按字符折行
-    const lines = [];
-    for (let i = 0; i < text.length; i += maxLength - 1) {
-      lines.push(text.substring(i, i + maxLength - 1));
-    }
-    return lines.join('\r\n ');
+    return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
   }
 
   /**
-   * 映射优先级
-   * z7Note: 1(低), 2(中), 3(高)
-   * iCal: 1(高) - 9(低)
+   * 折行处理 (RFC 5545)
+   * 每行不能超过 75 个字节,超过部分需另起一行并以空格开头
    */
-  static mapPriority(priority) {
-    const map = {
-      1: 9,  // 低 -> 9
-      2: 5,  // 中 -> 5
-      3: 1   // 高 -> 1
-    };
-    return map[priority] || 5;
+  static foldLines(content) {
+    return content.split(/\r?\n/).map(line => {
+      if (line.length <= 75) return line;
+      let result = '';
+      let currentLine = line;
+      while (currentLine.length > 75) {
+        result += currentLine.substring(0, 75) + '\r\n ';
+        currentLine = currentLine.substring(75);
+      }
+      result += currentLine;
+      return result;
+    }).join('\r\n');
+  }
+
+  // 格式化本地时间 (YYYYMMDDTHHMMSS)
+  static formatLocalTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return `${y}${m}${day}T${h}${min}${s}`;
   }
 
   /**
-   * 反向映射优先级
+   * 将系统优先级映射到 iCal 优先级 (1-9)
+   * 系统: 1(高), 3(中), 5(低)
+   * iCal: 1(高), 5(中), 9(低), 0(未指定)
    */
-  static mapPriorityFromICal(icalPriority) {
-    const map = {
-      1: 3,  // 高 -> 高
-      2: 3,
-      3: 3,
-      4: 3,
-      5: 2,  // 中 -> 中
-      6: 2,
-      7: 2,
-      8: 2,
-      9: 1   // 低 -> 低
-    };
-    return map[icalPriority] || 2;
+  static mapPriorityToICal(priority) {
+    if (priority <= 1) return 1;
+    if (priority <= 3) return 5;
+    return 9;
+  }
+
+  /**
+   * 将 iCal 优先级映射到系统优先级
+   */
+  static mapPriorityFromICal(priority) {
+    const p = parseInt(priority);
+    if (p >= 1 && p <= 4) return 1;
+    if (p === 5) return 3;
+    if (p >= 6 && p <= 9) return 5;
+    return 5;
   }
 }
 
