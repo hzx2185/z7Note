@@ -86,13 +86,13 @@ async function setSystemConfig(key, value, description = null) {
     await db.run(
       `INSERT INTO system_config (key, value, description, updatedAt) VALUES (?, ?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET value=excluded.value, description=excluded.description, updatedAt=excluded.updatedAt`,
-      [key, value, description, Date.now()]
+      [key, value, description, Math.floor(Date.now() / 1000)]
     );
   } else {
     await db.run(
       `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updatedAt=excluded.updatedAt`,
-      [key, value, Date.now()]
+      [key, value, Math.floor(Date.now() / 1000)]
     );
   }
 }

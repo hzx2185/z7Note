@@ -32,7 +32,7 @@ router.use((req, res, next) => {
 // OPTIONS - 宣告服务器支持的方法
 router.options('*', (req, res) => {
   res.setHeader('Allow', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCOL, PROPPATCH');
-  res.setHeader('DAV', '1, 2, 3, addressbook');
+  res.setHeader('DAV', '1, 2, 3, addressbook, access-control');
   res.setHeader('MS-Author-Via', 'DAV');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.status(200).end();
@@ -51,6 +51,7 @@ router.propfind('/', basicAuthMiddleware, async (req, res) => {
         <D:current-user-principal>
           <D:href>/carddav/principals/${username}/</D:href>
         </D:current-user-principal>
+        <D:resourcetype><D:collection/></D:resourcetype>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>
@@ -59,7 +60,7 @@ router.propfind('/', basicAuthMiddleware, async (req, res) => {
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
     res.status(207).send(xml);
   } catch (error) {
-    log('ERROR', 'CardDAV 根路径 PROPFIND 失败', { error: error.message });
+    log('ERROR', 'CardDAV根路径 PROPFIND 失败', { error: error.message });
     res.status(500).send();
   }
 });
@@ -76,9 +77,26 @@ router.propfind('/principals/:username/', basicAuthMiddleware, async (req, res) 
       <D:prop>
         <D:resourcetype><D:principal/></D:resourcetype>
         <D:displayname>${username}</D:displayname>
+        <D:principal-URL>
+          <D:href>/carddav/principals/${username}/</D:href>
+        </D:principal-URL>
         <C:addressbook-home-set>
           <D:href>/carddav/${username}/</D:href>
         </C:addressbook-home-set>
+        <D:current-user-privilege-set>
+          <D:privilege><D:all/></D:privilege>
+        </D:current-user-privilege-set>
+        <D:supported-report-set>
+          <D:report-set-item>
+            <D:report><D:expand-property/></D:report>
+          </D:report-set-item>
+          <D:report-set-item>
+            <D:report><D:principal-property-search/></D:report>
+          </D:report-set-item>
+          <D:report-set-item>
+            <D:report><D:principal-search-property-set/></D:report>
+          </D:report-set-item>
+        </D:supported-report-set>
       </D:prop>
       <D:status>HTTP/1.1 200 OK</D:status>
     </D:propstat>

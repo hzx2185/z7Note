@@ -92,6 +92,16 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
 
+  // CalDAV 健康检查端点
+  app.get('/caldav/health', (req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      service: 'CalDAV',
+      timestamp: Date.now(),
+      version: '1.0'
+    });
+  });
+
 // 注册路由
 const authRoutes = require('./routes/auth');
 const notesRoutes = require('./routes/notes');
@@ -184,6 +194,9 @@ app.use('/api/user/backup', auth, userBackupRoutes);
 
 // CalDAV 路由（使用 Basic Auth）
 if (config.caldav.enabled) {
+  // 为 CalDAV 提供原始 body（避免 JSON 解析干扰）
+  app.use('/caldav', express.text({ type: '*/*', limit: '50mb' }));
+
   app.use('/caldav', caldavRoutes);
   console.log('[CalDAV] CalDAV 服务已启用 (Basic Auth)');
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
+const { broadcast } = require('./ws');
 
 const router = express.Router();
 
@@ -60,7 +61,7 @@ router.get('/api/todos/:id', async (req, res) => {
 // 创建待办事项
 router.post('/api/todos', async (req, res) => {
   try {
-    const { title, description, completed, priority, dueDate, noteId } = req.body;
+    const { title, description, completed, priority, dueDate, noteId, reminderEmail, reminderBrowser } = req.body;
 
     // 数据验证
     if (!title || !title.trim()) {
@@ -85,8 +86,8 @@ router.post('/api/todos', async (req, res) => {
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
     await getConnection().run(
-      `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, noteId, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, noteId, reminderEmail, reminderBrowser, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         req.user,
@@ -96,6 +97,8 @@ router.post('/api/todos', async (req, res) => {
         priority !== undefined ? parseInt(priority) : 1,
         dueDate ? parseInt(dueDate) : null,
         noteId || null,
+        reminderEmail !== undefined ? (reminderEmail ? 1 : 0) : 0,
+        reminderBrowser !== undefined ? (reminderBrowser ? 1 : 0) : 1,
         Math.floor(Date.now() / 1000),
         Math.floor(Date.now() / 1000)
       ]
@@ -103,6 +106,9 @@ router.post('/api/todos', async (req, res) => {
 
     const todo = await getConnection().get('SELECT * FROM todos WHERE id = ?', [id]);
     log('INFO', '创建待办事项', { username: req.user, todoId: id });
+    
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+    
     res.json(todo);
   } catch (e) {
     log('ERROR', '创建待办事项失败', { username: req.user, error: e.message });
@@ -113,8 +119,6 @@ router.post('/api/todos', async (req, res) => {
 // 更新待办事项
 router.put('/api/todos/:id', async (req, res) => {
   try {
-    const { title, description, completed, priority, dueDate, noteId } = req.body;
-
     const existing = await getConnection().get(
       'SELECT * FROM todos WHERE id = ? AND username = ?',
       [req.params.id, req.user]
@@ -124,31 +128,45 @@ router.put('/api/todos/:id', async (req, res) => {
       return res.status(404).json({ error: '待办事项不存在' });
     }
 
-    await getConnection().run(
-      `UPDATE todos SET
-       title = COALESCE(?, title),
-       description = COALESCE(?, description),
-       completed = COALESCE(?, completed),
-       priority = COALESCE(?, priority),
-       dueDate = COALESCE(?, dueDate),
-       noteId = COALESCE(?, noteId),
-       updatedAt = ?
-       WHERE id = ? AND username = ?`,
-      [
-        title !== undefined ? title.trim() : null,
-        description !== undefined ? description : null,
-        completed !== undefined ? (completed ? 1 : 0) : null,
-        priority !== undefined ? parseInt(priority) : null,
-        dueDate !== undefined ? (dueDate ? parseInt(dueDate) : null) : null,
-        noteId !== undefined ? noteId : null,
-        Math.floor(Date.now() / 1000),
-        req.params.id,
-        req.user
-      ]
-    );
+    const updates = [];
+    const params = [];
+
+    const fields = {
+      title: (v) => v !== undefined ? v.trim() : undefined,
+      description: (v) => v,
+      completed: (v) => v !== undefined ? (v ? 1 : 0) : undefined,
+      priority: (v) => v !== undefined ? parseInt(v) : undefined,
+      dueDate: (v) => v !== undefined ? (v ? parseInt(v) : null) : undefined,
+      noteId: (v) => v !== undefined ? v : undefined,
+      reminderEmail: (v) => v !== undefined ? (v ? 1 : 0) : undefined,
+      reminderBrowser: (v) => v !== undefined ? (v ? 1 : 0) : undefined
+    };
+
+    for (const [key, parser] of Object.entries(fields)) {
+      if (req.body[key] !== undefined) {
+        const val = parser(req.body[key]);
+        if (val !== undefined) {
+          updates.push(`${key} = ?`);
+          params.push(val);
+        }
+      }
+    }
+
+    if (updates.length > 0) {
+      updates.push('updatedAt = ?');
+      params.push(Math.floor(Date.now() / 1000));
+
+      params.push(req.params.id, req.user);
+      
+      const query = `UPDATE todos SET ${updates.join(', ')} WHERE id = ? AND username = ?`;
+      await getConnection().run(query, params);
+    }
 
     const todo = await getConnection().get('SELECT * FROM todos WHERE id = ?', [req.params.id]);
     log('INFO', '更新待办事项', { username: req.user, todoId: req.params.id });
+    
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+    
     res.json(todo);
   } catch (e) {
     log('ERROR', '更新待办事项失败', { username: req.user, todoId: req.params.id, error: e.message });
@@ -169,6 +187,9 @@ router.delete('/api/todos/:id', async (req, res) => {
     }
 
     log('INFO', '删除待办事项', { username: req.user, todoId: req.params.id });
+    
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+    
     res.json({ status: 'ok' });
   } catch (e) {
     log('ERROR', '删除待办事项失败', { username: req.user, todoId: req.params.id, error: e.message });
@@ -196,6 +217,9 @@ router.patch('/api/todos/:id/toggle', async (req, res) => {
 
     const updated = await getConnection().get('SELECT * FROM todos WHERE id = ?', [req.params.id]);
     log('INFO', '切换待办事项状态', { username: req.user, todoId: req.params.id, completed: newCompleted });
+    
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+    
     res.json(updated);
   } catch (e) {
     log('ERROR', '切换待办事项状态失败', { username: req.user, todoId: req.params.id, error: e.message });

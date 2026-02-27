@@ -115,7 +115,7 @@ router.put('/api/notes/:id/restore', async (req, res) => {
   try {
     const result = await getConnection().run(
       'UPDATE notes SET deleted = 0, updatedAt = ? WHERE id = ? AND username = ?',
-      [Date.now(), req.params.id, req.user]
+      [Math.floor(Date.now() / 1000), req.params.id, req.user]
     );
     if (result.changes === 0) {
       return res.status(404).json({ error: '笔记不存在' });
@@ -176,7 +176,7 @@ router.post('/api/notes', async (req, res) => {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
     await getConnection().run(
       'INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)',
-      [id, req.user, title || '新笔记', noteContent, Date.now()]
+      [id, req.user, title || '新笔记', noteContent, Math.floor(Date.now() / 1000)]
     );
     const note = await getConnection().get('SELECT * FROM notes WHERE id = ?', [id]);
     res.json(note);
@@ -207,7 +207,7 @@ router.put('/api/notes/:id', async (req, res) => {
         // 内容为空时,自动删除笔记
         await getConnection().run(
           'UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?',
-          [Date.now(), req.params.id, req.user]
+          [Math.floor(Date.now() / 1000), req.params.id, req.user]
         );
         // 同步删除该笔记的分享链接
         await getConnection().run(
@@ -224,7 +224,7 @@ router.put('/api/notes/:id', async (req, res) => {
       }
     }
 
-    const updatedAt = Date.now();
+    const updatedAt = Math.floor(Date.now() / 1000);
     await getConnection().run(
       'UPDATE notes SET content = COALESCE(?, content), title = ?, updatedAt = ? WHERE id = ? AND username = ?',
       [content !== undefined ? content : null, title || '未命名', updatedAt, req.params.id, req.user]
@@ -259,7 +259,7 @@ router.delete('/api/notes/:id', async (req, res) => {
   try {
     await getConnection().run(
       'UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?',
-      [Date.now(), req.params.id, req.user]
+      [Math.floor(Date.now() / 1000), req.params.id, req.user]
     );
     // 同步删除该笔记的分享链接
     await getConnection().run(
@@ -304,7 +304,7 @@ router.post('/api/notes/batch-delete', async (req, res) => {
 
       const result = await getConnection().run(
         `UPDATE notes SET deleted = 1, updatedAt = ? WHERE id IN (${placeholders}) AND username = ?`,
-        [Date.now(), ...params]
+        [Math.floor(Date.now() / 1000), ...params]
       );
 
       // 同步删除这些笔记的分享链接
@@ -626,7 +626,7 @@ router.post('/api/files', async (req, res) => {
           req.user,
           item.title || '未命名',
           item.content || '',
-          item.updatedAt || Date.now(),
+          item.updatedAt || Math.floor(Date.now() / 1000),
           item.deleted ? 1 : 0
         ]);
 

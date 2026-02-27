@@ -184,5 +184,6 @@ class WebSocketManager {
 // 创建全局实例
 const wsManager = new WebSocketManager();
 
-// 导出
+// 导出并挂载到 window
+window.wsManager = wsManager;
 export default wsManager;

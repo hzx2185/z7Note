@@ -1,138 +1,79 @@
 /**
- * 浏览器通知处理器
- * 处理通过WebSocket接收的提醒通知
+ * 浏览器通知处理逻辑
  */
 
-class NotificationHandler {
+class NotificationManager {
   constructor() {
-    this.permission = 'default';
+    this.hasPermission = false;
     this.init();
   }
 
-  init() {
-    // 检查浏览器是否支持通知
-    if ('Notification' in window) {
-      this.permission = Notification.permission;
-    }
-  }
-
-  /**
-   * 请求通知权限
-   */
-  async requestPermission() {
-    if (!('Notification' in window)) {
-      console.warn('浏览器不支持通知API');
-      return false;
+  async init() {
+    if (!("Notification" in window)) {
+      console.log("此浏览器不支持桌面通知");
+      return;
     }
 
-    if (this.permission === 'granted') {
-      return true;
+    if (Notification.permission === "granted") {
+      this.hasPermission = true;
+    } else if (Notification.permission !== "denied") {
+      const permission = await Notification.requestPermission();
+      this.hasPermission = (permission === "granted");
     }
-
-    if (this.permission !== 'denied') {
-      const result = await Notification.requestPermission();
-      this.permission = result;
-      return result === 'granted';
-    }
-
-    return false;
   }
 
   /**
    * 显示通知
    */
   show(title, options = {}) {
-    if (!('Notification' in window)) {
-      console.warn('浏览器不支持通知API');
-      return;
-    }
+    if (!this.hasPermission) return;
 
-    if (this.permission !== 'granted') {
-      console.warn('通知权限未授予');
-      return;
-    }
+    const notification = new Notification(title, {
+      icon: '/favicon.png',
+      badge: '/favicon.png',
+      ...options
+    });
 
-    const defaultOptions = {
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: options.tag || Date.now().toString(),
-      requireInteraction: false,
-      silent: false,
-      timestamp: Date.now()
-    };
-
-    const notification = new Notification(title, { ...defaultOptions, ...options });
-
-    // 点击通知时聚焦窗口
-    notification.onclick = () => {
+    notification.onclick = function() {
       window.focus();
-      notification.close();
-
-      // 如果有URL，跳转到该地址
       if (options.url) {
         window.location.href = options.url;
       }
+      this.close();
     };
-
-    // 10秒后自动关闭
-    setTimeout(() => {
-      notification.close();
-    }, 10000);
-
-    return notification;
   }
 
   /**
-   * 显示提醒通知
+   * 处理后端发送的提醒消息
    */
-  showReminder(data) {
-    const { itemType, item } = data;
-    const isEvent = itemType === 'event';
-
-    const title = isEvent ? '📅 事件提醒' : '✅ 待办提醒';
-
-    const body = `${item.title}\n⏰ ${item.timeStr || ''}${item.description ? '\n' + item.description : ''}`;
-
-    this.show(title, {
-      body,
+  handleReminder(data) {
+    const item = data.item;
+    const typeLabel = data.itemType === 'event' ? '📅 事件提醒' : '✅ 待办提醒';
+    
+    // 桌面通知
+    this.show(`${typeLabel}: ${item.title}`, {
+      body: `${item.timeStr}\n${item.description || ''}`,
       tag: `reminder-${item.id}`,
-      url: '/calendar.html'
+      requireInteraction: true // 保持通知直到用户交互
     });
-  }
 
-  /**
-   * 显示系统通知
-   */
-  showSystem(title, message, type = 'info') {
-    const icons = {
-      info: 'ℹ️',
-      success: '✓',
-      warning: '⚠',
-      error: '✕'
-    };
-
-    const body = `${icons[type] || ''} ${message}`;
-
-    this.show(title, {
-      body,
-      tag: `system-${Date.now()}`
-    });
-  }
-
-  /**
-   * 检查权限状态
-   */
-  checkPermission() {
-    if (!('Notification' in window)) {
-      return 'unsupported';
-    }
-
-    return Notification.permission;
+    // 同时在页面内显示一个简单的 Alert 或 Toast 作为备选
+    console.log('[Notification] 收到提醒:', item);
   }
 }
 
-// 创建全局实例
-const notificationHandler = new NotificationHandler();
+const notificationManager = new NotificationManager();
 
-// 导出
-export default notificationHandler;
+// 如果 WebSocketManager 已连接，注册处理器
+if (window.wsManager) {
+  window.wsManager.on('reminder', (data) => notificationManager.handleReminder(data));
+} else {
+  // 延迟检查，兼容异步加载
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.wsManager) {
+      window.wsManager.on('reminder', (data) => notificationManager.handleReminder(data));
+    }
+  });
+}
+
+window.notificationManager = notificationManager;

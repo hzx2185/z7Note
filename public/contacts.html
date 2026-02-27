@@ -7,13 +7,12 @@
   <link rel="stylesheet" href="/css/app.css">
   <style>
     :root { --row-h: 32px; }
-    body { background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
-    .header { height: 40px; padding: 0 8px; flex-shrink: 0; background: var(--side); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-    .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 4px; gap: 4px; }
+    body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
+    .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 4px; gap: 4px; margin-top: 40px; }
     .toolbar { display: flex; gap: 4px; align-items: center; background: var(--side); padding: 4px; border-radius: 4px; border: 1px solid var(--border); }
     .search-input { flex: 1; min-width: 0; height: 26px; padding: 0 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); outline: none; font-size: 12px; }
-    #pagination { display: none; gap: 4px; align-items: center; flex-shrink: 0; }
-    #pagination.show { display: flex !important; }
+    #pagination { display: none; gap: 4px; align-items: center; }
+    #pagination.show { display: flex; }
 
     .table-container { flex: 1; background: var(--side); border: 1px solid var(--border); border-radius: 4px; overflow: auto; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -30,30 +29,19 @@
 
     @media (max-width: 600px) { .col-org, .col-email { display: none; } .col-tel { width: auto; } .header b span { display: none; } }
 
-    .modal-content { max-width: 360px; }
+    /* 表单与通用模态框样式 */
     .form-group { margin-bottom: 6px; }
     .form-group label { font-size: 11px; color: var(--gray); display: block; margin-bottom: 2px; }
-    input, textarea, select { width: 100%; padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; }
-
     .multi-item { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
     .multi-item select { width: 65px; flex-shrink: 0; height: 26px; font-size: 11px; padding: 0 4px; }
     .multi-item input { flex: 1; height: 26px; font-size: 12px; }
-
-    .modal-actions-full { display: flex; gap: 8px; padding: 10px 0 0; }
-    .modal-actions-full .btn { flex: 1; min-height: 32px; font-size: 13px; border-radius: 4px; }
     .btn-xs { padding: 2px 6px; font-size: 11px; height: 24px; min-width: auto; border-radius: 3px; }
-    .tool-btn { min-width: auto; padding: 0 6px; height: 28px; font-size: 12px; }
-
+    
     /* 查重和历史记录通用样式 */
-    .dup-group, .history-item { padding: 4px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 8px; background: var(--bg); }
-    .dup-row { display: flex; align-items: center; gap: 4px; padding: 4px 0; font-size: 11px; color: var(--text); }
-    .dup-row:not(:last-child) { border-bottom: 1px solid rgba(128,128,128,0.05); }
-    .dup-header { color: var(--gray); font-weight: 500; border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px; }
-
-    .dup-col-sel { width: 24px; flex-shrink: 0; text-align: center; }
-    .dup-col-name { width: 60px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .dup-col-info { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item-card { padding: 6px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; background: var(--bg); font-size: 12px; }
+    .dup-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
     .hl { color: var(--accent); font-weight: bold; }
+    .col-sel { width: 24px; flex-shrink: 0; text-align: center; }
   </style>
 </head>
 <body>
@@ -96,24 +84,24 @@
 
   <!-- 编辑 -->
   <div class="modal" id="edit-modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width:360px">
       <div class="modal-header"><h3 id="modal-title">联系人</h3><button onclick="closeModal()">×</button></div>
       <form id="contact-form" onsubmit="saveContact(event)" class="modal-body">
         <div style="display:flex;gap:6px">
           <div class="form-group" style="flex:2"><label>名*</label><input name="n_given" required></div>
           <div class="form-group" style="flex:1"><label>姓</label><input name="n_family"></div>
         </div>
-        <div class="form-group"><label>全名*</label><input name="fn" id="fn-input" required></div>
+        <div class="form-group"><label>全名*</label><input name="fn" required></div>
         <div class="form-group"><label>电话</label><div id="tel-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('tel')">+ 添加号码</button></div>
         <div class="form-group"><label>邮箱</label><div id="email-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('email')">+ 添加邮箱</button></div>
         <div style="display:flex;gap:6px">
-          <div class="form-group"><label>公司</label><input name="org"></div>
-          <div class="form-group"><label>职位</label><input name="title"></div>
+          <div class="form-group" style="flex:1"><label>公司</label><input name="org"></div>
+          <div class="form-group" style="flex:1"><label>职位</label><input name="title"></div>
         </div>
-        <div class="modal-actions-full">
+        <div class="modal-actions" style="padding:10px 0 0;border:none">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
           <button type="button" class="btn btn-secondary" id="history-btn" onclick="showHistory()" style="display:none">历史</button>
-          <button type="submit" class="btn btn-primary">保存</button>
+          <button type="submit" class="btn btn-primary" style="flex:1">保存</button>
         </div>
         <button type="button" class="btn btn-xs" style="width:100%;margin-top:10px;color:var(--red);background:none;border:none" id="del-contact-btn" onclick="deleteSingle()">删除此联系人</button>
       </form>
@@ -127,7 +115,7 @@
       <div class="modal-body">
         <textarea id="vcard-text" placeholder="粘贴 vCard 内容..." rows="5" style="font-family:monospace;font-size:11px"></textarea>
         <input type="file" accept=".vcf" onchange="readVcf(this)" style="margin-top:6px;font-size:11px">
-        <div class="modal-actions-full"><button class="btn btn-primary" onclick="doImport()">开始导入</button></div>
+        <div class="modal-actions" style="padding:10px 0 0;border:none"><button class="btn btn-primary" style="width:100%" onclick="doImport()">开始导入</button></div>
       </div>
     </div>
   </div>
@@ -137,30 +125,22 @@
     <div class="modal-content" style="max-width:440px">
       <div class="modal-header"><h3>清理重复</h3><button onclick="$('dup-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <div class="dup-row dup-header" style="padding-left:4px">
-          <div class="dup-col-sel" title="勾选组进行合并"><input type="checkbox" id="dup-sel-all" checked onclick="toggleAllDups(this.checked)"></div>
-          <div class="dup-col-sel" title="选择保留哪一行">留</div>
-          <div class="dup-col-name">姓名</div>
-          <div class="dup-col-info">电话 / 邮箱</div>
-        </div>
         <div id="dup-list" style="max-height:60vh;overflow-y:auto"></div>
-        <div class="modal-actions-full">
+        <div class="modal-actions" style="padding:10px 0 0;border:none">
           <button class="btn btn-secondary" onclick="$('dup-modal').classList.remove('show')">取消</button>
-          <button class="btn btn-primary" onclick="batchMergeGroups()">合并选中组</button>
+          <button class="btn btn-primary" style="flex:1" onclick="batchMergeGroups()">合并选中组</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 历史记录 -->
+  <!-- 历史 -->
   <div class="modal" id="history-modal">
     <div class="modal-content" style="max-width:440px">
       <div class="modal-header"><h3>修改历史</h3><button onclick="$('history-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
         <div id="history-list" style="max-height:60vh;overflow-y:auto"></div>
-        <div class="modal-actions-full">
-          <button class="btn btn-secondary" onclick="$('history-modal').classList.remove('show')">关闭</button>
-        </div>
+        <div class="modal-actions" style="padding:10px 0 0;border:none"><button class="btn btn-secondary" style="width:100%" onclick="$('history-modal').classList.remove('show')">关闭</button></div>
       </div>
     </div>
   </div>
@@ -168,7 +148,7 @@
   <script>
     const $ = id => document.getElementById(id);
     const esc = t => (t||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = 100, total = 0, query = '', currentDups = [];
+    let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = 100, total = 0, query = '';
 
     if (localStorage.getItem('p-theme') === 'dark') document.documentElement.classList.add('dark-mode');
 
@@ -181,18 +161,17 @@
     function render() {
       $('list').innerHTML = contacts.map(c => {
         let tels = [], emails = []; try { tels = JSON.parse(c.tel||'[]'); emails = JSON.parse(c.email||'[]'); } catch(e){}
-        const tel = tels[0]?.value || ''; const email = emails[0]?.value || '';
         return `<tr class="${selected.has(c.id)?'selected':''}" onclick="onRowClick('${c.id}', event)">
           <td class="col-cb" onclick="event.stopPropagation()"><input type="checkbox" ${selected.has(c.id)?'checked':''} onchange="toggleSel('${c.id}', this.checked)"></td>
           <td class="col-name">${esc(c.fn||'未命名')}</td>
-          <td class="col-tel">${esc(tel)}</td>
-          <td class="col-email">${esc(email)}</td>
+          <td class="col-tel">${esc(tels[0]?.value || '')}</td>
+          <td class="col-email">${esc(emails[0]?.value || '')}</td>
           <td class="col-org">${esc(c.org||'-')}</td>
         </tr>`;
       }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>';
       $('count-info').textContent = `(${total}${selected.size?`/选${selected.size}`:''})`;
-      $('pagination').className = total > pageSize ? 'show' : '';
-      $('page-info').textContent = `${page}/${Math.ceil(total/pageSize)}`;
+      $('pagination').classList.toggle('show', total > pageSize);
+      $('page-info').textContent = `${page}/${Math.ceil(total/pageSize) || 1}`;
     }
 
     function onSearch() { clearTimeout(this.t); this.t = setTimeout(() => { query = $('search-input').value; page = 1; load(); }, 300); }
@@ -236,11 +215,11 @@
     }
 
     async function deleteSingle() { if (confirm('确定删除此联系人?')) { await fetch(`/api/contacts/${curId}`,{method:'DELETE'}); closeModal(); load(); } }
-    async function batchDelete() {
+    async function batchDelete() { 
       if (!selected.size) return alert('请先选择要删除的联系人');
-      if (confirm(`确定删除选中的 ${selected.size} 个联系人?`)) { await fetch('/api/contacts/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})}); selected.clear(); load(); }
+      if (confirm(`确定删除选中的 ${selected.size} 个联系人?`)) { await fetch('/api/contacts/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})}); selected.clear(); load(); } 
     }
-    async function batchMerge() {
+    async function batchMerge() { 
       if (selected.size < 2) return alert('请至少选择两个联系人进行合并');
       if (confirm(`确定合并选中的 ${selected.size} 个联系人?`)) { const ids=[...selected]; await fetch('/api/contacts/merge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keepId:ids[0],mergeIds:ids.slice(1)})}); selected.clear(); load(); }
     }
@@ -250,109 +229,53 @@
 
     async function smartFindDuplicates() {
       const data = await (await fetch('/api/contacts/smart-duplicates')).json();
-      currentDups = [...data.duplicates.byName, ...data.duplicates.byPhone, ...data.duplicates.byEmail];
-      $('dup-list').innerHTML = currentDups.map((g, i) => {
-        return `<div class="dup-group">
-          <div class="dup-row" style="background:rgba(128,128,128,0.03);font-weight:bold">
-            <div class="dup-col-sel"><input type="checkbox" class="dup-group-cb" checked></div>
-            <div class="dup-col-sel"></div>
-            <div colspan="2" style="flex:1;color:var(--accent)">原因: ${g.field} 重复 (${esc(g.value)})</div>
+      const allDups = [...data.duplicates.byName, ...data.duplicates.byPhone, ...data.duplicates.byEmail];
+      $('dup-list').innerHTML = allDups.map((g, i) => `
+        <div class="item-card">
+          <div class="dup-row" style="color:var(--accent);font-weight:bold;margin-bottom:4px">
+            <input type="checkbox" class="dup-group-cb" checked> ${g.field}重复: ${esc(g.value)}
           </div>
-          ${g.contacts.map((c, ci) => {
-            let tel = '', email = '';
-            try {
-              const tels = JSON.parse(c.tel||'[]'); tel = tels[0]?.value || '';
-              const emails = JSON.parse(c.email||'[]'); email = emails[0]?.value || '';
-            } catch(e){}
-            const info = tel + (tel && email ? ' / ' : '') + email;
-            const isMatch = (g.type==='name'&&c.fn===g.value) || (g.type==='phone'&&tel===g.value) || (g.type==='email'&&email===g.value);
-
-            return `<div class="dup-row">
-              <div class="dup-col-sel"></div>
-              <div class="dup-col-sel"><input type="radio" name="keep_${i}" value="${c.id}" ${ci===0?'checked':''}></div>
-              <div class="dup-col-name">${esc(c.fn)}</div>
-              <div class="dup-col-info ${isMatch?'hl':''}">${esc(info)}</div>
-            </div>`;
-          }).join('')}
-        </div>`;
-      }).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">未发现明显重复</div>';
+          ${g.contacts.map((c, ci) => `
+            <div class="dup-row">
+              <div class="col-sel"></div>
+              <div class="col-sel"><input type="radio" name="keep_${i}" value="${c.id}" ${ci===0?'checked':''}></div>
+              <div style="flex:1">${esc(c.fn)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">未发现明显重复</div>';
       $('dup-modal').classList.add('show');
     }
 
-    function toggleAllDups(c) { document.querySelectorAll('.dup-group-cb').forEach(cb => cb.checked = c); }
-
     async function batchMergeGroups() {
-      const groups = document.querySelectorAll('.dup-group');
       const mergeList = [];
-      groups.forEach((group, i) => {
-        if (group.querySelector('.dup-group-cb').checked) {
-          const keepId = group.querySelector('input[type="radio"]:checked').value;
-          const allIds = [...group.querySelectorAll('input[type="radio"]')].map(r => r.value);
+      document.querySelectorAll('.item-card').forEach(card => {
+        if (card.querySelector('.dup-group-cb').checked) {
+          const keepId = card.querySelector('input[type="radio"]:checked').value;
+          const allIds = [...card.querySelectorAll('input[type="radio"]')].map(r => r.value);
           const mergeIds = allIds.filter(id => id !== keepId);
           if (mergeIds.length) mergeList.push({ keepId, mergeIds });
         }
       });
-
       if (!mergeList.length) return alert('未选中任何组或无需合并');
-      if (confirm(`确定合并选中的 ${mergeList.length} 组联系人？`)) {
+      if (confirm(`确定合并 ${mergeList.length} 组联系人?`)) {
         const res = await fetch('/api/contacts/merge-batch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mergeList }) });
-        if (res.ok) { $('dup-modal').classList.remove('show'); load(); alert('合并完成'); }
+        if (res.ok) { $('dup-modal').classList.remove('show'); load(); }
       }
     }
 
     async function showHistory() {
-      if (!curId) return;
-      try {
-        const res = await fetch(`/api/contacts/${curId}/history`);
-        const data = await res.json();
-        const history = data.history || [];
-
-        if (history.length === 0) {
-          $('history-list').innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray)">暂无修改记录</div>';
-        } else {
-          $('history-list').innerHTML = history.map(h => {
-            const time = new Date(h.created_at * 1000).toLocaleString('zh-CN');
-            let actionText = '';
-
-            switch (h.action) {
-              case 'create':
-                actionText = `<span style="color:var(--accent)">创建联系人</span>`;
-                break;
-              case 'update':
-                actionText = `<span style="color:var(--accent)">修改</span> ${esc(h.field || '')}`;
-                if (h.old_value && h.new_value) {
-                  actionText += `<br><span style="color:var(--red)">- ${esc(h.old_value)}</span>`;
-                  actionText += `<br><span style="color:var(--accent)">+ ${esc(h.new_value)}</span>`;
-                } else if (h.new_value) {
-                  actionText += `<br><span style="color:var(--accent)">+ ${esc(h.new_value)}</span>`;
-                } else if (h.old_value) {
-                  actionText += `<br><span style="color:var(--red)">- ${esc(h.old_value)}</span>`;
-                }
-                break;
-              case 'delete':
-                actionText = `<span style="color:var(--red)">删除联系人</span>`;
-                break;
-              default:
-                actionText = esc(h.action);
-            }
-
-            return `<div class="history-item" style="padding:8px;border-bottom:1px solid var(--border);font-size:12px">
-              <div style="color:var(--gray);font-size:11px;margin-bottom:4px">${time}</div>
-              <div>${actionText}</div>
-            </div>`;
-          }).join('');
-        }
-
-        $('history-modal').classList.add('show');
-      } catch (e) {
-        alert('获取历史记录失败');
-      }
+      const res = await fetch(`/api/contacts/${curId}/history`);
+      const { history } = await res.json();
+      $('history-list').innerHTML = history.map(h => `
+        <div class="item-card">
+          <div style="color:var(--gray);font-size:11px">${new Date(h.created_at).toLocaleString()}</div>
+          <div style="margin-top:2px">${esc(h.action === 'update' ? '更新' : '创建')} - ${esc(h.details)}</div>
+        </div>
+      `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">无历史记录</div>';
+      $('history-modal').classList.add('show');
     }
 
-    $('contact-form').n_given.oninput = $('contact-form').n_family.oninput = function() {
-      const f = $('contact-form'); if (!$('fn-input').value || $('fn-input').dataset.auto !== 'false') { $('fn-input').value = (f.n_family.value + f.n_given.value).trim(); $('fn-input').dataset.auto = 'true'; }
-    };
-    $('fn-input').oninput = () => $('fn-input').dataset.auto = 'false';
     load();
   </script>
 </body>

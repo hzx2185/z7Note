@@ -248,7 +248,7 @@ router.post('/api/attachments/fix-paths', async (req, res) => {
         const newContent = note.content.split(findText).join(replaceText);
         if (newContent !== note.content) {
           await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ?',
-            [newContent, Date.now(), note.id]);
+            [newContent, Math.floor(Date.now() / 1000), note.id]);
           count++;
         }
       }

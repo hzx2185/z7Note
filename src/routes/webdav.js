@@ -184,7 +184,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
             // 转换附件路径（Web → WebDAV）以计算正确的大小
             const convertedContent = convertAttachmentPathToWebDAV(note.content || '', username);
             const contentLength = Buffer.byteLength(convertedContent, 'utf8');
-            const lastModified = new Date(note.updatedAt).toUTCString();
+            const lastModified = new Date(note.updatedAt * 1000).toUTCString();
             const etag = `"${note.updatedAt}"`;
 
             responses.push(createResponseXml(`${req.baseUrl}/${username}/${encodeURIComponent(fname)}`, {
@@ -362,7 +362,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       const contentBuffer = Buffer.from(convertedContent, 'utf8');
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
       res.setHeader('ETag', `"${note.updatedAt}"`);
-      res.setHeader('Last-Modified', new Date(note.updatedAt).toUTCString());
+      res.setHeader('Last-Modified', new Date(note.updatedAt * 1000).toUTCString());
       res.setHeader('Content-Length', contentBuffer.length);
       if (method === 'HEAD') return res.status(200).end();
       return res.status(200).send(contentBuffer);
@@ -384,7 +384,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       // 转换附件路径（WebDAV → Web）
       contentStr = convertAttachmentPathToWeb(contentStr, username);
 
-      const now = Date.now();
+      const now = Math.floor(Date.now() / 1000);
       // 去掉 .md 后缀
       const cleanTitle = filename.replace(/\.md$/i, '');
 
@@ -414,7 +414,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
 
     if (method === 'DELETE') {
       if (note) {
-        await getConnection().run('UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ?', [Date.now(), note.id]);
+        await getConnection().run('UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ?', [Math.floor(Date.now() / 1000), note.id]);
         // 通知 WebSocket 客户端
         broadcastNoteDelete(note.id);
       }
@@ -430,7 +430,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
         displayname: escapeXml(filename),
         getcontenttype: 'text/markdown',
         getcontentlength: contentBuffer.length,
-        getlastmodified: new Date(note.updatedAt).toUTCString(),
+        getlastmodified: new Date(note.updatedAt * 1000).toUTCString(),
         getetag: `"${note.updatedAt}"`
       })];
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');

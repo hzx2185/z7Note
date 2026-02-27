@@ -509,11 +509,11 @@ function parseICSDate(icsDate) {
   const month = parseInt(value.substring(4, 6)) - 1;
   const day = parseInt(value.substring(6, 8));
   
-  if (isAllDay) {
-    // 全天事件，按本地时区处理为当天开始
-    const date = new Date(year, month, day);
-    return Math.floor(date.getTime() / 1000);
-  }
+    if (isAllDay) {
+      // 全天事件，使用UTC时间避免时区偏差
+      const date = new Date(Date.UTC(year, month, day));
+      return Math.floor(date.getTime() / 1000);
+    }
 
   const hours = parseInt(value.substring(9, 11)); // THHMMSS
   const minutes = parseInt(value.substring(11, 13));
@@ -536,10 +536,9 @@ function parseICSDate(icsDate) {
       date = new Date(year, month, day, hours, minutes, seconds);
     }
   } else {
-    // 浮动时间（没有Z也没有TZID），也按本地时间处理
-    date = new Date(year, month, day, hours, minutes, seconds);
-  }
-  
+      // 浮动时间，使用UTC时间避免时区偏差
+      date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+    }
   return Math.floor(date.getTime() / 1000);
 }
 

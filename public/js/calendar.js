@@ -2718,6 +2718,26 @@ if (elements.sidebarSearch) {
     elements.sidebarDate.textContent = utils.formatSidebarDate(state.selectedDate);
     handlers.updateLunarInfo(initialDateStr);
 
+    // 手机端默认折叠日期框
+    if (window.innerWidth <= 768) {
+      const monthView = document.getElementById('month-view');
+      if (monthView) monthView.classList.add('collapsed');
+    }
+
+    const mobileToggle = document.getElementById('mobile-calendar-toggle');
+    if (mobileToggle) {
+      console.log('[CalendarApp] 绑定手机端折叠切换按钮');
+      mobileToggle.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const mv = document.getElementById('month-view');
+        if (mv) {
+          mv.classList.toggle('collapsed');
+          console.log('[CalendarApp] 切换折叠状态:', mv.classList.contains('collapsed'));
+        }
+      };
+    }
+
     console.log('[CalendarApp] 初始化完成');
   }
 
