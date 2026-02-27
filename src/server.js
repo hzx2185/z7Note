@@ -119,7 +119,7 @@ const webdavRoutes = require('./routes/webdav');
 const contactsRoutes = require('./routes/contacts');
 const timelineRoutes = require('./routes/timeline');
 const lunarRoutes = require('./routes/lunar');
-const calendarSubscriptionsRoutes = require('./routes/calendarSubscriptions');
+const { router: calendarSubscriptionsRoutes, syncSubscription } = require('./routes/calendarSubscriptions');
 const remindersRoutes = require('./routes/reminders');
 const tfaRoutes = require('./routes/2fa');
 
@@ -328,6 +328,27 @@ let server;
         console.error('[定时任务] 清理失败:', e);
       }
     });
+
+    // 设置日历订阅自动同步任务 (每12小时一次)
+    nodeCron.schedule('0 */12 * * *', async () => {
+      console.log('[定时任务] 开始自动同步日历订阅...');
+      try {
+        const db = getConnection();
+        const subscriptions = await db.all('SELECT id, username, name FROM calendar_subscriptions WHERE enabled = 1');
+        
+        for (const sub of subscriptions) {
+          try {
+            const count = await syncSubscription(sub.id, sub.username);
+            console.log(`[定时任务] 订阅同步成功: ${sub.name} (${sub.username}), 导入: ${count}`);
+          } catch (err) {
+            console.error(`[定时任务] 订阅同步失败: ${sub.name} (${sub.username})`, err.message);
+          }
+        }
+      } catch (e) {
+        console.error('[定时任务] 自动同步订阅全局错误:', e);
+      }
+    });
+    console.log('[定时任务] 日历订阅同步服务已启动 (每12小时检查一次)');
 
     server = app.listen(config.port, config.host, () => {
       console.log(`z7Note Server running on http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);

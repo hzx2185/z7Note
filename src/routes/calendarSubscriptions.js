@@ -143,76 +143,117 @@ router.delete('/:id', async (req, res) => {
 });
 
 /**
- * 手动同步订阅
+ * 核心同步逻辑 (导出供定时任务使用)
  */
-router.post('/:id/sync', async (req, res) => {
+async function syncSubscription(subscriptionId, username) {
+  const subscription = await getConnection().get(
+    'SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?',
+    [subscriptionId, username]
+  );
+
+  if (!subscription) {
+    throw new Error('订阅不存在');
+  }
+
+  // 自动修正协议：webcal:// -> https://
+  let fetchUrl = subscription.url;
+  if (fetchUrl.startsWith('webcal://')) {
+    fetchUrl = 'https://' + fetchUrl.substring(9);
+  }
+
+  log('INFO', '开始同步订阅内容', { url: fetchUrl, subscriptionId });
+
+  // 获取ICS内容
+  let icsContent;
   try {
-    const subscription = await getConnection().get(
-      'SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?',
-      [req.params.id, req.user]
-    );
-
-    if (!subscription) {
-      return res.status(404).json({ error: '订阅不存在' });
-    }
-
-    // 获取ICS内容
-    const response = await fetch(subscription.url, {
+    const response = await fetch(fetchUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/calendar, text/plain, */*'
+        'Accept': 'text/calendar, text/plain, */*',
+        'Connection': 'keep-alive'
       },
+      redirect: 'follow',
       timeout: 30000
     });
 
     if (!response.ok) {
       throw new Error(`获取ICS失败: ${response.status}`);
     }
+    icsContent = await response.text();
+  } catch (fetchErr) {
+    log('WARN', 'Fetch同步失败，尝试备用方案(curl)', { error: fetchErr.message });
+    const { execSync } = require('child_process');
+    try {
+      icsContent = execSync(`curl -L -s -A "Mozilla/5.0" "${fetchUrl}"`, { encoding: 'utf8', timeout: 30000 });
+      if (!icsContent || !icsContent.includes('BEGIN:VCALENDAR')) {
+        throw new Error('curl 返回内容无效');
+      }
+    } catch (curlErr) {
+      throw new Error(`所有同步方案均失败: ${fetchErr.message} | ${curlErr.message}`);
+    }
+  }
 
-    const icsContent = await response.text();
-    const events = importFromICS(icsContent);
+  const events = importFromICS(icsContent);
+  const db = getConnection();
+  await db.run('BEGIN TRANSACTION');
 
-    // 删除该订阅的旧事件
-    await getConnection().run(
+  try {
+    // 1. 删除该订阅的所有旧事件
+    await db.run(
       'DELETE FROM events WHERE subscriptionId = ? AND username = ?',
-      [req.params.id, req.user]
+      [subscriptionId, username]
     );
 
-    // 插入新事件
+    // 2. 批量插入新事件
     let importedCount = 0;
+    const now = Math.floor(Date.now() / 1000);
+    
     for (const event of events) {
-      try {
-        const id = `sub_${req.params.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        await getConnection().run(
-          `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, subscriptionId, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            id,
-            req.user,
-            event.title || '未命名事件',
-            event.description || '',
-            event.startTime || Math.floor(Date.now() / 1000),
-            event.endTime || null,
-            event.allDay ? 1 : 0,
-            subscription.color || '#6366f1',
-            req.params.id,
-            Math.floor(Date.now() / 1000),
-            Math.floor(Date.now() / 1000)
-          ]
-        );
-        importedCount++;
-      } catch (err) {
-        log('ERROR', '导入单个事件失败', { username: req.user, event, error: err.message });
-      }
+      const eventUid = event.uid || `idx_${importedCount}`;
+      const id = `sub_${subscriptionId}_${eventUid}`;
+      
+      await db.run(
+        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, subscriptionId, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          username,
+          event.title || '未命名事件',
+          event.description || '',
+          event.startTime || now,
+          event.endTime || null,
+          event.allDay ? 1 : 0,
+          subscription.color || '#6366f1',
+          subscriptionId,
+          now,
+          now
+        ]
+      );
+      importedCount++;
     }
 
-    // 更新最后同步时间
-    await getConnection().run(
+    // 3. 更新最后同步时间
+    await db.run(
       'UPDATE calendar_subscriptions SET lastSync = ?, updatedAt = ? WHERE id = ?',
-      [Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), req.params.id]
+      [now, now, subscriptionId]
     );
 
-    log('INFO', '同步订阅', {
+    await db.run('COMMIT');
+    return importedCount;
+  } catch (err) {
+    await db.run('ROLLBACK');
+    throw err;
+  }
+}
+
+/**
+ * 手动同步订阅
+ */
+router.post('/:id/sync', async (req, res) => {
+  try {
+    const importedCount = await syncSubscription(req.params.id, req.user);
+    
+    log('INFO', '手动同步订阅成功', {
       username: req.user,
       subscriptionId: req.params.id,
       imported: importedCount
@@ -224,9 +265,9 @@ router.post('/:id/sync', async (req, res) => {
     });
   } catch (e) {
     console.error('[Sync Error]', e);
-    log('ERROR', '同步订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message, stack: e.stack });
+    log('ERROR', '手动同步订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
     res.status(500).json({ error: '同步失败: ' + e.message });
   }
 });
 
-module.exports = router;
+module.exports = { router, syncSubscription };
