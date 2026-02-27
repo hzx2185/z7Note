@@ -1597,6 +1597,25 @@ if (elements.sidebarSearch) {
 
   // ==================== 事件处理 ====================
   const handlers = {
+    // 获取并更新天气信息
+    async updateWeather() {
+      const weatherEl = document.getElementById('sidebar-weather');
+      if (!weatherEl) return;
+
+      try {
+        // 使用 wttr.in 获取天气 (支持自动定位，返回简洁文本)
+        // format=%c+%t: 符号 + 温度
+        const response = await fetch('https://wttr.in/?format=%c%t');
+        if (response.ok) {
+          const text = await response.text();
+          weatherEl.textContent = text.trim();
+        }
+      } catch (e) {
+        console.error('获取天气失败:', e);
+        weatherEl.textContent = '';
+      }
+    },
+
     // 批量选择相关方法
     toggleBatchSelect() {
       state.batchSelect.enabled = !state.batchSelect.enabled;
@@ -2526,6 +2545,16 @@ if (elements.sidebarSearch) {
     if (exportBtn) exportBtn.addEventListener('click', handlers.exportCalendar);
     if (importBtn) importBtn.addEventListener('click', () => icsFileInput.click());
     if (icsFileInput) icsFileInput.addEventListener('change', handlers.importCalendar);
+    
+    // 初始化天气
+    const weatherEl = document.getElementById('sidebar-weather');
+    if (weatherEl) {
+      handlers.updateWeather();
+      weatherEl.addEventListener('click', () => {
+        weatherEl.textContent = '...';
+        handlers.updateWeather();
+      });
+    }
     
     // 绑定跳转按钮
     const jumpBtn = document.getElementById('jump-btn');
