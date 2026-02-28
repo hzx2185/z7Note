@@ -7,7 +7,7 @@
     <meta name="description" content="z7Note 管理后台">
     <title>z7Note Admin - 管理后台</title>
     <style>
-        :root { --bg: #f8fafc; --text: #1e293b; --border: #e2e8f0; --accent: #2563eb; --green: #10b981; --red: #ef4444; --gray: #64748b; }
+        :root { --bg: #f8fafc; --text: #1e293b; --border: #e2e8f0; --accent: #2563eb; --green: #10b981; --red: #ef4444; --orange: #f97316; --gray: #64748b; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
         .container { display: flex; gap: 10px; min-height: calc(100vh - 40px); padding: 50px 10px 10px; }
@@ -67,6 +67,18 @@
             <button class="tool-btn" onclick="showSystemConfig()" style="flex:1">文件配置</button>
             <button class="tool-btn" onclick="cleanupExpiredUploads()" style="flex:1">清理上传</button>
         </div>
+        <div style="font-size:13px;font-weight:600;margin:15px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">数据库管理</div>
+        <div class="card" style="margin-bottom:10px">
+            <div style="font-size:11px;color:var(--gray);margin-bottom:8px">
+                <div>总大小: <strong id="db-total-size">加载中...</strong></div>
+                <div>已使用: <strong id="db-used-size">加载中...</strong></div>
+                <div>空闲空间: <strong id="db-free-size">加载中...</strong></div>
+            </div>
+            <div class="form-row">
+                <button class="tool-btn" onclick="loadDatabaseInfo()" style="flex:1">刷新</button>
+                <button class="tool-btn" onclick="vacuumDatabase()" style="flex:1;background:var(--orange);color:white;border:none">清理优化</button>
+            </div>
+        </div>
         <div style="font-size:13px;font-weight:600;margin:15px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)">备份配置</div>
         <form onsubmit="event.preventDefault();saveBackupConfig();">
             <div class="form-item"><label>备份模式</label><select id="bc-backupMode"><option value="incremental">增量</option><option value="full">全量</option></select></div>
@@ -103,7 +115,16 @@
                 </div>
                 <div style="overflow:auto;max-height:calc(100vh - 200px)">
                     <table>
-                        <thead><tr><th onclick="sortUsers('username')">用户 <span id="sort-username">⇅</span></th><th onclick="sortUsers('noteSize')">笔记 <span id="sort-noteSize">⇅</span></th><th onclick="sortUsers('attachmentSize')">附件 <span id="sort-attachmentSize">⇅</span></th><th>操作</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th onclick="sortUsers('username')">用户 <span id="sort-username">⇅</span></th>
+                                <th>数据数量 (<span onclick="sortUsers('noteCount')" title="排序:笔记" style="cursor:pointer">N</span>/<span onclick="sortUsers('contactCount')" title="排序:联系人" style="cursor:pointer">C</span>/<span onclick="sortUsers('eventCount')" title="排序:日程" style="cursor:pointer">E</span>/<span onclick="sortUsers('todoCount')" title="排序:待办" style="cursor:pointer">T</span>)</th>
+                                <th onclick="sortUsers('dbSize')">数据库空间 <span id="sort-dbSize">⇅</span></th>
+                                <th onclick="sortUsers('attachmentSize')">附件占用 <span id="sort-attachmentSize">⇅</span></th>
+                                <th>存储限额 (MB)</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
                         <tbody id="userList"></tbody>
                     </table>
                 </div>
@@ -154,7 +175,7 @@
 
 <script>
     let currentPage = 1, totalPages = 1;
-    let userSortField = 'noteSize', userSortOrder = 'desc';
+    let userSortField = 'noteCount', userSortOrder = 'desc';
     let userSearchTimer, noteSearchTimer;
 
     function switchTab(tab) {
@@ -203,6 +224,56 @@
         const res = await fetch('/api/admin/system/cleanup-uploads', { method: 'POST' });
         const data = await res.json();
         res.ok && data.status === 'ok' ? alert(`已清理 ${data.count} 个过期上传会话`) : alert('清理失败: ' + (data.error || '未知错误'));
+    }
+
+    // 数据库管理
+    async function loadDatabaseInfo() {
+        try {
+            const res = await fetch('/api/admin/database/info');
+            if (!res.ok) {
+                alert('无法获取数据库信息');
+                return;
+            }
+
+            const data = await res.json();
+            document.getElementById('db-total-size').textContent = data.totalSizeMB + ' MB';
+            document.getElementById('db-used-size').textContent = data.usedSizeMB + ' MB';
+            document.getElementById('db-free-size').textContent = data.freeSpaceMB + ' MB';
+
+            // 如果空闲空间超过50MB，提示清理
+            if (parseFloat(data.freeSpaceMB) > 50) {
+                alert(`数据库有 ${data.freeSpaceMB} MB 碎片空间，建议执行清理优化。`);
+            }
+        } catch(e) {
+            console.error(e);
+            alert('获取数据库信息失败');
+        }
+    }
+
+    async function vacuumDatabase() {
+        if (!confirm('确定要执行数据库清理吗？\n\n这将重建数据库文件，需要一定时间。')) return;
+
+        const btn = event.target;
+        try {
+            btn.disabled = true;
+            btn.textContent = '清理中...';
+
+            const res = await fetch('/api/admin/database/vacuum', { method: 'POST' });
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert('数据库清理失败: ' + (data.error || '未知错误'));
+            } else {
+                alert('数据库清理完成！');
+                loadDatabaseInfo();
+            }
+        } catch(e) {
+            console.error(e);
+            alert('数据库清理失败');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '清理优化';
+        }
     }
 
     // 备份配置
@@ -254,13 +325,28 @@
         res.ok ? alert('备份执行成功！') : alert('备份失败: ' + (data.error || '未知错误'));
     }
 
+    // 工具函数：格式化大小
+    function formatSize(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = bytes;
+        let unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        return `${size.toFixed(unitIndex === 0 ? 0 : 2)} ${units[unitIndex]}`;
+    }
+
     // 用户管理
     async function loadUsers() {
         const url = `/api/admin/users/stats?search=${encodeURIComponent(document.getElementById('userSearch').value)}&sort=${userSortField}&order=${userSortOrder}`;
-        ['username', 'noteSize', 'attachmentSize'].forEach(f => {
+        ['username', 'dbSize', 'attachmentSize', 'contactCount', 'eventCount', 'todoCount', 'noteCount'].forEach(f => {
             const el = document.getElementById(`sort-${f}`);
-            el.innerText = f === userSortField ? (userSortOrder === 'desc' ? '↓' : '↑') : '⇅';
-            el.style.color = f === userSortField ? 'var(--accent)' : 'var(--gray)';
+            if (el) {
+                el.innerText = f === userSortField ? (userSortOrder === 'desc' ? '↓' : '↑') : '⇅';
+                el.style.color = f === userSortField ? 'var(--accent)' : 'var(--gray)';
+            }
         });
         try {
             const res = await fetch(url);
@@ -268,26 +354,44 @@
             const users = await res.json();
             document.getElementById('userList').innerHTML = users.map(u => `
                 <tr>
-                    <td><strong>${u.username}</strong><br><small style="color:var(--gray);font-size:9px">${u.email||'无邮箱'}</small></td>
                     <td>
-                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-                            <span class="badge">${u.noteCount}篇</span>
-                            <span class="badge">${(u.noteSize/1024/1024).toFixed(1)}MB</span>
-                            <input type="number" value="${u.noteLimit}" style="width:45px;padding:2px 4px;font-size:10px" onchange="updateQuotaInline('${u.username}',this.value,${u.fileLimit})">
+                        <strong>${u.username}</strong>
+                        <div style="color:var(--gray);font-size:9px">${u.email||'无邮箱'}</div>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:4px">
+                            <span class="badge" title="笔记: ${u.noteCount} 篇" style="${u.noteCount > 0 ? 'font-weight:bold;border:1px solid var(--accent)' : ''}">${u.noteCount || 0} N</span>
+                            <span class="badge" title="联系人: ${u.contactCount} 个" style="${u.contactCount > 0 ? 'font-weight:bold;border:1px solid var(--accent)' : ''}">${u.contactCount || 0} C</span>
+                            <span class="badge" title="日程: ${u.eventCount} 条" style="background:rgba(16, 185, 129, 0.1);color:var(--green);${u.eventCount > 0 ? 'font-weight:bold;border:1px solid var(--green)' : ''}">${u.eventCount || 0} E</span>
+                            <span class="badge" title="待办: ${u.todoCount} 条" style="background:rgba(249, 115, 22, 0.1);color:var(--orange);${u.todoCount > 0 ? 'font-weight:bold;border:1px solid var(--orange)' : ''}">${u.todoCount || 0} T</span>
                         </div>
                     </td>
                     <td>
-                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-                            <span class="badge" style="color:var(--green)">${(u.attachmentSize/1024/1024).toFixed(1)}MB</span>
-                            <input type="number" value="${u.fileLimit}" style="width:45px;padding:2px 4px;font-size:10px" onchange="updateQuotaInline('${u.username}',${u.noteLimit},this.value)">
+                        <div style="font-weight:600">${formatSize(u.dbSize)}</div>
+                        <div style="color:var(--gray);font-size:9px">数据库占用</div>
+                    </td>
+                    <td>
+                        <div style="font-weight:600;color:var(--green)">${formatSize(u.attachmentSize)}</div>
+                        <div style="color:var(--gray);font-size:9px">文件占用</div>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:2px;align-items:center;white-space:nowrap">
+                            <input type="number" value="${u.noteLimit}" title="笔记限额" style="width:38px;padding:1px 2px;font-size:10px" onchange="updateQuotaInline('${u.username}',this.value,${u.fileLimit})">
+                            <span style="color:var(--gray)">|</span>
+                            <input type="number" value="${u.fileLimit}" title="文件限额" style="width:38px;padding:1px 2px;font-size:10px" onchange="updateQuotaInline('${u.username}',${u.noteLimit},this.value)">
                         </div>
                     </td>
                     <td style="text-align:right">
-                        <button class="tool-btn" onclick="resetPass('${u.username}')" style="padding:2px 6px;font-size:9px">改密</button>
-                        <button class="tool-btn" onclick="deleteUser('${u.username}')" style="color:var(--red);border-color:var(--red);padding:2px 6px;font-size:9px">注销</button>
+                        <div style="display:flex;gap:2px;justify-content:flex-end">
+                            <button class="tool-btn" onclick="resetPass('${u.username}')" title="重置密码" style="padding:2px 4px;font-size:9px">改密</button>
+                            <button class="tool-btn" onclick="deleteUser('${u.username}')" title="彻底注销" style="color:var(--red);border-color:var(--red);padding:2px 4px;font-size:9px">注销</button>
+                        </div>
                     </td>
                 </tr>`).join('');
-        } catch(e) { document.getElementById('userList').innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--red);padding:10px">加载失败</td></tr>'; }
+        } catch(e) { 
+            console.error(e);
+            document.getElementById('userList').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--red);padding:10px">加载失败</td></tr>'; 
+        }
     }
 
     function sortUsers(field) {
@@ -423,7 +527,7 @@
     function closeModal() { document.getElementById('modal').style.display = 'none'; }
 
     // 初始化
-    document.addEventListener('DOMContentLoaded', () => { loadBackupConfig(); loadUsers(); loadShares(); loadNotes(); });
+    document.addEventListener('DOMContentLoaded', () => { loadBackupConfig(); loadUsers(); loadShares(); loadNotes(); loadDatabaseInfo(); });
 </script>
 
 </body>

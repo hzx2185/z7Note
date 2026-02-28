@@ -132,6 +132,9 @@
       if (contact.adr.length === 0) delete contact.adr;
       else contact.adr = JSON.stringify(contact.adr);
 
+      // 存储原始vCard内容
+      contact.vcard = content;
+
       return contact;
     }
 

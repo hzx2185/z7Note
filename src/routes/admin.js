@@ -84,31 +84,50 @@ router.get('/api/admin/users/stats', async (req, res) => {
     let users = await getConnection().all('SELECT username, email, noteLimit, fileLimit FROM users');
     
     let stats = await Promise.all(users.map(async (u) => {
-      const noteData = await getConnection().get(
-        'SELECT COUNT(*) as count, SUM(LENGTH(content)) as size FROM notes WHERE username = ? AND deleted = 0', 
-        [u.username]
-      );
-      const attachmentSize = await getUserFileSize(u.username);
-      let attachmentCount = 0;
-      try {
-        const files = await fs.readdir(path.join(config.paths.uploads, u.username));
-        attachmentCount = files.length;
-      } catch(e) {
-        // 用户目录不存在时附件数为0
-      }
-      return { ...u, noteCount: noteData.count || 0, noteSize: noteData.size || 0, attachmentSize, attachmentCount };
+      const username = (u.username || '').trim();
+      const db = getConnection();
+
+      // 并行执行所有统计，包括数量和空间
+      const [n, c, e, t] = await Promise.all([
+        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(content)), 0) as sz FROM notes WHERE LOWER(username) = LOWER(?) AND deleted = 0', [username]),
+        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(fn) + LENGTH(vcard)), 0) as sz FROM contacts WHERE LOWER(username) = LOWER(?)', [username]),
+        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM events WHERE LOWER(username) = LOWER(?)', [username]),
+        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM todos WHERE LOWER(username) = LOWER(?)', [username])
+      ]);
+
+      const attachmentSize = await getUserFileSize(username);
+      
+      return { 
+        ...u, 
+        noteCount: n?.cnt || 0,
+        contactCount: c?.cnt || 0,
+        eventCount: e?.cnt || 0,
+        todoCount: t?.cnt || 0,
+        dbSize: (n?.sz || 0) + (c?.sz || 0) + (e?.sz || 0) + (t?.sz || 0),
+        attachmentSize: attachmentSize || 0
+      };
     }));
 
-    if (search) stats = stats.filter(u => u.username.includes(search) || (u.email && u.email.includes(search)));
+    if (search) {
+      const s = search.toLowerCase();
+      stats = stats.filter(u => 
+        u.username.toLowerCase().includes(s) || 
+        (u.email && u.email.toLowerCase().includes(s))
+      );
+    }
+    
     if (sort) {
       stats.sort((a, b) => {
         let valA = a[sort], valB = b[sort];
-        if (sort === 'username') return order === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
-        return order === 'asc' ? valA - valB : valB - valA;
+        if (typeof valA === 'string') return order === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        return order === 'asc' ? (valA || 0) - (valB || 0) : (valB || 0) - (valA || 0);
       });
     }
     res.json(stats);
-  } catch (e) { res.status(500).json({ error: "Stats failed" }); }
+  } catch (e) { 
+    console.error('[Admin] 获取用户统计失败:', e);
+    res.status(500).json({ error: "Stats failed" }); 
+  }
 });
 
 // 删除用户
@@ -340,4 +359,54 @@ router.delete('/api/admin/trash/empty-all', async (req, res) => {
   }
 });
 
-module.exports = router;
+  // 获取数据库空间信息
+  router.get('/api/admin/database/info', async (req, res) => {
+    try {
+      const dbPath = config.paths.database;
+      const dbStats = await fs.stat(dbPath);
+      const dbSizeBytes = dbStats.size;
+      const dbSizeMB = (dbSizeBytes / (1024 * 1024)).toFixed(2);
+
+      // 获取数据库页面信息
+      const pageResult = await getConnection().get('PRAGMA page_count');
+      const pageSizeResult = await getConnection().get('PRAGMA page_size');
+      const freelistResult = await getConnection().get('PRAGMA freelist_count');
+
+      const totalPages = pageResult.page_count || 0;
+      const pageSize = pageSizeResult.page_size || 4096;
+      const freePages = freelistResult.freelist_count || 0;
+      const freeBytes = freePages * pageSize;
+      const freeMB = (freeBytes / (1024 * 1024)).toFixed(2);
+      const usedMB = (dbSizeMB - freeMB).toFixed(2);
+
+      res.json({
+        totalSizeMB: dbSizeMB,
+        usedSizeMB: usedMB,
+        freeSpaceMB: freeMB,
+        totalPages,
+        freePages,
+        pageSize
+      });
+    } catch (e) {
+      log('ERROR', '获取数据库信息失败', { error: e.message });
+      res.status(500).json({ error: '获取数据库信息失败' });
+    }
+  });
+
+  // 执行数据库VACUUM清理
+  router.post('/api/admin/database/vacuum', async (req, res) => {
+    try {
+      log('INFO', '开始执行数据库VACUUM');
+
+      // 执行VACUUM操作
+      await getConnection().run('VACUUM');
+
+      log('INFO', '数据库VACUUM完成');
+      res.json({ status: 'ok', message: '数据库清理完成' });
+    } catch (e) {
+      log('ERROR', '数据库VACUUM失败', { error: e.message });
+      res.status(500).json({ error: '数据库清理失败: ' + e.message });
+    }
+  });
+
+  module.exports = router;

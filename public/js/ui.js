@@ -2171,6 +2171,15 @@ const UIManager = {
 
         this._isLoadingUserInfo = true;
 
+        // 格式化大小工具
+        const formatSize = (mb) => {
+            const bytes = parseFloat(mb) * 1024 * 1024;
+            if (bytes === 0) return '0B';
+            if (bytes < 1024) return bytes.toFixed(0) + 'B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+            return parseFloat(mb).toFixed(2) + 'MB';
+        };
+
         try {
             const res = await fetch('/api/user-info');
             if (!res.ok) throw new Error('Failed to load user info');
@@ -2207,23 +2216,38 @@ const UIManager = {
                 }
             }
 
-            // 更新笔记配额
-            const noteUsage = document.getElementById('note-usage-text');
+            // 更新数据配额 (包含 笔记/联系人/日历/待办)
+            const noteUsageText = document.getElementById('note-usage-text');
             const noteBar = document.getElementById('note-bar');
-            if (noteUsage && noteBar && data.noteLimit) {
-                const noteSize = parseFloat(data.noteUsage || 0);
-                const notePercent = Math.min((noteSize / data.noteLimit) * 100, 100);
-                noteUsage.textContent = `${Math.round(noteSize)}MB/${Math.round(data.noteLimit)}MB`;
+            if (noteUsageText && noteBar && data.noteLimit) {
+                const noteUsageMB = parseFloat(data.noteUsage || 0);
+                const notePercent = Math.min((noteUsageMB / data.noteLimit) * 100, 100);
+                
+                // 设置显示文本为格式化后的实际占用/限额
+                noteUsageText.textContent = `${formatSize(noteUsageMB)}/${Math.round(data.noteLimit)}MB`;
+                
+                // 设置父级容器显示详细数量提示
+                const noteContainer = noteUsageText.parentElement;
+                if (noteContainer) {
+                    noteContainer.title = `笔记: ${data.noteCount || 0} | 联系人: ${data.contactCount || 0} | 日历: ${data.eventCount || 0} | 待办: ${data.todoCount || 0}`;
+                    // 修改标签文本 (如果有)
+                    const label = noteContainer.previousSibling;
+                    if (label && label.nodeType === 3 && label.textContent.includes('笔记:')) {
+                        label.textContent = label.textContent.replace('笔记:', '数据:');
+                    }
+                }
+                
                 noteBar.style.width = `${notePercent}%`;
             }
 
             // 更新附件配额
-            const fileUsage = document.getElementById('file-usage-text');
+            const fileUsageText = document.getElementById('file-usage-text');
             const fileBar = document.getElementById('file-bar');
-            if (fileUsage && fileBar && data.fileLimit) {
-                const fileSize = parseFloat(data.fileUsage || 0);
-                const filePercent = Math.min((fileSize / data.fileLimit) * 100, 100);
-                fileUsage.textContent = `${Math.round(fileSize)}MB/${Math.round(data.fileLimit)}MB`;
+            if (fileUsageText && fileBar && data.fileLimit) {
+                const fileUsageMB = parseFloat(data.fileUsage || 0);
+                const filePercent = Math.min((fileUsageMB / data.fileLimit) * 100, 100);
+                
+                fileUsageText.textContent = `${formatSize(fileUsageMB)}/${Math.round(data.fileLimit)}MB`;
                 fileBar.style.width = `${filePercent}%`;
             }
 
@@ -2991,7 +3015,7 @@ const UIManager = {
     update2FAStatus(enabled) {
         const statusDiv = document.getElementById('2fa-status');
         const statusText = document.getElementById('2fa-status-text');
-        
+
         if (statusDiv && statusText) {
             statusDiv.style.display = 'block';
             statusText.textContent = enabled ? '已启用 ✅' : '未启用';

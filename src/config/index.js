@@ -124,7 +124,8 @@ const config = {
     uploads: UPLOADS_DIR,
     backups: BACKUP_DIR,
     public: PUBLIC_DIR,
-    logs: LOGS_DIR
+    logs: LOGS_DIR,
+    database: path.join(DATA_DIR, 'z7note.db')
   },
   
   // 验证必需的环境变量

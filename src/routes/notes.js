@@ -12,21 +12,48 @@ const router = express.Router();
 // 获取用户信息
 router.get('/api/user-info', async (req, res) => {
   try {
-    const user = await getConnection().get(
+    const db = getConnection();
+    const username = req.user;
+    const user = await db.get(
       'SELECT username, email, noteLimit, fileLimit, blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS, editorType FROM users WHERE username = ?',
-      [req.user]
+      [username]
     );
     if (!user) return res.status(404).json({ error: "用户不存在" });
 
-    const noteData = await getConnection().get(
-      'SELECT SUM(LENGTH(content)) as size FROM notes WHERE username = ? AND deleted = 0',
-      [req.user]
-    );
-    const noteSizeMB = ((noteData?.size || 0) / (1024 * 1024)).toFixed(2);
-    const fileSizeBytes = await getUserFileSize(req.user);
+    // 并行获取所有数据的数量和空间占用
+    const [n, c, e, t] = await Promise.all([
+      db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(content)), 0) as sz FROM notes WHERE LOWER(username) = LOWER(?) AND deleted = 0', [username]),
+      db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(fn) + LENGTH(vcard)), 0) as sz FROM contacts WHERE LOWER(username) = LOWER(?)', [username]),
+      db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM events WHERE LOWER(username) = LOWER(?)', [username]),
+      db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM todos WHERE LOWER(username) = LOWER(?)', [username])
+    ]);
+
+    // 计算总数据库占用 (MB)
+    const userDbSizeBytes = (n?.sz || 0) + (c?.sz || 0) + (e?.sz || 0) + (t?.sz || 0);
+    const userDbSizeMB = (userDbSizeBytes / (1024 * 1024)).toFixed(2);
+
+    const fileSizeBytes = await getUserFileSize(username);
     const fileSizeMB = (fileSizeBytes / (1024 * 1024)).toFixed(2);
 
-    const isAdmin = config.adminUsers.includes(req.user);
+    const isAdmin = config.adminUsers.includes(username);
+
+    // 获取数据库文件总大小
+    const fs = require('fs').promises;
+    const dbPath = config.paths.database;
+    let totalDbSizeMB = '0.00';
+    let dbFreeSpaceMB = '0.00';
+
+    try {
+      const dbStats = await fs.stat(dbPath);
+      totalDbSizeMB = (dbStats.size / (1024 * 1024)).toFixed(2);
+
+      // 获取数据库空闲空间
+      const freelistResult = await db.get('PRAGMA freelist_count');
+      const freeBytes = (freelistResult.freelist_count || 0) * 4096;
+      dbFreeSpaceMB = (freeBytes / (1024 * 1024)).toFixed(2);
+    } catch (err) {
+      log.error('获取数据库大小失败:', err);
+    }
 
     // 获取附件预览配置
     const attachmentPreviewConfig = {
@@ -39,12 +66,19 @@ router.get('/api/user-info', async (req, res) => {
 
     res.json({
       ...user,
-      noteUsage: noteSizeMB,
+      noteCount: n?.cnt || 0,
+      contactCount: c?.cnt || 0,
+      eventCount: e?.cnt || 0,
+      todoCount: t?.cnt || 0,
+      noteUsage: userDbSizeMB, // 以前只包含笔记，现在包含所有 DB 数据
       fileUsage: fileSizeMB,
+      totalDbUsage: totalDbSizeMB,
+      dbFreeSpace: dbFreeSpaceMB,
       isAdmin,
       attachmentPreviewConfig
     });
   } catch (e) {
+    console.error('[API] Get user-info error:', e);
     res.status(500).json({ error: "系统内部错误" });
   }
 });
