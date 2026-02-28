@@ -1,20 +1,37 @@
 services:
+  # 权限初始化容器：自动修复挂载目录权限，解决新安装报错问题
+  init-chown:
+    image: alpine:latest
+    container_name: z7note-init
+    user: "root"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: chown -R 1001:1001 /app/data /app/logs
+
   z7note-app:
     build:
       context: .
       dockerfile: Dockerfile
     image: z7note:latest
     container_name: z7note
+    depends_on:
+      init-chown:
+        condition: service_completed_successfully
     env_file: .env
     user: "1001:1001"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./public:/app/public
-      - ./src:/app/src
     ports:
       - "3000:3000"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
     environment:
       - NODE_ENV=production
       - TZ=Asia/Shanghai

@@ -105,12 +105,16 @@ async function performBackup(backupConfig) {
           username: backupConfig.webdavUser,
           password: backupConfig.webdavPassword
         });
-        await client.putFileContents(`/${fileName}`, await fs.readFile(filePath));
-        console.log('[备份] WebDAV 上传成功');
+        
+        // 使用流式上传，避免大文件内存溢出
+        const fileStream = nodeFs.createReadStream(filePath);
+        await client.putFileContents(`/${fileName}`, fileStream);
+        console.log('[备份] WebDAV 流式上传成功');
 
         // 清理 WebDAV 上的旧备份
         if (backupConfig.keepCount && backupConfig.keepCount > 0) {
-          await cleanupOldBackups(client, backupConfig.keepCount, true);
+          // 稍微延迟执行清理，确保上传已完全同步
+          setTimeout(() => cleanupOldBackups(client, backupConfig.keepCount, true), 5000);
         }
       } catch (e) {
         console.error('[备份] WebDAV 上传失败:', e.message);
