@@ -99,10 +99,13 @@ const CodeMirrorAdapter = {
             autoCloseBrackets: true,
             autofocus: true,
             viewportMargin: 20,
+            undoDepth: 200,
             gutters: showLineNumbers ? ['CodeMirror-linenumbers', 'CodeMirror-activeline-gutter'] : ['CodeMirror-activeline-gutter'],
             styleActiveLine: true,
-            // 使用 passive 事件监听器以提高性能
-            inputStyle: 'textarea'
+            // 优化移动端光标和性能
+            inputStyle: 'contenteditable',
+            spellcheck: false,
+            autocorrect: false
         });
 
         // 防抖函数
@@ -114,7 +117,7 @@ const CodeMirrorAdapter = {
             };
         };
         
-        // 添加数字高亮
+        // 添加数字高亮 - 优化性能：只处理可见区域
         const highlightNumbers = function() {
             if (!editor) return;
             
@@ -129,53 +132,53 @@ const CodeMirrorAdapter = {
                 });
             }
             
-            // 遍历每一行
-            const lineCount = editor.lineCount();
-            let totalMarked = 0;
+            // 仅遍历可见区域（前后各多加10行作为缓冲区）
+            const scrollInfo = editor.getScrollInfo();
+            const from = editor.lineAtHeight(scrollInfo.top, 'local');
+            const to = editor.lineAtHeight(scrollInfo.top + scrollInfo.clientHeight, 'local');
             
-            for (let i = 0; i < lineCount; i++) {
-                const line = editor.getLine(i);
-                if (!line) continue;
-                
-                // 查找所有数字
-                const regex = /\b\d+(\.\d+)?\b/g;
-                let match;
-                
-                while ((match = regex.exec(line)) !== null) {
-                    // 排除列表项序号（行首的数字加点号）
-                    if (match.index === 0 && /^\d+\./.test(line)) {
-                        continue;
-                    }
+            const lineCount = editor.lineCount();
+            const startLine = Math.max(0, from - 10);
+            const endLine = Math.min(lineCount - 1, to + 10);
+            
+            editor.operation(() => {
+                for (let i = startLine; i <= endLine; i++) {
+                    const line = editor.getLine(i);
+                    if (!line) continue;
                     
-                    // 标记数字
-                    editor.markText(
-                        {line: i, ch: match.index},
-                        {line: i, ch: match.index + match[0].length},
-                        {
-                            className: 'cm-custom-number',
-                            inclusiveLeft: false,
-                            inclusiveRight: false
+                    // 查找所有数字
+                    const regex = /\b\d+(\.\d+)?\b/g;
+                    let match;
+                    
+                    while ((match = regex.exec(line)) !== null) {
+                        // 排除列表项序号（行首的数字加点号）
+                        if (match.index === 0 && /^\d+\./.test(line)) {
+                            continue;
                         }
-                    );
-                    totalMarked++;
+                        
+                        // 标记数字
+                        editor.markText(
+                            {line: i, ch: match.index},
+                            {line: i, ch: match.index + match[0].length},
+                            {
+                                className: 'cm-custom-number',
+                                inclusiveLeft: false,
+                                inclusiveRight: false
+                            }
+                        );
+                    }
                 }
-            }
+            });
         };
         
-        // 初始高亮 - 延迟确保编辑器完全加载
-        setTimeout(highlightNumbers, 500);
+        // 初始高亮
+        setTimeout(highlightNumbers, 300);
         
-        // 监听编辑器视图变化
-        editor.on('viewportChange', debounce(highlightNumbers, 300));
-        
-        // 内容变化时重新高亮
+        // 监听事件
+        editor.on('viewportChange', debounce(highlightNumbers, 100));
         editor.on('change', debounce(highlightNumbers, 300));
-        
-        // 监听编辑器刷新
-        editor.on('refresh', debounce(highlightNumbers, 300));
-        
-        // 监听窗口大小变化
-        window.addEventListener('resize', debounce(highlightNumbers, 300));
+        editor.on('refresh', debounce(highlightNumbers, 100));
+        window.addEventListener('resize', debounce(highlightNumbers, 200));
         
         editor.hasNumberHighlight = true;
 
@@ -184,13 +187,11 @@ const CodeMirrorAdapter = {
         let saveTimeout = null;
         let lastContent = editor.getValue();
         let isComposing = false; // 是否正在进行输入法输入
-        let compositionStartTime = 0; // 记录输入法开始时间
         let isProgrammaticChange = false; // 是否是程序设置值
 
         // 监听输入法开始事件
         editor.on('compositionstart', () => {
             isComposing = true;
-            compositionStartTime = Date.now();
             const uiManager = window.ui || ui;
             if (uiManager) {
                 uiManager._isComposing = true;
@@ -200,36 +201,28 @@ const CodeMirrorAdapter = {
         // 监听输入法结束事件
         editor.on('compositionend', () => {
             const currentContent = editor.getValue();
-            // 如果内容没有真正变化（只是输入过程中的临时状态），不处理
             if (currentContent === lastContent) {
+                isComposing = false;
+                if (window.ui) window.ui._isComposing = false;
                 return;
             }
             lastContent = currentContent;
 
-            // 等待一小段时间确保输入法完全结束
+            // 缩短延迟
             setTimeout(() => {
                 isComposing = false;
                 const uiManager = window.ui || ui;
                 if (uiManager) {
                     uiManager._isComposing = false;
+                    if (uiManager.save) uiManager.save();
+                    if (uiManager.updatePreview) uiManager.updatePreview();
                 }
-                // 输入法结束后，触发保存和预览更新
-                if (uiManager && uiManager.save) {
-                    uiManager.save();
-                }
-                if (uiManager && uiManager.updatePreview) {
-                    uiManager.updatePreview();
-                }
-            }, 50);
+            }, 20);
         });
 
         editor.on('change', () => {
-            // 如果正在使用输入法，不触发任何操作
-            if (isComposing) {
-                return;
-            }
+            if (isComposing) return;
 
-            // 如果是程序设置值，不触发保存
             if (isProgrammaticChange) {
                 isProgrammaticChange = false;
                 lastContent = editor.getValue();
@@ -237,19 +230,14 @@ const CodeMirrorAdapter = {
             }
 
             const currentContent = editor.getValue();
-
-            // 内容真正变化才处理
             if (currentContent === lastContent) return;
             lastContent = currentContent;
 
             const uiManager = window.ui || ui;
-
-            // 显示编辑中状态
             if (uiManager && uiManager.updateStatus) {
                 uiManager.updateStatus('working', '编辑中...');
             }
 
-            // 立即触发预览更新（带防抖）
             if (uiManager && uiManager.updatePreview) {
                 uiManager.updatePreview();
             }
@@ -266,14 +254,14 @@ const CodeMirrorAdapter = {
                             if (uiManager && uiManager.updateStatus) {
                                 uiManager.updateStatus('idle', '就绪');
                             }
-                        }, 1500);
+                        }, 1000);
                     }
                 } catch (e) {
                     if (uiManager && uiManager.updateStatus) {
                         uiManager.updateStatus('error', '保存失败');
                     }
                 }
-            }, 1500); // 延长到1500ms
+            }, 1000); 
         });
 
         // 滚动事件
@@ -293,43 +281,32 @@ const CodeMirrorAdapter = {
         // 存储上次点击的行号，用于Shift+点击多选
         let lastClickedLine = null;
 
-        // 点击两次选择模式（移动端和桌面端通用）
+        // 点击两次选择模式
         let firstClickLine = null;
         let clickCount = 0;
         let clickCountTimer = null;
-        const DOUBLE_CLICK_INTERVAL = 5000; // 两次点击间隔时间5秒
+        const DOUBLE_CLICK_INTERVAL = 3000; 
 
-        // 点击行号选中整行 - 支持两次点击选择多行
+        // 点击行号选中整行
         editor.on('gutterClick', (cm, line, gutter, clickEvent) => {
-            // 只处理行号gutter
             if (gutter !== 'CodeMirror-linenumbers') return;
 
-            // 选中整行
             const lineHandle = cm.getLineHandle(line);
             if (!lineHandle) return;
 
-            // 行号点击
-
             let start, end;
 
-            // 如果按住Shift键且上次有点击的行，则选中多行（桌面端传统方式）
             if (clickEvent.shiftKey && lastClickedLine !== null) {
                 const startLine = Math.min(lastClickedLine, line);
                 const endLine = Math.max(lastClickedLine, line);
-
                 start = { line: startLine, ch: 0 };
                 end = { line: endLine, ch: cm.getLine(endLine).length };
-
                 cm.setSelection(start, end);
                 cm.focus();
-
-                // 记录本次点击的行号
                 lastClickedLine = line;
                 return;
             }
 
-            // 两次点击选择模式（移动端友好，不需要Shift）
-            // 清除之前的计时器
             if (clickCountTimer) {
                 clearTimeout(clickCountTimer);
                 clickCountTimer = null;
@@ -338,16 +315,11 @@ const CodeMirrorAdapter = {
             clickCount++;
 
             if (clickCount === 1) {
-                // 第一次点击
                 firstClickLine = line;
-
-                // 选中该行
                 start = { line: line, ch: 0 };
                 end = { line: line, ch: lineHandle.text.length };
                 cm.setSelection(start, end);
                 cm.focus();
-
-                // 设置超时，如果1秒内没有第二次点击，重置计数
                 clickCountTimer = setTimeout(() => {
                     clickCount = 0;
                     firstClickLine = null;
@@ -355,27 +327,18 @@ const CodeMirrorAdapter = {
                 }, DOUBLE_CLICK_INTERVAL);
 
             } else if (clickCount === 2) {
-                // 第二次点击
                 if (firstClickLine !== null) {
                     const startLine = Math.min(firstClickLine, line);
                     const endLine = Math.max(firstClickLine, line);
-
                     start = { line: startLine, ch: 0 };
                     end = { line: endLine, ch: cm.getLine(endLine).length };
-
                     cm.setSelection(start, end);
                     cm.focus();
-
-                    // 两次点击选择
                 }
-
-                // 重置计数
                 clickCount = 0;
                 firstClickLine = null;
                 clickCountTimer = null;
             }
-
-            // 记录本次点击的行号（用于Shift键）
             lastClickedLine = line;
         });
 
@@ -405,33 +368,7 @@ const CodeMirrorAdapter = {
         editor.on('dragover', (editor, event) => {
             event.preventDefault();
             event.stopPropagation();
-            editor.getWrapperElement().style.backgroundColor = 'rgba(37, 99, 235, 0.1)';
-        });
-
-        editor.on('dragleave', (editor, event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            editor.getWrapperElement().style.backgroundColor = '';
-        });
-
-        editor.on('drop', (editor, event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            editor.getWrapperElement().style.backgroundColor = '';
-
-            const files = event.dataTransfer?.files;
-            if (!files || files.length === 0) return;
-
-            for (const file of files) {
-                uploadFileAndInsertCodeMirror(editor, file, ui);
-            }
-        });
-
-        // 拖拽事件处理
-        editor.on('dragover', (editor, event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            editor.getWrapperElement().style.backgroundColor = 'rgba(37, 99, 235, 0.1)';
+            editor.getWrapperElement().style.backgroundColor = 'rgba(37, 99, 235, 0.05)';
         });
 
         editor.on('dragleave', (editor, event) => {
@@ -492,22 +429,17 @@ const CodeMirrorAdapter = {
             getValue: () => editor.getValue(),
             setValue: (val) => {
                 isProgrammaticChange = true;
-
                 editor.operation(() => {
                     const cursor = editor.getCursor();
                     editor.setValue(val);
-
                     try {
                         const lineCount = editor.lineCount();
                         if (lineCount > 0) {
                             const targetLine = Math.min(cursor.line, lineCount - 1);
                             editor.setCursor({ line: targetLine, ch: cursor.ch });
                         }
-                    } catch (e) {
-                        // 忽略光标恢复错误
-                    }
+                    } catch (e) {}
                 });
-
                 editor.refresh();
             },
             getSelection: () => editor.getSelection(),
@@ -518,8 +450,6 @@ const CodeMirrorAdapter = {
             executeEdits: (source, edits) => {
                 if (edits && edits.length > 0) {
                     const edit = edits[0];
-                    // 使用 replaceSelection 方法，它会自动替换选中的文本
-                    // 如果没有选中文本，则在光标位置插入
                     editor.replaceSelection(edit.text);
                     ui.updatePreview();
                 }
@@ -530,7 +460,7 @@ const CodeMirrorAdapter = {
             setCursor: (pos) => editor.setCursor(pos),
             toggleLineNumbers: (show) => {
                 editor.setOption('lineNumbers', show);
-                editor.setOption('gutters', show ? ['CodeMirror-linenumbers'] : []);
+                editor.setOption('gutters', show ? ['CodeMirror-linenumbers', 'CodeMirror-activeline-gutter'] : ['CodeMirror-activeline-gutter']);
                 editor.refresh();
             },
             toggleLineWrapping: (wrap) => {
@@ -569,14 +499,12 @@ const CodeMirrorAdapter = {
                 height: editor.getScrollInfo().clientHeight,
                 width: editor.getScrollInfo().clientWidth
             }),
-            // 标记功能所需的方法
             getWrapperElement: () => editor.getWrapperElement(),
             addLineClass: (line, where, cls) => editor.addLineClass(line, where, cls),
             removeLineClass: (line, where, cls) => editor.removeLineClass(line, where, cls),
             markText: (from, to, options) => editor.markText(from, to, options),
             getAllMarks: () => editor.getAllMarks(),
             scrollIntoView: (pos, margin) => editor.scrollIntoView(pos, margin),
-            // 暴露原生 CodeMirror 实例 (用于高级操作)
             _editor: editor
         };
     }
@@ -590,36 +518,25 @@ const EditorAdapterManager = {
     currentType: null,
     currentEditor: null,
 
-    // 获取保存的编辑器类型
     getEditorType() {
         let type = localStorage.getItem('editorType') || 'codemirror';
-
-        // 如果保存的类型不存在于可用适配器中,回退到 codemirror
         if (!this.adapters[type]) {
-
             type = 'codemirror';
             localStorage.setItem('editorType', 'codemirror');
         }
-
         return type;
     },
 
-    // 设置编辑器类型
     setEditorType(type) {
-        if (!this.adapters[type]) {
-            return false;
-        }
+        if (!this.adapters[type]) return false;
         localStorage.setItem('editorType', type);
         return true;
     },
 
-    // 创建编辑器
     async createEditor(container, content, options) {
         const type = this.getEditorType();
         this.currentType = type;
 
-        // 始终创建新编辑器实例，而不是复用
-        // 避免因复用导致的内部状态损坏问题
         if (this.currentEditor && this.currentEditor.destroy) {
             try {
                 this.currentEditor.destroy();
@@ -629,24 +546,19 @@ const EditorAdapterManager = {
             this.currentEditor = null;
         }
 
-        // 创建新编辑器
         const adapter = this.adapters[type];
         this.currentEditor = await adapter.create(container, content, options);
         this.currentEditor.adapterName = type;
-
         return this.currentEditor;
     },
 
-    // 获取当前编辑器
     getCurrentEditor() {
         return this.currentEditor;
     },
 
-    // 获取当前编辑器类型
     getCurrentType() {
         return this.currentType;
     }
 };
 
-// 导出
 window.EditorAdapterManager = EditorAdapterManager;

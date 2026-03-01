@@ -1,10 +1,11 @@
 const { open } = require('sqlite');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs').promises;
+const path = require('path');
 const config = require('../config');
 
 const dbConfig = {
-  filename: config.paths.data + '/z7note.db',
+  filename: path.join(config.paths.data, 'z7note.db'),
   driver: sqlite3.Database,
   mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE | sqlite3.OPEN_FULLMUTEX
 };
@@ -18,6 +19,11 @@ async function connect() {
   await fs.mkdir(config.paths.backups, { recursive: true });
   
   db = await open(dbConfig);
+  
+  // 性能优化设置
+  await db.exec('PRAGMA journal_mode = WAL');
+  await db.exec('PRAGMA synchronous = NORMAL');
+  await db.exec('PRAGMA foreign_keys = ON');
   
   // 创建表结构
   await createTables();
@@ -90,23 +96,6 @@ async function createTables() {
     updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
   )`);
 
-  // 初始化默认备份配置（每天凌晨3点）
-  const existingBackupConfig = await db.get('SELECT id FROM backup_config WHERE id = 1');
-  if (!existingBackupConfig) {
-    await db.run(
-      `INSERT INTO backup_config (id, schedule, includeAttachments, backupMode, sendEmail, emailAddress, useWebDAV, webdavUrl, webdavUser, webdavPassword)
-      VALUES (1, '0 3 * * *', 1, 'incremental', 0, NULL, 0, NULL, NULL, NULL)`
-    );
-  } else {
-    // 检查并添加缺失的列
-    try {
-      await db.run("SELECT backupMode FROM backup_config LIMIT 1");
-    } catch (e) {
-      // 列不存在，添加它
-      await db.run("ALTER TABLE backup_config ADD COLUMN backupMode TEXT DEFAULT 'incremental'");
-    }
-  }
-
   // 分享表
   await db.exec(`CREATE TABLE IF NOT EXISTS shares (
     token TEXT PRIMARY KEY,
@@ -139,11 +128,18 @@ async function createTables() {
     expiresAt INTEGER DEFAULT ((strftime('%s','now')*1000) + 3600000)
   )`);
 
+  // 创建迁移记录表
+  await db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    version INTEGER PRIMARY KEY,
+    description TEXT,
+    appliedAt INTEGER DEFAULT (strftime('%s', 'now'))
+  )`);
+
   // 创建索引
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_username ON notes(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updatedAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_username_deleted ON notes(username, deleted)`);
-  await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_username_updated ON notes(username, updatedAt)`); // 优化同步查询
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_username_updated ON notes(username, updatedAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_public ON shares(public)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_expires_at ON shares(expiresAt)`);
@@ -156,6 +152,15 @@ async function createTables() {
 
   // 运行迁移脚本
   await runMigrations();
+
+  // 初始化默认备份配置（如果表为空）
+  const existingBackupConfig = await db.get('SELECT rowid FROM backup_config LIMIT 1');
+  if (!existingBackupConfig) {
+    await db.run(
+      `INSERT INTO backup_config (id, schedule, includeAttachments, backupMode, sendEmail, emailAddress, useWebDAV, webdavUrl, webdavUser, webdavPassword)
+      VALUES (1, '0 3 * * *', 1, 'incremental', 0, NULL, 0, NULL, NULL, NULL)`
+    );
+  }
 }
 
 async function migrateSchema() {
@@ -179,40 +184,41 @@ async function migrateSchema() {
   if (!columns.includes('editorType')) {
     await db.exec(`ALTER TABLE users ADD COLUMN editorType TEXT DEFAULT 'codemirror'`);
   }
+
+  // 检查 backup_config 的新列
+  const backupTableInfo = await db.all("PRAGMA table_info(backup_config)");
+  const backupColumns = backupTableInfo.map(c => c.name);
+  if (!backupColumns.includes('backupMode')) {
+    await db.exec("ALTER TABLE backup_config ADD COLUMN backupMode TEXT DEFAULT 'incremental'");
+  }
 }
 
 async function runMigrations() {
-  const migrationsPath = require('path').join(__dirname, '../migrations');
-  const fs = require('fs');
+  const migrationsPath = path.join(__dirname, '../migrations');
+  
+  try {
+    const migrationFiles = (await fs.readdir(migrationsPath)).filter(f => f.endsWith('.js'));
 
-  // 创建迁移记录表
-  await db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-    version INTEGER PRIMARY KEY,
-    description TEXT,
-    appliedAt INTEGER DEFAULT (strftime('%s', 'now'))
-  )`);
+    for (const file of migrationFiles) {
+      const migrationPath = path.join(migrationsPath, file);
+      const migration = require(migrationPath);
 
-  // 读取迁移文件
-  const migrationFiles = fs.readdirSync(migrationsPath).filter(f => f.endsWith('.js'));
+      if (!migration.version || !migration.migrate) {
+        continue;
+      }
 
-  for (const file of migrationFiles) {
-    const migrationPath = require('path').join(migrationsPath, file);
-    const migration = require(migrationPath);
+      const existing = await db.get('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
 
-    // 跳过旧格式的迁移文件（没有version和migrate属性的）
-    if (!migration.version || !migration.migrate) {
-      console.log(`[Migration] Skipping old format migration: ${file}`);
-      continue;
+      if (!existing) {
+        console.log(`[Migration] Running migration ${migration.version}: ${migration.description}`);
+        await migration.migrate(db);
+        await db.run('INSERT INTO schema_migrations (version, description) VALUES (?, ?)', [migration.version, migration.description]);
+        console.log(`[Migration] Migration ${migration.version} completed`);
+      }
     }
-
-    // 检查是否已运行
-    const existing = await db.get('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
-
-    if (!existing) {
-      console.log(`[Migration] Running migration ${migration.version}: ${migration.description}`);
-      await migration.migrate(db);
-      await db.run('INSERT INTO schema_migrations (version, description) VALUES (?, ?)', [migration.version, migration.description]);
-      console.log(`[Migration] Migration ${migration.version} completed`);
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      console.error('[Migration] Failed to run migrations:', e);
     }
   }
 }

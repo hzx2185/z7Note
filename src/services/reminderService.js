@@ -8,6 +8,8 @@ const { sendMail } = require('./mailer');
 const { broadcast } = require('../routes/ws');
 const log = require('../utils/logger');
 
+let isChecking = false;
+
 /**
  * 获取用户提醒设置
  */
@@ -121,7 +123,6 @@ async function updateUserReminderSettings(username, settings) {
  */
 function calculateReminderTime(startTime, settings) {
   const eventDate = new Date(startTime * 1000);
-  // 默认提前1天（如果没有设置）
   const advanceDays = settings.reminder_advance_days !== undefined ? settings.reminder_advance_days : 1;
   const advanceHours = settings.reminder_advance_hours !== undefined ? settings.reminder_advance_hours : 0;
   const advanceMinutes = settings.reminder_advance_minutes !== undefined ? settings.reminder_advance_minutes : 0;
@@ -143,16 +144,13 @@ function isQuietTime(settings) {
   const quietStart = settings.quiet_start_time || '22:00';
   const quietEnd = settings.quiet_end_time || '08:00';
 
-  // 如果开始和结束时间相同，说明没有启用免打扰
   if (quietStart === quietEnd) {
     return false;
   }
 
   if (quietStart < quietEnd) {
-    // 免打扰时间段在一天内，如 09:00-17:00
     return currentTime >= quietStart && currentTime < quietEnd;
   } else {
-    // 免打扰时间段跨天，如 22:00-08:00
     return currentTime >= quietStart || currentTime < quietEnd;
   }
 }
@@ -162,7 +160,6 @@ function isQuietTime(settings) {
  */
 async function sendEmailReminder(username, type, item, settings) {
   try {
-    // 获取用户邮箱
     const db = getConnection();
     const user = await db.get(
       'SELECT email FROM users WHERE username = ?',
@@ -174,7 +171,7 @@ async function sendEmailReminder(username, type, item, settings) {
     }
 
     const isEvent = type === 'event';
-    const title = isEvent ? item.title : item.title;
+    const title = item.title;
     const startTime = isEvent ? item.startTime : item.dueDate;
     const timeStr = new Date(startTime * 1000).toLocaleString('zh-CN', {
       year: 'numeric',
@@ -245,7 +242,6 @@ async function sendEmailReminder(username, type, item, settings) {
 async function sendBrowserReminder(username, type, item, settings) {
   try {
     const isEvent = type === 'event';
-    const title = isEvent ? item.title : item.title;
     const startTime = isEvent ? item.startTime : item.dueDate;
     const timeStr = new Date(startTime * 1000).toLocaleString('zh-CN', {
       month: '2-digit',
@@ -266,14 +262,12 @@ async function sendBrowserReminder(username, type, item, settings) {
       }
     };
 
-    // 发送到特定用户的WebSocket连接
     broadcast('reminder', notification, { username });
-
     log('INFO', '浏览器提醒发送成功', { username, type, itemId: item.id });
     return true;
   } catch (e) {
     log('ERROR', '浏览器提醒发送失败', { username, type, itemId: item.id, error: e.message });
-    throw e;
+    return false;
   }
 }
 
@@ -282,13 +276,11 @@ async function sendBrowserReminder(username, type, item, settings) {
  */
 async function sendCaldavReminder(username, type, item, settings) {
   try {
-    // CalDAV提醒需要在ICS文件中包含VALARM组件
-    // 这个功能在导入导出时处理，这里只是标记
     log('INFO', 'CalDAV提醒标记', { username, type, itemId: item.id });
     return true;
   } catch (e) {
     log('ERROR', 'CalDAV提醒标记失败', { username, type, itemId: item.id, error: e.message });
-    throw e;
+    return false;
   }
 }
 
@@ -299,7 +291,6 @@ async function recordReminderHistory(username, type, targetId, method, status, e
   try {
     const db = getConnection();
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-
     await db.run(
       `INSERT INTO reminder_history (id, username, type, target_id, reminder_time, method, status, error_message, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -330,34 +321,25 @@ async function sendReminder(username, type, item, settings) {
   for (const method of methods) {
     try {
       let success = false;
+      const trimmedMethod = method.trim();
 
-      switch (method.trim()) {
-        case 'email':
-          if (settings.email_reminder_enabled) {
-            success = await sendEmailReminder(username, type, item, settings);
-          }
-          break;
-        case 'browser':
-          if (settings.browser_reminder_enabled) {
-            success = await sendBrowserReminder(username, type, item, settings);
-          }
-          break;
-        case 'caldav':
-          if (settings.caldav_reminder_enabled) {
-            success = await sendCaldavReminder(username, type, item, settings);
-          }
-          break;
+      if (trimmedMethod === 'email' && settings.email_reminder_enabled) {
+        success = await sendEmailReminder(username, type, item, settings);
+      } else if (trimmedMethod === 'browser' && settings.browser_reminder_enabled) {
+        success = await sendBrowserReminder(username, type, item, settings);
+      } else if (trimmedMethod === 'caldav' && settings.caldav_reminder_enabled) {
+        success = await sendCaldavReminder(username, type, item, settings);
+      } else {
+        continue;
       }
 
       if (success) {
-        await recordReminderHistory(username, type, item.id, method, 'sent');
-        results.push({ method, status: 'success' });
-      } else {
-        results.push({ method, status: 'skipped' });
+        await recordReminderHistory(username, type, item.id, trimmedMethod, 'sent');
+        results.push({ method: trimmedMethod, status: 'success' });
       }
     } catch (e) {
-      await recordReminderHistory(username, type, item.id, method, 'failed', e.message);
-      results.push({ method, status: 'failed', error: e.message });
+      await recordReminderHistory(username, type, item.id, method.trim(), 'failed', e.message);
+      results.push({ method: method.trim(), status: 'failed', error: e.message });
     }
   }
 
@@ -368,83 +350,76 @@ async function sendReminder(username, type, item, settings) {
  * 检查并发送待处理的提醒
  */
 async function checkAndSendPendingReminders() {
+  if (isChecking) return;
+  isChecking = true;
+
   try {
     const db = getConnection();
+    if (!db) return;
+    
     const now = Math.floor(Date.now() / 1000);
 
-    // 获取所有启用了提醒的用户
-    const users = await db.all(
-      'SELECT DISTINCT username FROM reminder_settings WHERE event_reminder_enabled = 1 OR todo_reminder_enabled = 1'
+    // 获取所有启用了提醒的用户设置
+    const usersSettings = await db.all(
+      'SELECT * FROM reminder_settings WHERE event_reminder_enabled = 1 OR todo_reminder_enabled = 1'
     );
 
-    for (const user of users) {
-      const settings = await getUserReminderSettings(user.username);
-
-      if (!settings) continue;
+    for (const settings of usersSettings) {
+      const username = settings.username;
 
       // 检查免打扰时间
-      if (isQuietTime(settings)) {
-        continue;
-      }
+      if (isQuietTime(settings)) continue;
 
       // 检查事件提醒
       if (settings.event_reminder_enabled) {
-        // 计算应该发送提醒的时间范围：现在到未来1小时内的事件
-        // 需要在事件开始前（advanceDays + advanceHours + advanceMinutes）发送提醒
-        const checkWindowEnd = now + 3600; // 检查未来1小时内的事件
-
         const events = await db.all(
           `SELECT * FROM events
            WHERE username = ?
            AND startTime > ?
-           AND startTime <= ?
            AND (reminderEmail = 1 OR reminderBrowser = 1 OR reminderCaldav = 1)
            AND id NOT IN (
              SELECT target_id FROM reminder_history
              WHERE username = ? AND type = 'event' AND status = 'sent'
            )`,
-          [user.username, now, checkWindowEnd, user.username]
+          [username, now, username]
         );
 
         for (const event of events) {
-          // 检查是否到达提醒时间
           const reminderTime = calculateReminderTime(event.startTime, settings);
-          if (reminderTime <= now) {
-            await sendReminder(user.username, 'event', event, settings);
+          // 只有在提醒时间点到事件开始前的窗口内才发送
+          if (reminderTime <= now && event.startTime > now) {
+            await sendReminder(username, 'event', event, settings);
           }
         }
       }
 
       // 检查待办提醒
       if (settings.todo_reminder_enabled) {
-        const checkWindowEnd = now + 3600;
-
         const todos = await db.all(
           `SELECT * FROM todos
            WHERE username = ?
            AND dueDate > ?
-           AND dueDate <= ?
            AND completed = 0
            AND (reminderEmail = 1 OR reminderBrowser = 1)
            AND id NOT IN (
              SELECT target_id FROM reminder_history
              WHERE username = ? AND type = 'todo' AND status = 'sent'
            )`,
-          [user.username, now, checkWindowEnd, user.username]
+          [username, now, username]
         );
 
         for (const todo of todos) {
           const reminderTime = calculateReminderTime(todo.dueDate, settings);
-          if (reminderTime <= now) {
-            await sendReminder(user.username, 'todo', todo, settings);
+          if (reminderTime <= now && todo.dueDate > now) {
+            await sendReminder(username, 'todo', todo, settings);
           }
         }
       }
     }
-
-    log('INFO', '提醒检查完成');
   } catch (e) {
     log('ERROR', '检查并发送提醒失败', { error: e.message });
+  } finally {
+    isChecking = false;
   }
 }
 
