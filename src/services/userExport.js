@@ -1,19 +1,18 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { createClient } = require('webdav');
 const { getConnection } = require('../db/connection');
 const config = require('../config');
 const { sendMail } = require('./mailer');
 const log = require('../utils/logger');
 const { exportToICS } = require('../utils/icsExport');
 const VCardGenerator = require('../utils/vCardGenerator');
+const WebDAVHelper = require('../utils/webdavHelper');
 
 // 用户定时备份任务管理
 const userBackupTasks = new Map();
 
 /**
  * 导出用户文本数据（JSON/ICS/VCF）
- * 附件数据不再一次性读入内存，而是单独处理
  */
 async function exportUserData(username, backupConfig) {
   const db = getConnection();
@@ -97,39 +96,26 @@ async function performUserBackup(username, backupConfig) {
   console.log(`[用户备份] ${username} 开始备份流程...`);
 
   try {
-    // 1. 获取文本数据 (JSON/ICS/VCF) - 这些由于数据量小，可以暂存内存
-    const { textFiles, notesCount } = await exportUserData(username, backupConfig);
+    // 1. 获取文本数据 (JSON/ICS/VCF)
+    const { textFiles } = await exportUserData(username, backupConfig);
 
     // 2. 连接 WebDAV
-    const client = createClient(backupConfig.webdavUrl, {
-      username: backupConfig.webdavUsername,
-      password: backupConfig.webdavPassword
-    });
+    const client = WebDAVHelper.getClient(backupConfig.webdavUrl, backupConfig.webdavUsername, backupConfig.webdavPassword);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const rootDir = '/z7note-backups';
-    const userDir = `${rootDir}/${username}`;
-    const folderPath = `${userDir}/${timestamp}/`;
+    const folderPath = `/z7note-backups/${username}/${timestamp}/`;
 
-    // 逐级创建目录（如果不存在）
-    const ensureDir = async (p) => {
-      try { await client.createDirectory(p); } catch (e) {
-        if (!e.message.includes('405') && !e.message.includes('409')) throw e;
-      }
-    };
+    // 确保目录存在
+    await WebDAVHelper.ensureDirectory(client, folderPath);
 
-    await ensureDir(rootDir);
-    await ensureDir(userDir);
-    await ensureDir(folderPath);
-
-    // 3. 上传文本文件 (Buffer模式，因为体积通常只有几KB到几MB)
+    // 3. 上传文本文件
     let totalFiles = 0;
     for (const file of textFiles) {
-      await client.putFileContents(folderPath + file.filename, file.buffer);
+      await WebDAVHelper.uploadFile(client, folderPath + file.filename, file.buffer);
       totalFiles++;
     }
 
-    // 4. 上传附件 (流式模式 - 关键优化点：不占用内存)
+    // 4. 上传附件
     let attachmentCount = 0;
     if (backupConfig.includeAttachments) {
       try {
@@ -139,19 +125,17 @@ async function performUserBackup(username, backupConfig) {
           const filePath = path.join(userUploadDir, filename);
           const stats = await fs.stat(filePath);
           if (stats.isFile()) {
-            // 逐个流式上传，内存极其稳定
             const fileStream = nodeFs.createReadStream(filePath);
-            await client.putFileContents(folderPath + filename, fileStream);
+            await WebDAVHelper.uploadFile(client, folderPath + filename, fileStream);
             attachmentCount++;
             totalFiles++;
-            // 稍微让出 CPU，避免连续高压
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise(r => setTimeout(r, 50));
           }
         }
-      } catch (e) { /* 无附件或目录不存在 */ }
+      } catch (e) { /* 无附件 */ }
     }
 
-    // 5. 发送邮件通知
+    // 5. 邮件通知
     if (backupConfig.sendEmail && backupConfig.emailAddress) {
       try {
         const fileSummary = textFiles.map(f => `  - ${f.filename}`).join('\n') + (attachmentCount > 0 ? `\n  - ${attachmentCount} 个附件文件` : '');
@@ -173,7 +157,7 @@ async function performUserBackup(username, backupConfig) {
     return { success: true, path: folderPath, fileCount: totalFiles };
   } catch (e) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.error(`[用户备份] ${username} 任务彻底失败:`, e.message);
+    console.error(`[用户备份] ${username} 备份失败:`, e.message);
     log('ERROR', '用户备份失败', { username, error: e.message, duration: `${duration}s` });
     throw e;
   }
@@ -187,7 +171,6 @@ async function getUserBackupConfig(username) {
   const config = await db.get('SELECT * FROM user_backup_config WHERE username = ?', [username]);
 
   if (!config) {
-    // 返回默认配置
     return {
       username,
       enabled: 0,
@@ -284,45 +267,26 @@ function setupUserBackupCron(username, backupConfig) {
       console.error(`[用户备份] 停止旧任务失败 ${username}:`, e);
     }
     userBackupTasks.delete(username);
-    console.log(`[用户备份] ${username} 旧任务已停止`);
   }
 
   // 如果未启用，不设置任务
   if (!backupConfig.enabled || !backupConfig.schedule || backupConfig.schedule === 'none') {
-    console.log(`[用户备份] ${username} 定时任务未设置或已关闭`);
-    log('INFO', '用户备份任务未设置', { username, enabled: backupConfig.enabled });
-    return;
-  }
-
-  // 验证 cron 表达式格式
-  try {
-    if (!cron.validate(backupConfig.schedule)) {
-      console.error(`[用户备份] ${username} 无效的 cron 表达式: ${backupConfig.schedule}`);
-      log('ERROR', '用户备份 cron 表达式无效', { username, schedule: backupConfig.schedule });
-      return;
-    }
-  } catch (e) {
-    console.error(`[用户备份] ${username} 验证 cron 表达式失败:`, e);
     return;
   }
 
   // 创建新任务
   try {
     const task = cron.schedule(backupConfig.schedule, async () => {
-      console.log(`[用户备份] ${username} 定时任务触发`);
       try {
         await performUserBackup(username, backupConfig);
       } catch (e) {
-        console.error(`[用户备份] ${username} 定时任务执行失败:`, e);
         log('ERROR', '用户备份任务执行失败', { username, error: e.message });
       }
     }, { scheduled: true, timezone: 'Asia/Shanghai' });
 
     userBackupTasks.set(username, task);
-    console.log(`[用户备份] ${username} 定时任务已设置: ${backupConfig.schedule}`);
     log('INFO', '用户备份任务已设置', { username, schedule: backupConfig.schedule });
   } catch (e) {
-    console.error(`[用户备份] ${username} 创建定时任务失败:`, e);
     log('ERROR', '用户备份任务创建失败', { username, error: e.message });
   }
 }

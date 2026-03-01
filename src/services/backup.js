@@ -1,6 +1,5 @@
 const archiver = require('archiver');
 const cron = require('node-cron');
-const { createClient } = require('webdav');
 const path = require('path');
 const fs = require('fs').promises;
 const nodeFs = require('fs');
@@ -8,6 +7,7 @@ const { sendMail } = require('./mailer');
 const { getConnection } = require('../db/connection');
 const config = require('../config');
 const log = require('../utils/logger');
+const WebDAVHelper = require('../utils/webdavHelper');
 
 let scheduledTask = null;
 
@@ -101,20 +101,19 @@ async function performBackup(backupConfig) {
     // 上传到 WebDAV
     if (backupConfig.useWebDAV && backupConfig.webdavUrl) {
       try {
-        const client = createClient(backupConfig.webdavUrl, {
-          username: backupConfig.webdavUser,
-          password: backupConfig.webdavPassword
-        });
+        const client = WebDAVHelper.getClient(backupConfig.webdavUrl, backupConfig.webdavUser, backupConfig.webdavPassword);
         
         // 使用流式上传，避免大文件内存溢出
         const fileStream = nodeFs.createReadStream(filePath);
-        await client.putFileContents(`/${fileName}`, fileStream);
-        console.log('[备份] WebDAV 流式上传成功');
+        await WebDAVHelper.uploadFile(client, `/${fileName}`, fileStream);
+        console.log('[备份] WebDAV 上传成功');
 
         // 清理 WebDAV 上的旧备份
         if (backupConfig.keepCount && backupConfig.keepCount > 0) {
-          // 稍微延迟执行清理，确保上传已完全同步
-          setTimeout(() => cleanupOldBackups(client, backupConfig.keepCount, true), 5000);
+          setTimeout(() => {
+            WebDAVHelper.cleanupOldFiles(client, '/', 'z7note-', backupConfig.keepCount)
+              .catch(err => console.error('[备份清理] WebDAV 清理失败:', err.message));
+          }, 5000);
         }
       } catch (e) {
         console.error('[备份] WebDAV 上传失败:', e.message);
@@ -123,7 +122,7 @@ async function performBackup(backupConfig) {
 
     // 清理本地旧备份
     if (backupConfig.keepCount && backupConfig.keepCount > 0) {
-      await cleanupOldBackups(null, backupConfig.keepCount, false);
+      await cleanupOldLocalBackups(backupConfig.keepCount);
     }
 
     log('INFO', '定时备份成功', { fileName, size });
@@ -134,34 +133,17 @@ async function performBackup(backupConfig) {
 }
 
 /**
- * 清理旧备份
- * @param {Object} webdavClient - WebDAV 客户端，如果为 null 则清理本地备份
- * @param {number} keepCount - 保留的备份数量
- * @param {boolean} isWebDAV - 是否清理 WebDAV
+ * 清理本地旧备份
  */
-async function cleanupOldBackups(webdavClient, keepCount, isWebDAV) {
+async function cleanupOldLocalBackups(keepCount) {
   try {
-    let files = [];
-
-    if (isWebDAV && webdavClient) {
-      // 获取 WebDAV 文件列表
-      const items = await webdavClient.getDirectoryContents('/');
-      files = items
-        .filter(item => item.type === 'file' && (item.basename.startsWith('z7note-inc-') || item.basename.startsWith('z7note-backup-')))
-        .map(item => ({
-          name: item.basename,
-          time: item.lastmod || new Date(item.timestamp)
-        }));
-    } else {
-      // 获取本地备份文件列表
-      const localFiles = await fs.readdir(config.paths.backups);
-      files = await Promise.all(localFiles
-        .filter(f => f.startsWith('z7note-inc-') || f.startsWith('z7note-backup-'))
-        .map(async f => ({
-          name: f,
-          time: (await fs.stat(path.join(config.paths.backups, f))).mtime
-        })));
-    }
+    const localFiles = await fs.readdir(config.paths.backups);
+    const files = await Promise.all(localFiles
+      .filter(f => f.startsWith('z7note-inc-') || f.startsWith('z7note-backup-'))
+      .map(async f => ({
+        name: f,
+        time: (await fs.stat(path.join(config.paths.backups, f))).mtime
+      })));
 
     // 按时间倒序排序
     files.sort((a, b) => b.time - a.time);
@@ -169,25 +151,17 @@ async function cleanupOldBackups(webdavClient, keepCount, isWebDAV) {
     // 删除超出保留数量的备份
     if (files.length > keepCount) {
       const filesToDelete = files.slice(keepCount);
-
       for (const file of filesToDelete) {
         try {
-          if (isWebDAV && webdavClient) {
-            await webdavClient.deleteFile(`/${file.name}`);
-            console.log(`[备份清理] 删除 WebDAV 备份: ${file.name}`);
-          } else {
-            await fs.unlink(path.join(config.paths.backups, file.name));
-            console.log(`[备份清理] 删除本地备份: ${file.name}`);
-          }
+          await fs.unlink(path.join(config.paths.backups, file.name));
+          console.log(`[备份清理] 删除本地备份: ${file.name}`);
         } catch (e) {
           console.error(`[备份清理] 删除失败 ${file.name}:`, e.message);
         }
       }
-
-      log('INFO', '清理旧备份', { count: filesToDelete.length, kept: keepCount });
     }
   } catch (e) {
-    console.error('[备份清理] 失败:', e.message);
+    console.error('[备份清理] 本地清理失败:', e.message);
   }
 }
 
@@ -224,7 +198,7 @@ async function updateBackupConfig(configData) {
     webdavUrl=excluded.webdavUrl, webdavUser=excluded.webdavUser, webdavPassword=excluded.webdavPassword`, 
     [configData.schedule, configData.includeAttachments?1:0, configData.backupMode, 
      configData.sendEmail?1:0, configData.emailAddress, configData.useWebDAV?1:0, 
-     configData.webdavUrl, configData.webdavUser, configData.webdavPassword, '']);
+     configData.webdavUrl, configData.webdavUser, configData.webdavPassword]);
   
   const newConfig = await getBackupConfig();
   setupCron(newConfig);
@@ -246,6 +220,5 @@ module.exports = {
   setupCron,
   getBackupConfig,
   updateBackupConfig,
-  getBackupList,
-  cleanupOldBackups
+  getBackupList
 };
