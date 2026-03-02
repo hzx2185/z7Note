@@ -12,13 +12,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <link rel="stylesheet" href="/css/app.css">
+    <link rel="stylesheet" href="/css/app.css?v=20250302-v4">
 </head>
 <body class="auth-layout">
     <div id="toast"></div>
 
     <!-- 自定义模态框 -->
-    <div id="custom-modal-overlay" style="display:none;">
+    <div id="custom-modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>提示</h3>
@@ -69,58 +69,29 @@
         let isLoginMode = true;
         let tempToken = null; // 用于存储2FA临时令牌
 
-        // 主题切换功能
+        // 主题切换功能 - 简化并使用 app.css 中的定义
         function initTheme() {
             const savedTheme = localStorage.getItem('theme');
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-            if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-                setTheme('dark');
-            } else {
-                setTheme('light');
-            }
+            const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+            setTheme(theme);
         }
 
         function setTheme(theme) {
-            const root = document.documentElement;
-
             if (theme === 'dark') {
-                root.style.setProperty('--bg', '#0d1117');
-                root.style.setProperty('--side', '#161b22');
-                root.style.setProperty('--text', '#c9d1d9');
-                root.style.setProperty('--border', '#30363d');
-                root.style.setProperty('--accent', '#58a6ff');
-                root.style.setProperty('--green', '#2ea043');
-                root.style.setProperty('--red', '#f85149');
-                root.style.setProperty('--gray', '#8b949e');
-                document.body.classList.add('dark-mode');
-                localStorage.setItem('theme', 'dark');
-
+                document.documentElement.classList.add('dark-mode');
                 const themeBtn = document.getElementById('theme-toggle-btn');
                 if (themeBtn) themeBtn.textContent = '☀️';
-
-                document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0d1117');
             } else {
-                root.style.setProperty('--bg', '#ffffff');
-                root.style.setProperty('--side', '#f6f8fa');
-                root.style.setProperty('--text', '#24292f');
-                root.style.setProperty('--border', '#d0d7de');
-                root.style.setProperty('--accent', '#0969da');
-                root.style.setProperty('--green', '#2da44e');
-                root.style.setProperty('--red', '#cf222e');
-                root.style.setProperty('--gray', '#8b949e');
-                document.body.classList.remove('dark-mode');
-                localStorage.setItem('theme', 'light');
-
+                document.documentElement.classList.remove('dark-mode');
                 const themeBtn = document.getElementById('theme-toggle-btn');
                 if (themeBtn) themeBtn.textContent = '🌙';
-
-                document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#2563eb');
             }
+            localStorage.setItem('theme', theme);
         }
 
         function toggleTheme() {
-            const isDark = document.body.classList.contains('dark-mode');
+            const isDark = document.documentElement.classList.contains('dark-mode');
             setTheme(isDark ? 'light' : 'dark');
         }
 

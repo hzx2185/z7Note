@@ -98,6 +98,76 @@ html.dark-mode .cm-s-default .cm-header { color: var(--accent); }
 .progress-bar div { width: 0%;transition: 0.3s; }
 #note-bar { background: var(--accent); }
 #file-bar { background: var(--green); }
+
+/* ==================== 高效置顶标题布局 ==================== */
+#editor-wrapper {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--bg);
+}
+
+#note-title-wrapper {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+}
+
+#editor-scroller {
+    flex: 1 !important;
+    height: 100% !important;
+    overflow: hidden !important; /* 禁用外层滚动，让编辑器自己滚 */
+    display: flex;
+    flex-direction: column;
+}
+
+#editor-container { 
+    flex: 1;
+    height: 100%;
+    position: relative;
+}
+
+.CodeMirror { 
+    height: 100% !important; /* 恢复标准高度 */
+    background: transparent !important; 
+    font-family: 'Fira Code', monospace;
+    font-size: 14px; 
+    line-height: 1.6;
+}
+
+.CodeMirror-scroll { 
+    height: 100% !important;
+    overflow: auto !important; /* 恢复自带滚动 */
+}
+
+.CodeMirror-gutters { 
+    border: none !important;
+    border-right: 1px solid var(--border) !important;
+    background: var(--side) !important; /* 明显的行号区背景 */
+    width: auto !important;
+}
+
+.CodeMirror-linenumber { 
+    padding: 0 8px !important; 
+    color: var(--gray) !important;
+    min-width: 30px !important;
+    text-align: right !important;
+}
+
+.CodeMirror-lines { 
+    padding: 10px 0 !important;
+}
+
+/* 分类标签样式 */
+#note-category-badge {
+    user-select: none;
+}
+#note-category-badge:hover {
+    background: var(--border) !important;
+    color: var(--text) !important;
+}
 #user-display { opacity: 0.9;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;text-decoration: none;color: var(--text); }
 
 /* 笔记列表 */
@@ -136,16 +206,16 @@ input[type="checkbox"].note-checkbox { width: 16px; height: 16px; cursor: pointe
 /* 附件管理样式 */
 .attachment-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 16px;
-    padding: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    padding: 12px;
 }
 
 .attachment-list-view {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 16px;
+    gap: 4px;
+    padding: 12px;
 }
 
 /* 文件卡片 - 网格视图 */
@@ -153,42 +223,49 @@ input[type="checkbox"].note-checkbox { width: 16px; height: 16px; cursor: pointe
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 12px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     transition: all 0.2s;
+    position: relative;
 }
 
 .file-card:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     border-color: var(--accent);
+    transform: translateY(-2px);
 }
 
 .file-card .file-preview {
     width: 100%;
-    height: 120px;
+    height: 100px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--side);
     border-radius: 6px;
     overflow: hidden;
+    user-select: none;
 }
 
 .file-card .file-preview img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    background: #00000010;
 }
 
 .file-card .file-name {
-    font-size: 13px;
+    font-size: 12px;
+    font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     cursor: pointer;
     color: var(--text);
+    text-align: center;
+    margin: 2px 0;
 }
 
 .file-card .file-name:hover {
@@ -200,6 +277,16 @@ input[type="checkbox"].note-checkbox { width: 16px; height: 16px; cursor: pointe
     gap: 4px;
     flex-wrap: wrap;
     justify-content: center;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: auto;
+}
+
+.file-card .file-actions .tool-btn {
+    font-size: 11px;
+    padding: 2px 6px;
+    height: 24px;
+    min-width: auto;
 }
 
 /* 文件卡片 - 列表视图 */

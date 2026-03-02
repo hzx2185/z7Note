@@ -1,7 +1,7 @@
 // 应用入口 - 优化模块加载
 (async () => {
-    // 使用固定版本号,允许浏览器缓存
-    const VERSION = 'v20250209-12';
+    // 使用动态版本号强制刷新
+    const VERSION = `v${new Date().getTime()}`;
     const cacheBuster = `?${VERSION}`;
 
     try {

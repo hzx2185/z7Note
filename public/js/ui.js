@@ -231,13 +231,29 @@ const UIManager = {
         try {
             const container = document.getElementById("editor-container");
             if (!container) {
+                this._isInitializingEditor = false;
+                this._isInitializing = false;
                 return;
             }
+
+            // 清理旧的编辑器内容
+            container.innerHTML = '';
 
             // 使用适配器系统创建编辑器
             this.editor = await window.EditorAdapterManager.createEditor(container, content, {
                 onScroll: () => this.syncScroll(container, 'editor')
             });
+
+            if (this.editor) {
+                // 恢复标准滚动监听
+                const wrapper = this.editor.getWrapperElement();
+                if (wrapper) {
+                    const passiveEvents = ['touchstart', 'touchmove', 'mousewheel', 'wheel'];
+                    passiveEvents.forEach(eventName => {
+                        wrapper.addEventListener(eventName, () => {}, { passive: true });
+                    });
+                }
+            }
 
             // 根据编辑器类型显示/隐藏按钮
             this.updateToolbarButtons();
@@ -975,22 +991,18 @@ const UIManager = {
 
     },
 
-    // 渲染笔记列表（优化版本，减少闪烁）
-    render(limit = 100, force = false) {
+    // 渲染笔记列表（支持文件夹分组与增量加载）
+    render(limit = 50, force = false, isLoadMore = false) {
         const q = document.getElementById('search').value.toLowerCase();
         const list = document.getElementById('list');
         if (!list) return;
 
-        // 如果笔记数据没有变化且不是强制渲染，则跳过渲染
+        // 如果笔记数据没有变化且不是强制渲染且不是加载更多，则跳过渲染
         const currentHash = this._calculateNotesHash(this.notes);
-        if (!force && currentHash === this._lastRenderedNotesHash) return;
+        if (!force && !isLoadMore && currentHash === this._lastRenderedNotesHash) return;
         this._lastRenderedNotesHash = currentHash;
 
-        // 使用文档片段减少重绘
-        const fragment = document.createDocumentFragment();
-        const groups = {};
-
-        // 过滤和排序 - 单次遍历
+        // 过滤和排序
         const filtered = [];
         for (const n of this.notes) {
             if (n.deleted) continue;
@@ -1000,117 +1012,115 @@ const UIManager = {
         }
         filtered.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
+        // 如果是增量加载，我们只关心新增的部分
         const displayNotes = q ? filtered : filtered.slice(0, limit);
-
+        
         // 分组
+        const groups = {};
         for (const n of displayNotes) {
             let folder = '未分类';
             if (n.title && n.title.includes('_')) {
-                const firstPart = n.title.split('_')[0];
-                folder = firstPart.replace(/^#*\s*/, '').trim() || '未分类';
+                const parts = n.title.split('_');
+                folder = parts[0].replace(/^#*\s*/, '').trim() || '未分类';
             }
             if (!groups[folder]) groups[folder] = [];
             groups[folder].push(n);
         }
 
-        // 渲染
+        if (!isLoadMore) {
+            list.innerHTML = '';
+        } else {
+            const oldMoreBtn = list.querySelector('.load-more-btn');
+            if (oldMoreBtn) oldMoreBtn.remove();
+        }
+
+        const fragment = document.createDocumentFragment();
         const sortedFolders = Object.keys(groups).sort();
+
         for (const folder of sortedFolders) {
             const isCollapsed = this.collapsedFolders.has(folder);
+            
+            // 查找或创建文件夹
+            let fContent = list.querySelector(`.folder-content[data-folder="${folder}"]`);
+            if (!fContent) {
+                const fHead = document.createElement('div');
+                fHead.className = 'folder-item ' + (isCollapsed ? 'collapsed' : '');
+                fHead.style.cssText = 'display: flex !important; justify-content: space-between; align-items: center;';
+                fHead.onclick = () => this.toggleFolder(folder);
 
-            // 所有文件夹都显示头部，包括"未分类"
-            const fHead = document.createElement('div');
-            fHead.className = 'folder-item ' + (isCollapsed ? 'collapsed' : '');
-            fHead.style.cssText = 'display: flex !important; justify-content: space-between; align-items: center;';
+                const fName = document.createElement('span');
+                fName.textContent = folder;
+                fName.style.flex = '1';
+                fName.style.cursor = 'pointer';
+                fHead.appendChild(fName);
 
-            // 给整个文件夹头部添加点击事件
-            fHead.onclick = () => {
-                this.toggleFolder(folder);
-            };
+                if (folder !== '未分类') {
+                    const shareBtn = document.createElement('button');
+                    shareBtn.className = 'tool-btn';
+                    shareBtn.textContent = '分享';
+                    shareBtn.style.cssText = 'font-size:10px;padding:2px 6px;margin-left:4px;';
+                    shareBtn.onclick = (e) => { e.stopPropagation(); api.shareCategory(folder); };
+                    fHead.appendChild(shareBtn);
+                }
 
-            // 文件夹名称
-            const fName = document.createElement('span');
-            fName.textContent = folder;
-            fName.style.flex = '1';
-            fName.style.cursor = 'pointer';
-            fHead.appendChild(fName);
+                fragment.appendChild(fHead);
 
-            // 分享按钮（只有分类文件夹才显示）
-            if (folder !== '未分类') {
-                const shareBtn = document.createElement('button');
-                shareBtn.className = 'tool-btn';
-                shareBtn.textContent = '分享';
-                shareBtn.style.cssText = 'font-size:10px;padding:2px 6px;margin-left:4px;';
-                shareBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    api.shareCategory(folder);
-                };
-                fHead.appendChild(shareBtn);
+                fContent = document.createElement('div');
+                fContent.className = 'folder-content ' + (isCollapsed ? 'hidden' : '');
+                fContent.dataset.folder = folder;
+                fragment.appendChild(fContent);
             }
 
-            fragment.appendChild(fHead);
-
-            const fContent = document.createElement('div');
-            fContent.className = 'folder-content ' + (isCollapsed ? 'hidden' : '');
-
             for (const n of groups[folder]) {
+                if (list.querySelector(`.note-item[data-id="${n.id}"]`)) continue;
+
                 const el = document.createElement('div');
                 el.className = "note-item " + (n.id.toString() === this.activeId?.toString() ? 'active' : '');
-
-                // 提取纯标题
+                
                 let displayTitle = n.title || '无标题';
                 if (displayTitle.includes('_')) {
                     displayTitle = displayTitle.split('_').slice(1).join('_').trim();
                 }
 
-                // 使用事件委托，减少事件监听器数量
                 el.dataset.id = n.id;
                 el.dataset.title = displayTitle;
-                el.dataset.fullTitle = n.title; // 保存完整标题用于编辑
+                el.dataset.fullTitle = n.title;
 
-                // 复选框和标题的HTML
                 const checkbox = this.batchMode ? `<input type="checkbox" class="note-checkbox" ${this.selectedIds.has(n.id.toString()) ? 'checked' : ''}>` : '';
                 const shareBtnHtml = !this.batchMode ? `<span class="note-action-share" title="分享">🔗</span><span class="note-action-delete" title="删除">×</span>` : '';
+                
                 el.innerHTML = `${checkbox}<div class="note-info" title="双击编辑标题">${displayTitle}</div>${shareBtnHtml}`;
-
                 fContent.appendChild(el);
             }
-            fragment.appendChild(fContent);
         }
 
-        // 处理空状态
-        if (displayNotes.length === 0) {
-            const isOnline = navigator.onLine;
-            const emptyHTML = isOnline ?
-                `<div style="padding:40px;text-align:center;color:var(--gray);">
-                    <div style="font-size:40px;margin-bottom:16px">📝</div>
-                    <div style="font-size:14px">还没有笔记</div>
-                    <div style="font-size:12px;color:var(--gray);margin-top:8px">点击"新建笔记"开始记录</div>
-                 </div>` :
-                `<div style="padding:40px;text-align:center;color:var(--gray);">
-                    <div style="font-size:40px;margin-bottom:16px">📴</div>
-                    <div style="font-size:14px">离线模式</div>
-                    <div style="font-size:12px;color:var(--gray);margin-top:8px">当前无本地缓存<br/>点击"新建笔记"可离线创建，连接网络后同步</div>
-                 </div>`;
-            list.innerHTML = emptyHTML;
-            return;
-        }
-
-        // 添加加载更多按钮
-        if (filtered.length > limit && !q) {
-            const moreBtn = document.createElement('div');
-            moreBtn.style.cssText = "padding:12px;text-align:center;font-size:12px;color:var(--accent);cursor:pointer";
-            moreBtn.textContent = `加载更多 (${filtered.length - limit})...`;
-            moreBtn.onclick = () => this.render(limit + 200);
-            fragment.appendChild(moreBtn);
-        }
-
-        // 一次性添加所有元素，减少重绘
-        list.innerHTML = '';
         list.appendChild(fragment);
 
-        // 使用事件委托，绑定到列表容器
-        this._setupListEventDelegation(list);
+        if (filtered.length === 0 && !isLoadMore) {
+            list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);">
+                <div style="font-size:40px;margin-bottom:16px">📝</div>
+                <div style="font-size:14px">没有找到笔记</div>
+            </div>`;
+        }
+
+        // 再次添加加载更多按钮
+        if (filtered.length > limit && !q) {
+            const moreBtn = document.createElement('div');
+            moreBtn.className = 'load-more-btn';
+            moreBtn.style.cssText = "padding:16px;text-align:center;font-size:13px;color:var(--accent);cursor:pointer;border-top:1px solid var(--border);margin-top:10px;";
+            moreBtn.textContent = `加载更多 (${filtered.length - limit})...`;
+            moreBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.render(limit + 50, true, true);
+            };
+            list.appendChild(moreBtn);
+        }
+
+        // 使用事件委托，只绑定一次
+        if (!this._hasListEventDelegation) {
+            this._setupListEventDelegation(list);
+            this._hasListEventDelegation = true;
+        }
     },
 
     // 设置列表事件委托
@@ -1122,6 +1132,16 @@ const UIManager = {
 
         // 创建新的事件处理函数
         this._listEventHandler = (e) => {
+            // 处理加载更多按钮点击
+            const loadMoreBtn = e.target.closest('.load-more-btn');
+            if (loadMoreBtn) {
+                e.stopPropagation();
+                // 提取当前已显示的笔记数量
+                const currentCount = list.querySelectorAll('.note-item').length;
+                this.render(currentCount + 50, true, true);
+                return;
+            }
+
             const noteItem = e.target.closest('.note-item');
             if (!noteItem) return;
 
@@ -1188,12 +1208,6 @@ const UIManager = {
             return;
         }
 
-        // 如果编辑器正在初始化，取消并等待
-        if (this._isInitializingEditor) {
-            this._pendingEditorInit = null;
-            return;
-        }
-
         this._lastActiveId = newId;
         this.activeId = newId;
 
@@ -1203,11 +1217,83 @@ const UIManager = {
         const n = this.notes.find(x => x.id.toString() === this.activeId);
 
         if (n) {
-            this.initEditor(n.content || '');
-            // 延迟渲染，等待编辑器初始化
-            requestAnimationFrame(() => {
+            // 自动展开笔记所在的文件夹
+            let folder = '未分类';
+            if (n.title && n.title.includes('_')) {
+                folder = n.title.split('_')[0].replace(/^#*\s*/, '').trim() || '未分类';
+            }
+            if (this.collapsedFolders.has(folder)) {
+                this.collapsedFolders.delete(folder);
                 this.render(undefined, true);
-            });
+            }
+
+            // 更新标题输入框 - 恢复全标题模式
+            const titleInput = document.getElementById('note-title-input');
+            if (titleInput) titleInput.value = n.title || '';
+
+            this.initEditor(n.content || '');
+            
+            // 额外触发刷新，解决沉浸式模式下行号宽度计算延迟的问题
+            setTimeout(() => {
+                if (this.editor && typeof this.editor.refresh === 'function') {
+                    this.editor.refresh();
+                }
+            }, 100);
+
+            // 优化：仅更新列表中的激活状态
+            this.updateActiveStatus();
+        }
+    },
+
+    // 处理标题输入
+    handleTitleInput(val) {
+        if (!this.activeId) return;
+        const n = this.notes.find(x => x.id.toString() === this.activeId);
+        if (!n || n.title === val) return;
+
+        const oldFullTitle = n.title;
+        n.title = val;
+        n.updatedAt = Date.now();
+
+        // 实时更新侧边栏对应项的标题显示
+        const noteEl = document.querySelector(`.note-item[data-id="${this.activeId}"] .note-info`);
+        if (noteEl) {
+            let displayTitle = val;
+            if (displayTitle.includes('_')) {
+                displayTitle = displayTitle.split('_').slice(1).join('_').trim();
+            }
+            noteEl.textContent = displayTitle || '无标题';
+        }
+
+        // 如果分类发生了变化，需要触发全量重新渲染
+        const oldFolder = (oldFullTitle.includes('_') ? oldFullTitle.split('_')[0] : '未分类').trim();
+        const newFolder = (val.includes('_') ? val.split('_')[0] : '未分类').trim();
+        
+        if (oldFolder !== newFolder) {
+            this.render(undefined, true);
+        }
+
+        // 防抖保存
+        clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => this.save(), 1000);
+    },
+
+    // 更新列表中笔记的激活状态
+    updateActiveStatus() {
+        const list = document.getElementById('list');
+        if (!list) return;
+
+        // 移除所有旧的 active 类
+        list.querySelectorAll('.note-item.active').forEach(el => {
+            el.classList.remove('active');
+        });
+
+        // 给当前 activeId 对应的元素添加 active 类
+        const activeEl = list.querySelector(`.note-item[data-id="${this.activeId}"]`);
+        if (activeEl) {
+            activeEl.classList.add('active');
+            // 确保激活项在视口内
+            activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     },
 

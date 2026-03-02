@@ -616,6 +616,34 @@ const ToolsManager = {
         a.click();
     },
 
+    // 清理格式
+    cleanFormat() {
+        if (!ui.editor) return;
+        
+        const content = ui.editor.getValue ? ui.editor.getValue() : '';
+        if (!content) return;
+
+        // 执行清理逻辑
+        let cleaned = content
+            .replace(/[ \t]+$/gm, '')           // 1. 去除每行行末空格
+            .replace(/[\u200B-\u200D\uFEFF]/g, '') // 2. 移除零宽空格等不可见字符
+            .replace(/\n{3,}/g, '\n\n')         // 3. 将连续 3 个及以上换行压缩为 2 个
+            .trim();                            // 4. 去除首尾空白
+
+        // 如果内容有变化，则更新
+        if (content !== cleaned) {
+            const cursor = ui.editor.getCursor ? ui.editor.getCursor() : null;
+            ui.editor.setValue(cleaned);
+            if (cursor) ui.editor.setCursor(cursor);
+            
+            ui.save();
+            ui.updatePreview();
+            ui.showToast("格式已清理：去除了冗余空格与空行");
+        } else {
+            ui.showToast("内容已是规范格式，无需清理", false);
+        }
+    },
+
     // 导入数据
     importData(e) {
         const file = e.target.files[0];

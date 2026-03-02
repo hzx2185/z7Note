@@ -186,7 +186,7 @@ router.post('/api/admin/users/add', async (req, res) => {
 // 清理已删除笔记
 router.post('/api/admin/notes/purge', async (req, res) => {
   try {
-    const now = Date.now();
+    const now = Math.floor(Date.now() / 1000);
     const deletedNotes = await getConnection().all('SELECT DISTINCT username FROM notes WHERE deleted = 1');
     for (const user of deletedNotes) {
       await getConnection().run('UPDATE users SET dataCutoffTime = ? WHERE username = ?', [now, user.username]);

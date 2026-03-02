@@ -6,44 +6,46 @@
     <meta name="theme-color" content="#2563eb">
     <meta name="description" content="z7Note 管理后台">
     <title>z7Note Admin - 管理后台</title>
+    <link rel="stylesheet" href="/css/variables.css">
+    <link rel="stylesheet" href="/css/base.css">
     <style>
-        :root { --bg: #f8fafc; --text: #1e293b; --border: #e2e8f0; --accent: #2563eb; --green: #10b981; --red: #ef4444; --orange: #f97316; --gray: #64748b; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
-        .container { display: flex; gap: 10px; min-height: calc(100vh - 40px); padding: 50px 10px 10px; }
-        #sidebar { flex: 0 0 280px; overflow-y: auto; }
+        body { background: var(--bg); color: var(--text); overflow-y: auto; }
+        .container { display: flex; gap: 10px; min-height: calc(100vh - 40px); padding: 50px 10px 10px; max-width: 1400px; margin: 0 auto; }
+        #sidebar { flex: 0 0 280px; overflow-y: auto; max-height: calc(100vh - 60px); position: sticky; top: 50px; }
         #main { flex: 1; overflow: hidden; }
-        .header { position: fixed; top: 0; left: 0; right: 0; height: 40px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; z-index: 100; }
-        .tool-btn { background: white; border: 1px solid var(--border); padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 4px; }
-        .tool-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
-        .card { background: white; border-radius: 6px; padding: 10px; border: 1px solid var(--border); }
-        .badge { background: rgba(37, 99, 235, 0.1); color: var(--accent); padding: 1px 5px; border-radius: 3px; font-size: 9px; }
+        .header { position: fixed; top: 0; left: 0; right: 0; height: 40px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; z-index: 100; backdrop-filter: blur(8px); background: rgba(255,255,255,0.8); }
+        .dark-mode .header { background: rgba(13, 17, 23, 0.8); }
+        .badge { background: rgba(37, 99, 235, 0.1); color: var(--accent); padding: 1px 5px; border-radius: 3px; font-size: 9px; border: 1px solid rgba(37, 99, 235, 0.2); }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        th { background: #f1f5f9; font-weight: 600; white-space: nowrap; }
-        th[onclick] { cursor: pointer; user-select: none; }
-        .form-item { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
-        .form-item label { font-size: 10px; color: var(--gray); }
-        .form-item input, .form-item select, .form-item textarea { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; width: 100%; }
-        .form-item input:focus, .form-item select:focus, .form-item textarea:focus { outline: none; border-color: var(--accent); }
-        .form-row { display: flex; gap: 6px; }
-        .form-checkbox { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 8px; }
-        .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
-        .tab-btn { padding: 6px 12px; border: none; background: transparent; font-size: 11px; cursor: pointer; border-bottom: 2px solid transparent; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        th { background: var(--side); font-weight: 600; white-space: nowrap; color: var(--gray); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        th[onclick] { cursor: pointer; user-select: none; transition: color 0.2s; }
+        th[onclick]:hover { color: var(--text); }
+        tr:hover td { background: var(--side); }
+        .form-item { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+        .form-item label { font-size: 11px; color: var(--gray); font-weight: 500; }
+        .form-item input, .form-item select, .form-item textarea { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; width: 100%; background: var(--bg); color: var(--text); transition: border-color 0.15s; }
+        .form-item input:focus, .form-item select:focus, .form-item textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.1); }
+        .form-row { display: flex; gap: 8px; }
+        .form-checkbox { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 8px; cursor: pointer; user-select: none; }
+        .form-checkbox input { width: 14px; height: 14px; accent-color: var(--accent); }
+        .tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; padding-bottom: 0; }
+        .tab-btn { padding: 8px 4px; border: none; background: transparent; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--gray); transition: all 0.2s; }
+        .tab-btn:hover { color: var(--text); }
         .tab-btn.active { border-bottom-color: var(--accent); color: var(--accent); font-weight: 600; }
-        .tab-content { display: none; }
+        .tab-content { display: none; animation: fadeIn 0.2s ease; }
         .tab-content.active { display: block; }
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 200; }
-        .modal > form { background: white; padding: 15px; border-radius: 8px; min-width: 280px; max-width: 90vw; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        
         @media (max-width: 768px) {
-            .container { flex-direction: column; padding: 50px 6px 6px; }
-            #sidebar { flex: none; max-height: auto; }
+            .container { flex-direction: column; padding: 50px 10px 10px; }
+            #sidebar { flex: none; max-height: none; position: static; margin-bottom: 16px; }
             #main { overflow: visible; }
-            .card { padding: 8px; }
+            .card { padding: 12px; }
             table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
             th, td { white-space: nowrap; }
-            .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-            .tab-btn { flex-shrink: 0; }
+            .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 12px; }
+            .tab-btn { flex-shrink: 0; white-space: nowrap; }
         }
     </style>
 </head>

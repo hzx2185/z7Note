@@ -9,6 +9,16 @@ const config = require('../config');
 
 const router = express.Router();
 
+// 辅助：清洗标题，移除控制字符以防止文件名冲突
+function sanitizeTitle(title) {
+  if (!title) return title;
+  // 移除 0-31 和 127 之间的控制字符（包括 \v, \n, \r 等）
+  // 但保留 \n \r \t 可能在某些情况下有用，虽然作为标题通常不需要
+  // Windows 不允许: \ / : * ? " < > |
+  // 我们主要移除不可见的控制字符
+  return title.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // 获取用户信息
 router.get('/api/user-info', async (req, res) => {
   try {
@@ -210,7 +220,7 @@ router.post('/api/notes', async (req, res) => {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
     await getConnection().run(
       'INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)',
-      [id, req.user, title || '新笔记', noteContent, Math.floor(Date.now() / 1000)]
+      [id, req.user, sanitizeTitle(title) || '新笔记', noteContent, Math.floor(Date.now() / 1000)]
     );
     const note = await getConnection().get('SELECT * FROM notes WHERE id = ?', [id]);
     res.json(note);
@@ -259,9 +269,10 @@ router.put('/api/notes/:id', async (req, res) => {
     }
 
     const updatedAt = Math.floor(Date.now() / 1000);
+    const cleanTitle = sanitizeTitle(title) || '未命名';
     await getConnection().run(
       'UPDATE notes SET content = COALESCE(?, content), title = ?, updatedAt = ? WHERE id = ? AND username = ?',
-      [content !== undefined ? content : null, title || '未命名', updatedAt, req.params.id, req.user]
+      [content !== undefined ? content : null, cleanTitle, updatedAt, req.params.id, req.user]
     );
 
     // 获取更新后的笔记
@@ -414,7 +425,7 @@ router.post('/api/notes/batch-replace', async (req, res) => {
       );
 
       let replacedCount = 0;
-      const now = Date.now();
+      const now = Math.floor(Date.now() / 1000);
 
       // 批量更新
       for (const note of notes) {
@@ -422,6 +433,7 @@ router.post('/api/notes/batch-replace', async (req, res) => {
         for (const findText of validFindTexts) {
           newTitle = newTitle.split(findText).join(replaceText);
         }
+        newTitle = sanitizeTitle(newTitle);
 
         let newContent = note.content || '';
         for (const findText of validFindTexts) {
@@ -495,7 +507,7 @@ router.post('/api/notes/batch-move', async (req, res) => {
       );
 
       let movedCount = 0;
-      const now = Date.now();
+      const now = Math.floor(Date.now() / 1000);
 
       // 批量更新
       for (const note of notes) {
@@ -511,6 +523,7 @@ router.post('/api/notes/batch-move', async (req, res) => {
 
         // 构建新的标题（分类/标题）
         newTitle = pureTitle ? `${targetFolderName}/${pureTitle}` : targetFolderName;
+        newTitle = sanitizeTitle(newTitle);
 
         // 更新内容的第一行（如果包含分类标记）
         if (newContent && newContent.trim()) {

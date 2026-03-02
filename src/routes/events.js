@@ -68,20 +68,20 @@ router.delete('/batch', async (req, res) => {
       const items = await db.all('SELECT id FROM events WHERE username = ?', [req.user]);
       for (const item of items) {
           await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now() + Math.random().toString(), req.user, item.id, 'event', now]);
+              [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, item.id, 'event', now]);
       }
       await db.run('DELETE FROM events WHERE username = ?', [req.user]);
     } else if (startTime && endTime) {
       const items = await db.all('SELECT id FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?', [req.user, startTime, endTime]);
       for (const item of items) {
           await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now() + Math.random().toString(), req.user, item.id, 'event', now]);
+              [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, item.id, 'event', now]);
       }
       await db.run('DELETE FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?', [req.user, startTime, endTime]);
     } else if (Array.isArray(ids) && ids.length > 0) {
       for (const id of ids) {
           await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now() + Math.random().toString(), req.user, id, 'event', now]);
+              [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, id, 'event', now]);
       }
       const placeholders = ids.map(() => '?').join(',');
       await db.run(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [req.user, ...ids]);
@@ -368,7 +368,7 @@ router.delete('/:id', async (req, res) => {
   
   // 记录删除记录供 CalDAV 同步
   await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-      [Date.now() + Math.random().toString(), req.user, req.params.id, 'event', now]);
+      [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, req.params.id, 'event', now]);
       
   await db.run('DELETE FROM events WHERE id = ? AND username = ?', [req.params.id, req.user]);
   

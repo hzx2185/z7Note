@@ -329,12 +329,12 @@ const APIManager = {
                     ${isImage ? `<img src="${rawUrl}" loading="lazy">` : `<span style="font-size:24px">📄</span>`}
                 </div>
                 <div class="file-name" title="${name}" onclick="window.open('${rawUrl}', '_blank')">${name} ${invalidBadge}</div>
-                <div style="font-size:12px; color:var(--gray);">${sizeText}</div>
-                <div class="file-actions" style="gap:2px;">
-                    <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="font-size:11px;padding:2px 6px;color:var(--green);">分享</button>
-                    <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="font-size:11px;padding:2px 6px;color:var(--accent);">插入</button>
-                    <button class="tool-btn" onclick="api.renameAttachment('${encodedName}')" title="重命名" style="font-size:11px;padding:2px 6px;">重命名</button>
-                    <button class="tool-btn btn-danger" onclick="api.deleteAttachment('${encodedName}')" title="删除" style="font-size:11px;padding:2px 6px;">删除</button>
+                <div style="font-size:11px; color:var(--gray);">${sizeText}</div>
+                <div class="file-actions">
+                    <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="color:var(--green);">分享</button>
+                    <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="color:var(--accent);">插入</button>
+                    <button class="tool-btn" onclick="api.renameAttachment('${encodedName}')" title="重命名">重命名</button>
+                    <button class="tool-btn btn-danger" onclick="api.deleteAttachment('${encodedName}')" title="删除">删除</button>
                 </div>
             </div>
         `;
@@ -350,21 +350,21 @@ const APIManager = {
 
         // 检查是否为无效附件
         const isInvalid = this.invalidAttachmentsCache.some(inv => inv.name === name);
-        const invalidStyle = isInvalid ? 'border: 2px solid var(--red); opacity: 0.7;' : '';
+        const invalidStyle = isInvalid ? 'border: 1px solid var(--red); opacity: 0.8;' : '';
         const invalidBadge = isInvalid ? '<span class="badge" style="background:var(--red);color:white;margin-left:4px;">无效</span>' : '';
 
         return `
-            <div class="file-card attachment-list-item" style="${invalidStyle}">
+            <div class="attachment-list-item" style="${invalidStyle}">
                 <div class="file-preview">
                     ${isImage ? `<img src="${rawUrl}" loading="lazy">` : `<span style="font-size:18px">📄</span>`}
                 </div>
                 <div class="file-name" onclick="window.open('${rawUrl}', '_blank')" title="${name}">${name} ${invalidBadge}</div>
-                <div style="font-size:12px; color:var(--gray);flex-shrink:0;">${sizeText}</div>
-                <div class="file-actions" style="gap:2px;">
-                    <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="font-size:11px;padding:2px 6px;color:var(--green);">分享</button>
-                    <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="font-size:11px;padding:2px 6px;color:var(--accent);">插入</button>
-                    <button class="tool-btn" onclick="api.renameAttachment('${encodedName}')" title="重命名" style="font-size:11px;padding:2px 6px;">重命名</button>
-                    <button class="tool-btn btn-danger" onclick="api.deleteAttachment('${encodedName}')" title="删除" style="font-size:11px;padding:2px 6px;">删除</button>
+                <div style="font-size:11px; color:var(--gray); flex-shrink:0;">${sizeText}</div>
+                <div class="file-actions">
+                    <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="color:var(--green);">分享</button>
+                    <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="color:var(--accent);">插入</button>
+                    <button class="tool-btn" onclick="api.renameAttachment('${encodedName}')" title="重命名">重命名</button>
+                    <button class="tool-btn btn-danger" onclick="api.deleteAttachment('${encodedName}')" title="删除">删除</button>
                 </div>
             </div>
         `;

@@ -223,7 +223,7 @@ router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) 
     const { username, filename } = req.params;
     let id = filename.replace(/\.ics$/i, '');
     try { id = decodeURIComponent(id); } catch(e) {}
-    await getConnection().run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now() + Math.random().toString(), username, id, 'event', Math.floor(Date.now() / 1000)]);
+    await getConnection().run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now().toString(36) + Math.random().toString(36).slice(2), username, id, 'event', Math.floor(Date.now() / 1000)]);
     await getConnection().run('DELETE FROM events WHERE id = ? AND username = ?', [id, username]);
     await getConnection().run('DELETE FROM todos WHERE id = ? AND username = ?', [id, username]);
     res.status(204).end();

@@ -261,6 +261,7 @@
                 <div style="width:1px; height:18px; background:var(--border); margin:0 2px;"></div>
                 <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换">🔍</button>
                 <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT">📃</button>
+                <button class="tool-btn" onclick="tools.cleanFormat()" title="清理格式 (去除行末空格、多余空行)">🧹</button>
             </div>
 
             <!-- 查找替换栏 -->
@@ -278,7 +279,14 @@
 
             <!-- 主视图 -->
             <div id="main-view" class="edit-only">
-                <div id="editor-container"></div>
+                <div id="editor-wrapper" style="display:flex; flex-direction:column; flex:1; min-width:0; background:var(--bg); border-right:1px solid var(--border); overflow:hidden;">
+                    <div id="editor-scroller" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; background:var(--bg);">
+                        <div id="note-title-wrapper" style="padding:10px 16px; background:var(--bg); width:100%; box-sizing:border-box; border-bottom:1px solid var(--border); display:flex; align-items:center;">
+                            <input type="text" id="note-title-input" placeholder="分类_标题" style="width:100%; border:none; background:transparent; font-size:18px; font-weight:700; color:var(--text); outline:none; padding:0; margin:0; line-height:1.4;" oninput="ui.handleTitleInput(this.value)">
+                        </div>
+                        <div id="editor-container" style="flex:1; width:100%;"></div>
+                    </div>
+                </div>
                 <div id="preview-wrapper">
                     <iframe id="preview-frame"></iframe>
                 </div>
@@ -323,9 +331,9 @@
                 <h3>从附件库选择</h3>
                 <button onclick="document.getElementById('attachment-picker-modal').classList.remove('show')">×</button>
             </div>
-            <div class="modal-actions">
-                <input type="text" id="attachment-picker-search" placeholder="搜索附件..." oninput="api.filterAttachmentsForPicker()" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);outline:none;">
-                <button class="btn" onclick="api.loadAttachmentsForPicker()">刷新列表</button>
+            <div class="modal-actions" style="gap: 6px; padding: 8px 12px;">
+                <input type="text" id="attachment-picker-search" placeholder="搜索附件..." oninput="api.filterAttachmentsForPicker()" style="flex:1; min-width:120px; height:32px; padding:0 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); outline:none; font-size:13px;">
+                <button class="tool-btn" onclick="api.loadAttachmentsForPicker()" style="height:32px; padding:0 12px;">刷新列表</button>
             </div>
             <div class="modal-body">
                 <div id="attachment-picker-list" class="attachment-grid"></div>
@@ -351,17 +359,21 @@
                 </div>
                 <div id="upload-progress-details" style="font-size:11px;color:var(--gray);margin-top:4px;"></div>
             </div>
-            <div class="modal-actions">
-                <label class="tool-btn btn-green" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;font-size:11px;min-height:32px;flex:0 0 auto;">
-                    上传并插入
+            <div class="modal-actions" style="gap: 6px; padding: 8px 12px;">
+                <label class="tool-btn btn-green" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;font-size:12px;height:32px;flex:0 0 auto;margin:0;">
+                    上传附件
                     <input type="file" id="attachment-file-input" style="display:none" onchange="api.handleDirectUpload(this)">
                 </label>
-                <input type="text" id="attachment-search" placeholder="搜索附件..." oninput="api.filterAttachments()" style="flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);outline:none;">
-                <button class="tool-btn" onclick="api.toggleAttachmentView()" id="view-toggle-btn" title="切换视图">列表</button>
-                <button class="tool-btn" onclick="api.checkNotesWithInvalidAttachments()" title="检测引用无效附件的笔记" style="color:var(--orange);">检测无效</button>
-                <button class="tool-btn" onclick="api.findUnreferencedAttachments()" title="查询未被引用的附件">查询未引用</button>
-                <button class="tool-btn" onclick="api.purgeAttachmentsInManager()">清理未引用</button>
-                <button class="tool-btn" onclick="api.loadAttachments(true)" title="刷新列表">刷新</button>
+                <input type="text" id="attachment-search" placeholder="搜索附件..." oninput="api.filterAttachments()" style="flex:1; min-width:120px; height:32px; padding:0 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); outline:none; font-size:13px;">
+                <div style="display:flex; gap:4px; flex-wrap:nowrap;">
+                    <button class="tool-btn" onclick="api.toggleAttachmentView()" id="view-toggle-btn" title="切换视图" style="height:32px; padding:0 8px;">列表</button>
+                    <button class="tool-btn" onclick="api.loadAttachments(true)" title="刷新列表" style="height:32px; padding:0 8px;">刷新</button>
+                </div>
+                <div style="display:flex; gap:4px; flex-wrap:nowrap; margin-left:auto;">
+                    <button class="tool-btn" onclick="api.checkNotesWithInvalidAttachments()" title="检测引用无效附件的笔记" style="color:var(--orange); height:32px; padding:0 8px; font-size:11px;">检测无效</button>
+                    <button class="tool-btn" onclick="api.findUnreferencedAttachments()" title="查询未被引用的附件" style="height:32px; padding:0 8px; font-size:11px;">查询未引用</button>
+                    <button class="tool-btn" onclick="api.purgeAttachmentsInManager()" title="清理未引用" style="height:32px; padding:0 8px; font-size:11px;">清理</button>
+                </div>
             </div>
             <!-- 未引用附件列表展示区域 -->
             <div id="unreferenced-attachments-area" style="display:none;border-bottom:1px solid var(--border);background:var(--side);">
@@ -390,7 +402,7 @@
     </div>
 
     <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
-    <script type="module" src="/js/app-entry.js?v=20250228223000"></script>
+    <script type="module" src="/js/app-entry.js?v=20250302-v3"></script>
 
     <script>
         // 预加载关键字体和图标（提升首屏感知速度）

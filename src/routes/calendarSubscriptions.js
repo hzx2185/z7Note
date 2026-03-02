@@ -144,7 +144,7 @@ router.delete('/:id', async (req, res) => {
       for (const event of events) {
         await db.run(
           'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-          [Date.now() + Math.random().toString(), req.user, event.id, 'event', now]
+          [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, event.id, 'event', now]
         );
       }
 

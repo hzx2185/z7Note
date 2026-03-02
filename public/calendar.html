@@ -81,16 +81,17 @@
     .empty-state { text-align: center; padding: 40px 20px; color: var(--gray); }
 
     /* 统一紧凑模态框 */
-    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px); }
     .modal.show { display: flex; }
-    .modal-content { max-width: 340px; width: 95vw; max-height: 90vh; overflow-y: auto; padding: 12px; border-radius: 6px; background: var(--bg); box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: none; }
-    .modal-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border); background: none; }
-    .modal-header h3 { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); }
-    .modal-header button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray); padding: 0 4px; }
+    .modal-content { max-width: 360px; width: 95vw; max-height: 90vh; overflow-y: auto; padding: 0; border-radius: 12px; background: var(--bg); box-shadow: 0 20px 50px rgba(0,0,0,0.3); border: 1px solid var(--border); display: flex; flex-direction: column; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--side); }
+    .modal-header h3 { font-size: 15px; font-weight: 600; margin: 0; color: var(--text); }
+    .modal-header button { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray); padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: background 0.2s; }
+    .modal-header button:hover { background: rgba(0,0,0,0.05); color: var(--text); }
     
-    .modal-body { padding: 0; }
-    .form-group { margin-bottom: 10px; }
-    .form-group label { display: block; font-size: 11px; color: var(--gray); margin-bottom: 4px; }
+    .modal-body { padding: 16px; overflow-y: auto; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 6px; font-weight: 500; }
     
     /* 强制模态框内的行不换行，但允许 JavaScript 控制隐藏 */
     .modal .form-row { 
@@ -127,31 +128,35 @@
     .modal-actions { 
       display: flex !important; 
       flex-direction: row !important; 
-      gap: 8px !important; 
-      margin-top: 16px !important; 
-      border: none !important; 
-      padding: 0 !important; 
+      gap: 12px !important; 
+      margin-top: 0 !important; 
+      border-top: 1px solid var(--border) !important; 
+      padding: 12px 16px !important; 
+      background: var(--side) !important;
     }
     .modal-actions .btn { 
       flex: 1 !important; 
       height: 32px !important; 
-      border-radius: 4px !important; 
+      border-radius: 6px !important; 
       font-size: 13px !important; 
+      font-weight: 500;
       cursor: pointer !important; 
       display: flex !important; 
       align-items: center !important; 
       justify-content: center !important; 
       border: 1px solid var(--border) !important; 
-      background: var(--side) !important; 
+      background: var(--bg) !important; 
       color: var(--text) !important; 
       width: auto !important;
+      transition: all 0.2s;
     }
-    .modal-actions .btn-primary { background: var(--accent); color: white; border: none; }
-    .modal-actions .btn:hover { opacity: 0.9; }
+    .modal-actions .btn-primary { background: var(--accent) !important; color: white !important; border: none !important; }
+    .modal-actions .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .modal-actions .btn:active { transform: translateY(0); }
     
     /* 响应式调整 */
     @media (max-width: 480px) {
-      .modal-content { padding: 10px; }
+      .modal-content { width: 100vw; max-width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
       .reminder-option { font-size: 10px; gap: 2px; }
     }
 

@@ -131,7 +131,7 @@ router.get('/api/share/list', async (req, res) => {
       [req.user]
     );
 
-    const now = Date.now();
+    const now = Math.floor(Date.now() / 1000);
     const validShares = [];
     const invalidTokens = [];
 
