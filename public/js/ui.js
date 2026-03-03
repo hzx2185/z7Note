@@ -2708,6 +2708,11 @@ const UIManager = {
             return;
         }
 
+        const btn = document.querySelector('#modal-code-area button');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '验证中...';
+
         try {
             const res = await fetch('/api/verify-bind-email', {
                 method: 'POST',
@@ -2715,16 +2720,21 @@ const UIManager = {
                 body: JSON.stringify({ email, token: code })
             });
 
+            const data = await res.json();
+
             if (res.ok) {
                 this.showToast('邮箱绑定成功');
                 this.closeEmailModal();
                 this.loadUserInfo();
             } else {
-                const data = await res.json();
-                this.showToast(data.error || '绑定失败');
+                this.showToast(data.error || '验证失败', false);
             }
         } catch (e) {
-            this.showToast('绑定失败');
+            console.error('[VerifyEmail] Error:', e);
+            this.showToast('网络连接失败，请稍后重试', false);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
         }
     },
 

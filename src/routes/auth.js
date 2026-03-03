@@ -220,24 +220,34 @@ router.post('/api/verify-bind-email', async (req, res) => {
   try {
     const { email, token } = req.body;
     if (!req.user) {
-      return res.status(401).json({ error: "未登录" });
+      return res.status(401).json({ error: "会话已过期，请重新登录" });
+    }
+
+    if (!email || !token) {
+      return res.status(400).json({ error: "邮箱和验证码不能为空" });
     }
 
     const record = await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?',
       [email, token]);
     
-    if (!record || record.expires < Date.now()) {
-      return res.status(400).json({ error: "验证码错误或已过期" });
+    if (!record) {
+      return res.status(400).json({ error: "验证码错误" });
     }
 
+    if (record.expires < Date.now()) {
+      return res.status(400).json({ error: "验证码已过期，请重新发送" });
+    }
+
+    // 更新用户邮箱
     await getConnection().run('UPDATE users SET email = ? WHERE username = ?', [email, req.user]);
+    // 成功后删除验证码
     await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
     
     log('INFO', '用户绑定邮箱成功', { username: req.user, email });
     res.json({ status: "ok" });
   } catch (e) {
-    log('ERROR', '验证并绑定邮箱失败', { username: req.user, error: e.message });
-    res.status(500).json({ error: "绑定失败，请稍后重试" });
+    log('ERROR', '验证并绑定邮箱异常', { username: req.user, error: e.message });
+    res.status(500).json({ error: "系统繁忙，请稍后再试" });
   }
 });
 
