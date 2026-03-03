@@ -948,15 +948,16 @@ const UIManager = {
             }
 
             this._isSaving = true;
+            // 修正：后端 /api/files 期望接收数组格式
             const res = await fetch('/api/files', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+                body: JSON.stringify([{
                     id: note.id,
                     title: note.title,
                     content: note.content,
                     updatedAt: note.updatedAt
-                })
+                }])
             });
 
             if (res.ok) {
