@@ -2643,6 +2643,8 @@ const UIManager = {
             modal.style.display = 'flex';
             document.getElementById('modal-email-input').value = '';
             document.getElementById('modal-code-input').value = '';
+            const errorEl = document.getElementById('modal-email-error');
+            if (errorEl) errorEl.style.display = 'none';
             const btn = document.getElementById('modal-send-btn');
             btn.textContent = '发送';
             btn.disabled = false;
@@ -2658,8 +2660,15 @@ const UIManager = {
     // 发送验证码
     async modalSendCode() {
         const email = document.getElementById('modal-email-input').value.trim();
+        const errorEl = document.getElementById('modal-email-error');
+        if (errorEl) errorEl.style.display = 'none';
+
         if (!email || !email.includes('@')) {
-            this.showToast('请输入正确的邮箱地址');
+            if (errorEl) {
+                errorEl.textContent = '请输入正确的邮箱地址';
+                errorEl.style.display = 'block';
+            }
+            this.showToast('请输入正确的邮箱地址', false);
             return;
         }
 
@@ -2674,7 +2683,7 @@ const UIManager = {
             });
 
             if (res.ok) {
-                this.showToast('验证码已发送');
+                this.showToast('验证码已发送', true);
                 let count = 60;
                 btn.textContent = `${count}s`;
                 const timer = setInterval(() => {
@@ -2689,11 +2698,15 @@ const UIManager = {
                 }, 1000);
             } else {
                 const data = await res.json();
-                this.showToast(data.error || '发送失败');
+                if (errorEl) {
+                    errorEl.textContent = data.error || '发送失败';
+                    errorEl.style.display = 'block';
+                }
+                this.showToast(data.error || '发送失败', false);
                 btn.disabled = false;
             }
         } catch (e) {
-            this.showToast('发送失败');
+            this.showToast('发送失败', false);
             btn.disabled = false;
         }
     },
@@ -2702,9 +2715,15 @@ const UIManager = {
     async modalVerifyCode() {
         const email = document.getElementById('modal-email-input').value.trim();
         const code = document.getElementById('modal-code-input').value.trim();
+        const errorEl = document.getElementById('modal-email-error');
+        if (errorEl) errorEl.style.display = 'none';
 
         if (!email || !code) {
-            this.showToast('请填写邮箱和验证码');
+            if (errorEl) {
+                errorEl.textContent = '请填写邮箱和验证码';
+                errorEl.style.display = 'block';
+            }
+            this.showToast('请填写邮箱和验证码', false);
             return;
         }
 
@@ -2720,18 +2739,27 @@ const UIManager = {
                 body: JSON.stringify({ email, token: code })
             });
 
-            const data = await res.json();
+            let data;
+            try {
+                data = await res.json();
+            } catch (e) {
+                data = { error: '服务器响应格式错误' };
+            }
 
             if (res.ok) {
-                this.showToast('邮箱绑定成功');
+                this.showToast('邮箱绑定成功', true);
                 this.closeEmailModal();
                 this.loadUserInfo();
             } else {
+                if (errorEl) {
+                    errorEl.textContent = data.error || '验证失败';
+                    errorEl.style.display = 'block';
+                }
                 this.showToast(data.error || '验证失败', false);
             }
         } catch (e) {
-            console.error('[VerifyEmail] Error:', e);
-            this.showToast('网络连接失败，请稍后重试', false);
+            console.error('[VerifyEmail] 请求异常:', e);
+            this.showToast('无法连接到服务器，请检查网络', false);
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
