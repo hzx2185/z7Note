@@ -930,14 +930,24 @@ const UIManager = {
         await this.saveToCloud(this.notes[idx]);
     },
 
+    _isSaving: false,
+    _pendingSave: null,
+
     // 保存到云端
     async saveToCloud(note) {
+        // 如果正在保存，将当前笔记存入等待队列，确保最后一次修改不丢失
+        if (this._isSaving) {
+            this._pendingSave = note;
+            return;
+        }
+
         try {
             // 输入法期间完全禁止云端同步
             if (this._isComposing) {
                 return;
             }
 
+            this._isSaving = true;
             const res = await fetch('/api/files', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -951,14 +961,12 @@ const UIManager = {
 
             if (res.ok) {
                 const result = await res.json();
-                // 更新本地笔记数据，但要小心不要覆盖用户正在编辑的内容
+                // 更新本地笔记数据
                 const idx = this.notes.findIndex(n => n.id.toString() === note.id.toString());
                 if (idx !== -1 && result.note) {
-                    // 只有当保存时间戳匹配时才更新，避免覆盖更新的内容
                     if (result.note.updatedAt === note.updatedAt) {
                         this.notes[idx] = result.note;
                     } else {
-                        // 服务器返回的时间戳不同，只更新服务器时间戳和ID
                         this.notes[idx] = {
                             ...this.notes[idx],
                             id: result.note.id,
@@ -966,12 +974,21 @@ const UIManager = {
                         };
                     }
                 }
-                // 不调用 render()，避免触发 DOM 更新影响编辑器
             } else {
+                console.error('[Save] 服务器返回错误:', res.status);
                 this.showToast('保存失败，请检查网络连接');
             }
         } catch (e) {
+            console.error('[Save] 请求异常:', e);
             this.showToast('保存失败，请检查网络连接');
+        } finally {
+            this._isSaving = false;
+            // 如果在保存期间有新的修改，立即执行最后一次待办保存
+            if (this._pendingSave) {
+                const nextNote = this._pendingSave;
+                this._pendingSave = null;
+                this.saveToCloud(nextNote);
+            }
         }
     },
 
@@ -998,12 +1015,11 @@ const UIManager = {
         const list = document.getElementById('list');
         if (!list) return;
 
-        // 如果传入了 limit，则更新 currentLimit；否则使用 currentLimit
-        if (limit !== undefined) {
-            this.currentLimit = limit;
-        } else {
-            limit = this.currentLimit || 50;
+        // 默认不再分布显示，改为全量或大数量（除非指定了limit）
+        if (limit === undefined) {
+            limit = 9999; 
         }
+        this.currentLimit = limit;
 
         // 保存当前滚动位置 (仅在非加载更多模式下需要)
         const currentScroll = list.scrollTop;
@@ -2629,6 +2645,9 @@ const UIManager = {
             document.getElementById('modal-code-input').value = '';
             document.getElementById('modal-send-btn').textContent = '发送验证码';
             document.getElementById('modal-send-btn').disabled = false;
+            // 确保隐藏第二步，直到第一步完成
+            const step2 = document.getElementById('modal-step2');
+            if (step2) step2.style.display = 'none';
         }
     },
 

@@ -699,31 +699,34 @@ router.post('/api/files', async (req, res) => {
         updated: validItems.length - deletedItems.length
       });
 
+      // 为更新的笔记批量广播通知（优化：一次性获取所有更新后的笔记）
+      try {
+        const updatedIds = validItems.map(item => item.id);
+        if (updatedIds.length > 0) {
+          const placeholders = updatedIds.map(() => '?').join(',');
+          const updatedNotes = await getConnection().all(
+            `SELECT * FROM notes WHERE username = ? AND id IN (${placeholders})`,
+            [req.user, ...updatedIds]
+          );
+
+          if (updatedNotes && updatedNotes.length > 0) {
+            // 使用新定义的批量广播函数（如果可用）或快速循环
+            for (const note of updatedNotes) {
+              broadcastNoteUpdate(req.user, note.id, note);
+              wsBroadcastNoteUpdate(note);
+            }
+            console.log(`[Broadcast] 批量广播了 ${updatedNotes.length} 个笔记更新`);
+          }
+        }
+      } catch (e) {
+        console.error('[Broadcast] 批量广播笔记更新失败:', e);
+      }
+
       // 计算实际使用的容量
       const finalNoteData = await getConnection().get(
         'SELECT SUM(LENGTH(content)) as size FROM notes WHERE username = ? AND deleted = 0',
         [req.user]
       );
-
-      // 为每个更新的笔记单独广播通知
-      try {
-        for (const item of validItems) {
-          // 获取更新后的笔记数据
-          const note = await getConnection().get(
-            'SELECT * FROM notes WHERE id = ? AND username = ?',
-            [item.id, req.user]
-          );
-          if (note) {
-            // SSE广播
-            broadcastNoteUpdate(req.user, item.id, note);
-            // WebSocket广播
-            wsBroadcastNoteUpdate(note);
-          }
-        }
-        console.log(`[Broadcast] 广播了 ${validItems.length} 个笔记更新（SSE + WebSocket）`);
-      } catch (e) {
-        console.error('[Broadcast] 广播笔记更新失败:', e);
-      }
 
       res.json({
         status: "ok",
