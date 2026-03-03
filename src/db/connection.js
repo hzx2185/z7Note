@@ -24,6 +24,7 @@ async function connect() {
   await db.exec('PRAGMA journal_mode = WAL');
   await db.exec('PRAGMA synchronous = NORMAL');
   await db.exec('PRAGMA foreign_keys = ON');
+  await db.exec('PRAGMA busy_timeout = 5000'); // 增加繁忙超时时间至5秒
   
   // 创建表结构
   await createTables();

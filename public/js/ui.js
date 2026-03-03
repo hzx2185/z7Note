@@ -960,28 +960,34 @@ const UIManager = {
                 }])
             });
 
-            if (res.ok) {
-                const result = await res.json();
+            const contentType = res.headers.get('content-type');
+            let result;
+            if (contentType && contentType.includes('application/json')) {
+                result = await res.json();
+            }
+
+            if (res.ok && result) {
                 // 更新本地笔记数据
+                const noteToUpdate = Array.isArray(result.notes) ? result.notes[0] : result.note;
                 const idx = this.notes.findIndex(n => n.id.toString() === note.id.toString());
-                if (idx !== -1 && result.note) {
-                    if (result.note.updatedAt === note.updatedAt) {
-                        this.notes[idx] = result.note;
+                if (idx !== -1 && noteToUpdate) {
+                    if (noteToUpdate.updatedAt === note.updatedAt) {
+                        this.notes[idx] = noteToUpdate;
                     } else {
                         this.notes[idx] = {
                             ...this.notes[idx],
-                            id: result.note.id,
-                            updatedAt: result.note.updatedAt
+                            id: noteToUpdate.id,
+                            updatedAt: noteToUpdate.updatedAt
                         };
                     }
                 }
             } else {
                 console.error('[Save] 服务器返回错误:', res.status);
-                this.showToast('保存失败，请检查网络连接');
+                this.showToast(res.status === 502 ? '服务器繁忙，请稍后再试' : '保存失败，请检查网络连接', false);
             }
         } catch (e) {
             console.error('[Save] 请求异常:', e);
-            this.showToast('保存失败，请检查网络连接');
+            this.showToast('无法连接服务器，请稍后重试', false);
         } finally {
             this._isSaving = false;
             // 如果在保存期间有新的修改，立即执行最后一次待办保存
@@ -2735,11 +2741,14 @@ const UIManager = {
                 body: JSON.stringify({ email, token: code })
             });
 
+            // 先检查响应类型
+            const contentType = res.headers.get('content-type');
             let data;
-            try {
+            if (contentType && contentType.includes('application/json')) {
                 data = await res.json();
-            } catch (e) {
-                data = { error: '服务器响应格式错误' };
+            } else {
+                // 如果不是 JSON（如 502 HTML），抛出特定错误
+                throw new Error(`服务器响应异常 (${res.status})`);
             }
 
             if (res.ok) {
@@ -2754,7 +2763,7 @@ const UIManager = {
             }
         } catch (e) {
             console.error('[VerifyEmail] 请求异常:', e);
-            this._showEmailModalFeedback('无法连接到服务器', false);
+            this._showEmailModalFeedback(e.message || '无法连接到服务器', false);
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
