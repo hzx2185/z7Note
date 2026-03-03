@@ -217,15 +217,28 @@ router.post('/api/send-bind-code', async (req, res) => {
 
 // 验证绑定邮箱
 router.post('/api/verify-bind-email', async (req, res) => {
-  const { email, token } = req.body;
-  const record = await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?', 
-    [email, token]);
-  if (!record || record.expires < Date.now()) {
-    return res.status(400).json({ error: "验证码错误或已过期" });
+  try {
+    const { email, token } = req.body;
+    if (!req.user) {
+      return res.status(401).json({ error: "未登录" });
+    }
+
+    const record = await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?',
+      [email, token]);
+    
+    if (!record || record.expires < Date.now()) {
+      return res.status(400).json({ error: "验证码错误或已过期" });
+    }
+
+    await getConnection().run('UPDATE users SET email = ? WHERE username = ?', [email, req.user]);
+    await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
+    
+    log('INFO', '用户绑定邮箱成功', { username: req.user, email });
+    res.json({ status: "ok" });
+  } catch (e) {
+    log('ERROR', '验证并绑定邮箱失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: "绑定失败，请稍后重试" });
   }
-  await getConnection().run('UPDATE users SET email = ? WHERE username = ?', [email, req.user]);
-  await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
-  res.json({ status: "ok" });
 });
 
 // 忘记密码

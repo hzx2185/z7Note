@@ -67,7 +67,6 @@ app.use((req, res, next) => {
   const publicPaths = [
     '/login.html', '/share.html', '/user.html',
     '/api/register', '/api/login', '/api/forgot-password', '/api/reset-password', '/api/verify-tfa',
-    '/api/send-bind-code', '/api/verify-bind-email',
     '/api/share/public-list', '/api/share/public/', '/api/share/info', '/api/share/attachment', '/api/share/blog-info',
     '/s/', '/health', '/test-backup.html',
     '/favicon.ico', '/css/', '/js/', '/cdn/',

@@ -120,14 +120,16 @@
             </div>
             <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
                 <div>
-                    <label style="color:var(--accent); margin-bottom:4px; display:block;">第一步：输入新邮箱</label>
-                    <input type="email" id="modal-email-input" placeholder="example@mail.com" style="width:100%; padding:10px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:6px; outline:none;">
+                    <label style="color:var(--gray); margin-bottom:4px; display:block; font-size:12px;">新邮箱地址</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="email" id="modal-email-input" placeholder="example@mail.com" style="flex:1; padding:10px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:6px; outline:none;">
+                        <button id="modal-send-btn" onclick="ui.modalSendCode()" style="background:var(--accent); color:white; border:none; padding:0 12px; border-radius:6px; cursor:pointer; font-size:12px; white-space:nowrap;">发送</button>
+                    </div>
                 </div>
-                <button id="modal-send-btn" onclick="ui.modalSendCode()" style="background:var(--accent); color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold;">发送验证码</button>
-                <div id="modal-step2" style="display:none; border-top:1px solid var(--border); padding-top:12px; margin-top:4px;">
-                    <label style="color:var(--accent); margin-bottom:4px; display:block;">第二步：输入6位验证码</label>
-                    <input type="text" id="modal-code-input" placeholder="输入验证码" maxlength="6" style="width:100%; padding:10px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:6px; outline:none; letter-spacing:2px; text-align:center;">
-                    <button onclick="ui.modalVerifyCode()" style="background:var(--green); color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; width:100%; margin-top:10px;">确认绑定</button>
+                <div id="modal-code-area" style="border-top:1px solid var(--border); padding-top:12px; margin-top:4px;">
+                    <label style="color:var(--gray); margin-bottom:4px; display:block; font-size:12px;">验证码</label>
+                    <input type="text" id="modal-code-input" placeholder="6位数字" maxlength="6" style="width:100%; padding:10px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:6px; outline:none; letter-spacing:2px; text-align:center;">
+                    <button onclick="ui.modalVerifyCode()" style="background:var(--green); color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; width:100%; margin-top:12px;">确认绑定</button>
                 </div>
             </div>
         </div>

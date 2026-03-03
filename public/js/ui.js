@@ -2643,11 +2643,9 @@ const UIManager = {
             modal.style.display = 'flex';
             document.getElementById('modal-email-input').value = '';
             document.getElementById('modal-code-input').value = '';
-            document.getElementById('modal-send-btn').textContent = '发送验证码';
-            document.getElementById('modal-send-btn').disabled = false;
-            // 确保隐藏第二步，直到第一步完成
-            const step2 = document.getElementById('modal-step2');
-            if (step2) step2.style.display = 'none';
+            const btn = document.getElementById('modal-send-btn');
+            btn.textContent = '发送';
+            btn.disabled = false;
         }
     },
 
@@ -2677,18 +2675,16 @@ const UIManager = {
 
             if (res.ok) {
                 this.showToast('验证码已发送');
-                // 显示第二步输入框
-                document.getElementById('modal-step2').style.display = 'block';
                 let count = 60;
-                btn.textContent = `${count}秒后重试`;
+                btn.textContent = `${count}s`;
                 const timer = setInterval(() => {
                     count--;
                     if (count <= 0) {
                         clearInterval(timer);
                         btn.disabled = false;
-                        btn.textContent = '发送验证码';
+                        btn.textContent = '发送';
                     } else {
-                        btn.textContent = `${count}秒后重试`;
+                        btn.textContent = `${count}s`;
                     }
                 }, 1000);
             } else {
