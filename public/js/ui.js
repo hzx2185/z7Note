@@ -15,6 +15,7 @@ const UIManager = {
     collapsedFolders: new Set(),
     isTogglingEditor: false,
     pendingEditorToggle: null,
+    currentLimit: 50, // 新增：保存当前的限制条目数
     _isInitializingEditor: false,
     _pendingEditorInit: null,
     _lastActiveId: null,
@@ -992,10 +993,20 @@ const UIManager = {
     },
 
     // 渲染笔记列表（支持文件夹分组与增量加载）
-    render(limit = 50, force = false, isLoadMore = false) {
+    render(limit, force = false, isLoadMore = false) {
         const q = document.getElementById('search').value.toLowerCase();
         const list = document.getElementById('list');
         if (!list) return;
+
+        // 如果传入了 limit，则更新 currentLimit；否则使用 currentLimit
+        if (limit !== undefined) {
+            this.currentLimit = limit;
+        } else {
+            limit = this.currentLimit || 50;
+        }
+
+        // 保存当前滚动位置 (仅在非加载更多模式下需要)
+        const currentScroll = list.scrollTop;
 
         // 如果笔记数据没有变化且不是强制渲染且不是加载更多，则跳过渲染
         const currentHash = this._calculateNotesHash(this.notes);
@@ -1096,6 +1107,11 @@ const UIManager = {
 
         list.appendChild(fragment);
 
+        // 恢复滚动位置
+        if (!isLoadMore && currentScroll > 0) {
+            list.scrollTop = currentScroll;
+        }
+
         if (filtered.length === 0 && !isLoadMore) {
             list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);">
                 <div style="font-size:40px;margin-bottom:16px">📝</div>
@@ -1194,12 +1210,14 @@ const UIManager = {
         list.addEventListener('dblclick', this._dblClickHandler);
     },
 
-    // 切换笔记
-    switch(id) {
+    // 切换笔记 (shouldScroll 参数控制是否滚动列表)
+    switch(id, shouldScroll = true) {
         const newId = id.toString();
 
         // 如果是同一个笔记，不重复初始化
         if (this.activeId === newId) {
+            // 依然更新激活状态（以防列表刚重绘完）
+            this.updateActiveStatus(shouldScroll);
             return;
         }
 
@@ -1241,7 +1259,7 @@ const UIManager = {
             }, 100);
 
             // 优化：仅更新列表中的激活状态
-            this.updateActiveStatus();
+            this.updateActiveStatus(shouldScroll);
         }
     },
 
@@ -1279,7 +1297,7 @@ const UIManager = {
     },
 
     // 更新列表中笔记的激活状态
-    updateActiveStatus() {
+    updateActiveStatus(shouldScroll = false) {
         const list = document.getElementById('list');
         if (!list) return;
 
@@ -1292,8 +1310,10 @@ const UIManager = {
         const activeEl = list.querySelector(`.note-item[data-id="${this.activeId}"]`);
         if (activeEl) {
             activeEl.classList.add('active');
-            // 确保激活项在视口内
-            activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // 确保激活项在视口内 (仅在需要时滚动)
+            if (shouldScroll) {
+                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
     },
 
@@ -1365,8 +1385,8 @@ const UIManager = {
                                     this.editor = null;
                                     this.updatePreview("");
 
-                                    // 切换到新笔记
-                                    this.switch(nextNoteId);
+                                    // 切换到新笔记 (静默切换，不滚动列表)
+                                    this.switch(nextNoteId, false);
                                 }
                             }
                         }

@@ -247,7 +247,8 @@ import wsManager from './websocket.js';
             if (validNotes.length > 0) {
                 const latest = validNotes.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
                 if (!ui.activeId || ui.activeId.toString() !== latest.id.toString()) {
-                    ui.switch(latest.id);
+                    // 初始加载时不滚动列表
+                    ui.switch(latest.id, false);
                 }
             } else {
                 await ui.create();
