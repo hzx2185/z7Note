@@ -2636,6 +2636,16 @@ const UIManager = {
         }
     },
 
+    // 显示邮箱模态框内部反馈
+    _showEmailModalFeedback(msg, isSuccess = false) {
+        const feedbackEl = document.getElementById('modal-email-feedback');
+        if (!feedbackEl) return;
+        feedbackEl.textContent = msg;
+        feedbackEl.style.display = 'block';
+        feedbackEl.style.color = isSuccess ? 'var(--green)' : 'var(--red)';
+        feedbackEl.style.background = isSuccess ? 'rgba(40, 167, 69, 0.1)' : 'rgba(220, 53, 69, 0.1)';
+    },
+
     // 打开邮箱绑定模态框
     promptBindEmail() {
         const modal = document.getElementById('email-modal');
@@ -2643,8 +2653,8 @@ const UIManager = {
             modal.style.display = 'flex';
             document.getElementById('modal-email-input').value = '';
             document.getElementById('modal-code-input').value = '';
-            const errorEl = document.getElementById('modal-email-error');
-            if (errorEl) errorEl.style.display = 'none';
+            const feedbackEl = document.getElementById('modal-email-feedback');
+            if (feedbackEl) feedbackEl.style.display = 'none';
             const btn = document.getElementById('modal-send-btn');
             btn.textContent = '发送';
             btn.disabled = false;
@@ -2660,20 +2670,14 @@ const UIManager = {
     // 发送验证码
     async modalSendCode() {
         const email = document.getElementById('modal-email-input').value.trim();
-        const errorEl = document.getElementById('modal-email-error');
-        if (errorEl) errorEl.style.display = 'none';
-
         if (!email || !email.includes('@')) {
-            if (errorEl) {
-                errorEl.textContent = '请输入正确的邮箱地址';
-                errorEl.style.display = 'block';
-            }
-            this.showToast('请输入正确的邮箱地址', false);
+            this._showEmailModalFeedback('请输入正确的邮箱地址', false);
             return;
         }
 
         const btn = document.getElementById('modal-send-btn');
         btn.disabled = true;
+        this._showEmailModalFeedback('正在发送...', true);
 
         try {
             const res = await fetch('/api/send-bind-code', {
@@ -2683,7 +2687,7 @@ const UIManager = {
             });
 
             if (res.ok) {
-                this.showToast('验证码已发送', true);
+                this._showEmailModalFeedback('验证码已发送至您的邮箱', true);
                 let count = 60;
                 btn.textContent = `${count}s`;
                 const timer = setInterval(() => {
@@ -2698,15 +2702,11 @@ const UIManager = {
                 }, 1000);
             } else {
                 const data = await res.json();
-                if (errorEl) {
-                    errorEl.textContent = data.error || '发送失败';
-                    errorEl.style.display = 'block';
-                }
-                this.showToast(data.error || '发送失败', false);
+                this._showEmailModalFeedback(data.error || '发送失败', false);
                 btn.disabled = false;
             }
         } catch (e) {
-            this.showToast('发送失败', false);
+            this._showEmailModalFeedback('发送失败，请检查网络', false);
             btn.disabled = false;
         }
     },
@@ -2715,15 +2715,9 @@ const UIManager = {
     async modalVerifyCode() {
         const email = document.getElementById('modal-email-input').value.trim();
         const code = document.getElementById('modal-code-input').value.trim();
-        const errorEl = document.getElementById('modal-email-error');
-        if (errorEl) errorEl.style.display = 'none';
 
         if (!email || !code) {
-            if (errorEl) {
-                errorEl.textContent = '请填写邮箱和验证码';
-                errorEl.style.display = 'block';
-            }
-            this.showToast('请填写邮箱和验证码', false);
+            this._showEmailModalFeedback('请填写邮箱和验证码', false);
             return;
         }
 
@@ -2731,6 +2725,7 @@ const UIManager = {
         const originalText = btn.textContent;
         btn.disabled = true;
         btn.textContent = '验证中...';
+        this._showEmailModalFeedback('正在验证验证码...', true);
 
         try {
             const res = await fetch('/api/verify-bind-email', {
@@ -2747,19 +2742,18 @@ const UIManager = {
             }
 
             if (res.ok) {
-                this.showToast('邮箱绑定成功', true);
-                this.closeEmailModal();
-                this.loadUserInfo();
+                this._showEmailModalFeedback('绑定成功！正在关闭...', true);
+                setTimeout(() => {
+                    this.showToast('邮箱绑定成功', true);
+                    this.closeEmailModal();
+                    this.loadUserInfo();
+                }, 1000);
             } else {
-                if (errorEl) {
-                    errorEl.textContent = data.error || '验证失败';
-                    errorEl.style.display = 'block';
-                }
-                this.showToast(data.error || '验证失败', false);
+                this._showEmailModalFeedback(data.error || '验证失败', false);
             }
         } catch (e) {
             console.error('[VerifyEmail] 请求异常:', e);
-            this.showToast('无法连接到服务器，请检查网络', false);
+            this._showEmailModalFeedback('无法连接到服务器', false);
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
