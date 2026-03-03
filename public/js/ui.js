@@ -2743,12 +2743,9 @@ const UIManager = {
 
             // 先检查响应类型
             const contentType = res.headers.get('content-type');
-            let data;
+            let data = {};
             if (contentType && contentType.includes('application/json')) {
                 data = await res.json();
-            } else {
-                // 如果不是 JSON（如 502 HTML），抛出特定错误
-                throw new Error(`服务器响应异常 (${res.status})`);
             }
 
             if (res.ok) {
@@ -2759,11 +2756,15 @@ const UIManager = {
                     this.loadUserInfo();
                 }, 1000);
             } else {
-                this._showEmailModalFeedback(data.error || '验证失败', false);
+                // 只有非 400 状态码才记录 warn，减少预期的业务错误日志
+                if (res.status !== 400) {
+                    console.warn(`[VerifyEmail] 服务器返回状态异常: ${res.status}`);
+                }
+                this._showEmailModalFeedback(data.error || `验证失败 (${res.status})`, false);
             }
         } catch (e) {
-            console.error('[VerifyEmail] 请求异常:', e);
-            this._showEmailModalFeedback(e.message || '无法连接到服务器', false);
+            console.error('[VerifyEmail] 网络连接或解析异常:', e);
+            this._showEmailModalFeedback('无法连接到服务器，请检查网络', false);
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
