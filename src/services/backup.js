@@ -70,12 +70,15 @@ async function createBackupArchive(incremental = true, includeAttachments = fals
 async function performBackup(backupConfig) {
   try {
     const isIncremental = backupConfig.backupMode !== 'full';
-    const includeAttachments = !!backupConfig.includeAttachments;
+    const includeAttachments = backupConfig.includeAttachments === true || backupConfig.includeAttachments === 1 || backupConfig.includeAttachments === 'true' || backupConfig.includeAttachments === '1';
+    const sendEmail = backupConfig.sendEmail === true || backupConfig.sendEmail === 1 || backupConfig.sendEmail === 'true' || backupConfig.sendEmail === '1';
+    const useWebDAV = backupConfig.useWebDAV === true || backupConfig.useWebDAV === 1 || backupConfig.useWebDAV === 'true' || backupConfig.useWebDAV === '1';
+
     const { fileName, filePath, size } = await createBackupArchive(isIncremental, includeAttachments);
     console.log(`[备份] 创建备份文件: ${fileName}, 大小: ${(size / 1024).toFixed(2)} KB`);
 
     // 发送邮件（不发送附件，避免超时）
-    if (backupConfig.sendEmail && backupConfig.emailAddress) {
+    if (sendEmail && backupConfig.emailAddress) {
       try {
         let emailText = `备份模式: ${isIncremental?'增量':'全量'}
 附件: ${includeAttachments?'包含':'不包含'}
@@ -83,7 +86,7 @@ async function performBackup(backupConfig) {
 文件大小: ${(size / 1024 / 1024).toFixed(2)} MB
 备份时间: ${new Date().toLocaleString('zh-CN')}`;
 
-        if (backupConfig.useWebDAV && backupConfig.webdavUrl) {
+        if (useWebDAV && backupConfig.webdavUrl) {
           emailText += `\n\n备份已上传到 WebDAV`;
         }
 
@@ -99,7 +102,7 @@ async function performBackup(backupConfig) {
     }
 
     // 上传到 WebDAV
-    if (backupConfig.useWebDAV && backupConfig.webdavUrl) {
+    if (useWebDAV && backupConfig.webdavUrl) {
       try {
         const client = WebDAVHelper.getClient(backupConfig.webdavUrl, backupConfig.webdavUser, backupConfig.webdavPassword);
         
@@ -191,14 +194,16 @@ async function getBackupConfig() {
 
 async function updateBackupConfig(configData) {
   const db = getConnection();
-  await db.run(`INSERT INTO backup_config (id, schedule, includeAttachments, backupMode, sendEmail, emailAddress, useWebDAV, webdavUrl, webdavUser, webdavPassword)
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
+  await db.run(`INSERT INTO backup_config (id, schedule, includeAttachments, backupMode, sendEmail, emailAddress, useWebDAV, webdavUrl, webdavUser, webdavPassword, keepCount)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
     schedule=excluded.schedule, includeAttachments=excluded.includeAttachments, backupMode=excluded.backupMode,
     sendEmail=excluded.sendEmail, emailAddress=excluded.emailAddress, useWebDAV=excluded.useWebDAV, 
-    webdavUrl=excluded.webdavUrl, webdavUser=excluded.webdavUser, webdavPassword=excluded.webdavPassword`, 
+    webdavUrl=excluded.webdavUrl, webdavUser=excluded.webdavUser, webdavPassword=excluded.webdavPassword,
+    keepCount=excluded.keepCount`, 
     [configData.schedule, configData.includeAttachments?1:0, configData.backupMode, 
      configData.sendEmail?1:0, configData.emailAddress, configData.useWebDAV?1:0, 
-     configData.webdavUrl, configData.webdavUser, configData.webdavPassword]);
+     configData.webdavUrl, configData.webdavUser, configData.webdavPassword,
+     parseInt(configData.keepCount) || 0]);
   
   const newConfig = await getBackupConfig();
   setupCron(newConfig);

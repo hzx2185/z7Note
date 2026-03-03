@@ -103,6 +103,7 @@
           <div class="form-group" style="flex:1"><label>公司</label><input name="org"></div>
           <div class="form-group" style="flex:1"><label>职位</label><input name="title"></div>
         </div>
+        <div class="form-group"><label>备注</label><textarea name="note" rows="2" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:13px;outline:none;resize:vertical"></textarea></div>
         <div class="modal-actions" style="padding:10px 0 0;border:none">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
           <button type="button" class="btn btn-secondary" id="history-btn" onclick="showHistory()" style="display:none">历史</button>
@@ -195,7 +196,9 @@
         const res = await fetch(`/api/contacts/${id}`);
         const c = await res.json();
         if (c) {
-          ['n_family','n_given','fn','org','title'].forEach(k => f[k].value = c[k]||'');
+          ['n_family','n_given','fn','org','title','note'].forEach(k => {
+            if (f[k]) f[k].value = c[k]||'';
+          });
           try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
           try { JSON.parse(c.email||'[]').forEach(m => addItem('email', m.type, m.value)); } catch(e){}
         }

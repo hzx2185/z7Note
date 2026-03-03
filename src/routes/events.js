@@ -381,12 +381,25 @@ router.delete('/:id', async (req, res) => {
 router.get('/calendar/day/:date', async (req, res) => {
   try {
     // 解析日期字符串 (YYYY-MM-DD)
-      const [year, month, day] = req.params.date.split("-").map(Number);
-      // 使用本地时区创建日期对象
-      const d = new Date(year, month - 1, day);
+    const [year, month, day] = req.params.date.split("-").map(Number);
+    // 使用本地时区创建日期对象
+    const d = new Date(year, month - 1, day);
     const start = Math.floor(d.setHours(0,0,0,0)/1000), end = Math.floor(d.setHours(23,59,59,999)/1000);
+    
+    // 判断是否为"今天"
+    const now = new Date();
+    const isToday = now.getFullYear() === year && now.getMonth() === (month - 1) && now.getDate() === day;
+    
+    // 查询待办：如果请求的是今天，则包含没有截止日期的待办
+    let todoQuery = 'SELECT * FROM todos WHERE username=? AND dueDate>=? AND dueDate<=?';
+    let todoParams = [req.user, start, end];
+    
+    if (isToday) {
+      todoQuery = 'SELECT * FROM todos WHERE username=? AND (dueDate IS NULL OR (dueDate>=? AND dueDate<=?))';
+    }
+
     const [todos, rawEvents, notes] = await Promise.all([
-      getConnection().all('SELECT * FROM todos WHERE username=? AND dueDate>=? AND dueDate<=?', [req.user, start, end]),
+      getConnection().all(todoQuery, todoParams),
       getConnection().all('SELECT * FROM events WHERE username=? AND (recurrence IS NOT NULL OR (startTime<=? AND (endTime>=? OR endTime IS NULL)))', [req.user, end, start]),
       getConnection().all('SELECT * FROM notes WHERE username=? AND deleted=0 AND updatedAt >= ?', [req.user, start*1000])
     ]);

@@ -150,9 +150,9 @@ html.dark-mode .cm-s-default .cm-header { color: var(--accent); }
 }
 
 .CodeMirror-linenumber { 
-    padding: 0 8px !important; 
+    padding: 0 4px !important; 
     color: var(--gray) !important;
-    min-width: 30px !important;
+    min-width: 20px !important;
     text-align: right !important;
 }
 

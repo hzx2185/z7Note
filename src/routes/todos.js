@@ -176,8 +176,15 @@ router.put('/api/todos/:id', async (req, res) => {
 
 // 删除待办事项
 router.delete('/api/todos/:id', async (req, res) => {
+  const db = getConnection();
+  const now = Math.floor(Date.now() / 1000);
+  
   try {
-    const result = await getConnection().run(
+    // 记录删除记录供 CalDAV 同步
+    await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
+        [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, req.params.id, 'todo', now]);
+
+    const result = await db.run(
       'DELETE FROM todos WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );

@@ -202,7 +202,6 @@ const CalendarApp = (function() {
 
     async getDayData(dateStr) {
       try {
-        console.log('[API] 获取单天数据:', dateStr);
         const response = await fetch(`/api/events/calendar/day/${dateStr}?t=${Date.now()}`, {
           credentials: 'include'
         });
@@ -425,7 +424,6 @@ if (elements.sidebarSearch) {
         
         if (response.ok) {
           const allTodos = await response.json();
-          console.log('[sidebar] 加载所有待办事项:', allTodos.length);
           
           // 更新待办事项数量
           const incompleteCountEl = document.getElementById('incomplete-count');
@@ -434,8 +432,10 @@ if (elements.sidebarSearch) {
             incompleteCountEl.textContent = incompleteTodos.length;
           }
           
-          // 清空现有的待办数据
-          state.sidebar.dataByDate.clear();
+          // 只清空现有的待办数据，保留事件和笔记
+          state.sidebar.dataByDate.forEach(data => {
+            data.todos = [];
+          });
           
           // 将待办事项按状态和日期分组
           allTodos.forEach(todo => {
@@ -456,6 +456,9 @@ if (elements.sidebarSearch) {
               dayData.todos.push(todo);
             }
           });
+          
+          // 加载完成后立即渲染
+          this.render();
         }
       } catch (error) {
         console.error('加载待办事项失败:', error);
@@ -498,9 +501,7 @@ if (elements.sidebarSearch) {
     // 加载单天数据
     async loadDayData(dateStr) {
       try {
-        console.log('[sidebar] 加载单天数据:', dateStr);
         const data = await api.getDayData(dateStr);
-        console.log('[sidebar] 收到单天数据:', {
           todos: data.todos.length,
           events: data.events.length,
           notes: data.notes.length
@@ -515,7 +516,6 @@ if (elements.sidebarSearch) {
         dayData.events = data.events;
         dayData.notes = data.notes;
 
-        console.log('[sidebar] 数据已设置:', dayData);
       } catch (error) {
         console.error('加载单天数据失败:', error);
       }
@@ -1064,7 +1064,6 @@ if (elements.sidebarSearch) {
     // 刷新数据
     async refresh() {
       const dateStr = utils.formatDate(state.selectedDate);
-      console.log('[sidebar] 刷新数据:', dateStr);
       await this.loadDayData(dateStr);
       this.render();
       this.loadStats();
@@ -1975,8 +1974,11 @@ if (elements.sidebarSearch) {
 
         this.closeModals();
 
-        // 强制重新从服务器同步侧栏当天数据和月视图
-        await sidebarRenderer.refresh();
+        // 如果不是待办标签，可能需要刷新侧栏以确保其他类型数据的展示（尽管此处主要是待办）
+        if (state.sidebar.currentTab !== 'todo') {
+          await sidebarRenderer.refresh();
+        }
+        
         await dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
       } catch (error) {
         console.error('保存待办事项失败:', error);
@@ -2066,12 +2068,8 @@ if (elements.sidebarSearch) {
         // 更新未完成待办事项数量
         await sidebarRenderer.updateIncompleteCount();
         
-        // 如果当前在待办标签页，重新加载待办数据
-        if (state.sidebar.currentTab === 'todo') {
-          await sidebarRenderer.loadAllTodos();
-        }
-        
-        sidebarRenderer.refresh();
+        // 重新加载所有待办数据，确保侧边栏中所有日期的待办状态都是最新的
+        await sidebarRenderer.loadAllTodos();
       } catch (error) {
         console.error('切换待办状态失败:', error);
       }
@@ -2086,12 +2084,10 @@ if (elements.sidebarSearch) {
         // 更新未完成待办事项数量
         await sidebarRenderer.updateIncompleteCount();
         
-        // 如果当前在待办标签页，重新加载待办数据
-        if (state.sidebar.currentTab === 'todo') {
-          await sidebarRenderer.loadAllTodos();
-        }
+        // 重新加载所有待办数据
+        await sidebarRenderer.loadAllTodos();
         
-        sidebarRenderer.refresh();
+        // 更新月视图
         dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
       } catch (error) {
         console.error('删除待办事项失败:', error);
@@ -2487,7 +2483,6 @@ if (elements.sidebarSearch) {
   }
 
   async function init() {
-    console.log('[CalendarApp] 初始化开始...');
 
     const isLoggedIn = await checkAuth();
     const loginRequiredEl = document.getElementById('login-required');
@@ -2496,7 +2491,6 @@ if (elements.sidebarSearch) {
       if (loginRequiredEl) {
         loginRequiredEl.classList.add('show');
       }
-      console.log('[CalendarApp] 未登录，停止初始化');
       return;
     }
 
@@ -2725,19 +2719,16 @@ if (elements.sidebarSearch) {
 
     const mobileToggle = document.getElementById('mobile-calendar-toggle');
     if (mobileToggle) {
-      console.log('[CalendarApp] 绑定手机端折叠切换按钮');
       mobileToggle.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
         const mv = document.getElementById('month-view');
         if (mv) {
           mv.classList.toggle('collapsed');
-          console.log('[CalendarApp] 切换折叠状态:', mv.classList.contains('collapsed'));
         }
       };
     }
 
-    console.log('[CalendarApp] 初始化完成');
   }
 
   // ==================== 公开API ====================

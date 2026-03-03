@@ -16,21 +16,8 @@ const router = express.Router();
 // 更新备份配置
 router.post('/api/admin/backup/config', async (req, res) => {
   try {
-    const c = req.body;
-    const keepCount = parseInt(c.keepCount) || 0;
-    await getConnection().run(
-      `INSERT INTO backup_config (id, schedule, includeAttachments, backupMode, sendEmail, emailAddress, useWebDAV, webdavUrl, webdavUser, webdavPassword, keepCount)
-      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
-      schedule=excluded.schedule, includeAttachments=excluded.includeAttachments, backupMode=excluded.backupMode,
-      sendEmail=excluded.sendEmail, emailAddress=excluded.emailAddress, useWebDAV=excluded.useWebDAV,
-      webdavUrl=excluded.webdavUrl, webdavUser=excluded.webdavUser, webdavPassword=excluded.webdavPassword,
-      keepCount=excluded.keepCount`,
-      [c.schedule, c.includeAttachments?1:0, c.backupMode, c.sendEmail?1:0, c.emailAddress,
-       c.useWebDAV?1:0, c.webdavUrl, c.webdavUser, c.webdavPassword, keepCount]
-    );
-    const newConfig = await getConnection().get('SELECT * FROM backup_config WHERE id = 1');
-    const { setupCron } = require('../services/backup');
-    setupCron(newConfig);
+    const { updateBackupConfig } = require('../services/backup');
+    await updateBackupConfig(req.body);
     res.json({ status: "ok" });
   } catch (e) {
     console.error('[Admin] 保存备份配置失败:', e);

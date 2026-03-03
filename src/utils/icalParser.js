@@ -107,8 +107,8 @@ class ICalParser {
         // 解析属性 - 只在主组件中解析，且不在闹钟组件内
         if (currentComponent && currentItem && !inAlarm) {
           const unescapedValue = this.unescapeText(value);
-          if (['DTSTART', 'DTEND', 'DUE', 'CREATED', 'LAST-MODIFIED'].includes(key)) {
-            currentItem[key] = { value: value, params }; // 日期保留原始字符串供进一步解析
+          if (['DTSTART', 'DTEND', 'DUE', 'CREATED', 'LAST-MODIFIED', 'DESCRIPTION'].includes(key)) {
+            currentItem[key] = { value: unescapedValue, params }; 
           } else {
             currentItem[key] = unescapedValue;
           }
@@ -134,11 +134,12 @@ class ICalParser {
     // 处理日期时间属性（可能包含参数）
     const startTime = item['DTSTART'];
     const endTime = item['DTEND'];
+    const descObj = item['DESCRIPTION'];
 
     const event = {
       id: this.extractUID(item.UID),
       title: item.SUMMARY,
-      description: item.DESCRIPTION,
+      description: this.parseDescription(descObj),
       startTime: startTime && typeof startTime === 'object'
         ? this.parseDateTime(startTime.value, startTime.params)
         : this.parseDateTime(startTime),
@@ -260,11 +261,12 @@ class ICalParser {
   static parseTodo(item) {
     // 处理截止日期（可能包含参数）
     const dueDate = item['DUE'];
+    const descObj = item['DESCRIPTION'];
 
     const todo = {
       id: this.extractUID(item.UID),
       title: item.SUMMARY,
-      description: item.DESCRIPTION,
+      description: this.parseDescription(descObj),
       dueDate: dueDate && typeof dueDate === 'object'
         ? this.parseDateTime(dueDate.value, dueDate.params)
         : this.parseDateTime(dueDate),
@@ -281,15 +283,63 @@ class ICalParser {
    * 解析笔记（VJOURNAL）
    */
   static parseNote(item) {
+    const descObj = item['DESCRIPTION'];
     const note = {
       id: this.extractUID(item.UID),
       title: item.SUMMARY || '未命名',
-      content: item.DESCRIPTION || '',
+      content: this.parseDescription(descObj) || '',
       createdAt: Math.floor(Date.now() / 1000),
       updatedAt: Math.floor(Date.now() / 1000)
     };
   
     return note;
+  }
+
+  /**
+   * 统一解析描述字段，处理 Thunderbird 的 HTML 前缀和双内容（HTML/Text）合并问题
+   */
+  static parseDescription(desc) {
+    if (!desc) return '';
+    const isObj = typeof desc === 'object';
+    let value = isObj ? desc.value : desc;
+    const params = isObj ? (desc.params || {}) : {};
+    
+    if (!value) return '';
+
+    // 1. 识别是否为 HTML 增强格式
+    const isHtml = (params.FMTTYPE && params.FMTTYPE.toLowerCase().includes('html')) || 
+                   value.toLowerCase().startsWith('text/html,');
+
+    if (isHtml || value.includes('":')) {
+      // 尝试剥离 text/html, 前缀
+      if (value.toLowerCase().startsWith('text/htmlSource')) {
+        // 容错处理
+      }
+      if (value.toLowerCase().startsWith('text/html,')) {
+        value = value.substring(10);
+      }
+
+      // 2. 查找双重内容分隔符 ": 
+      // Thunderbird 格式通常是 "HTML部分":纯文本部分
+      // 即使没有前缀，如果内容符合 A":A 或 <html>":A，则说明是双重内容
+      const delimiterIndex = value.lastIndexOf('":');
+      if (delimiterIndex !== -1) {
+        const part1 = value.substring(0, delimiterIndex);
+        const part2 = value.substring(delimiterIndex + 2);
+        
+        // 如果两部分相同，或者第一部分包含明显的 HTML 转义/标签，或者是清除后的残留
+        if (part1 === part2 || part1.includes('%3C') || part1.includes('<') || part2 === '') {
+          return part2;
+        }
+      }
+    }
+
+    // 3. 处理包裹的引号
+    if (value.startsWith('"') && value.endsWith('"')) {
+      value = value.substring(1, value.length - 1);
+    }
+
+    return value;
   }
 
   /**
