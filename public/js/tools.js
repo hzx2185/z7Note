@@ -648,37 +648,98 @@ const ToolsManager = {
     importData(e) {
         const file = e.target.files[0];
         if (!file) return;
+
+        ui.showToast("正在导入...", true);
+
         const reader = new FileReader();
         reader.onload = async (ev) => {
             try {
                 const imported = JSON.parse(ev.target.result);
-                const items = Array.isArray(imported) ? imported : [imported];
+                const items = Array.isArray(imported) ? imported : (imported.notes ? imported.notes : [imported]);
+
+                if (items.length === 0) {
+                    ui.showToast("文件中没有可导入的数据", false);
+                    return;
+                }
+
                 let newNotes = [...ui.notes];
+                let importCount = 0;
+                let duplicateCount = 0;
+
+                // 检查重复的辅助函数
+                const isDuplicate = (item) => {
+                    return ui.notes.some(existingNote => {
+                        // 如果有相同的ID，认为是重复
+                        if (item.id && existingNote.id === item.id) return true;
+                        // 如果标题和内容都相同，认为是重复
+                        if (item.title === existingNote.title && item.content === existingNote.content) return true;
+                        return false;
+                    });
+                };
+
                 items.forEach(item => {
                     if (!item.content) return;
+
+                    // 检查是否重复
+                    if (isDuplicate(item)) {
+                        duplicateCount++;
+                        return;
+                    }
+
                     newNotes.unshift({
                         ...item,
                         id: Date.now().toString() + Math.random(),
                         isUnsynced: true,
                         deleted: false
                     });
+                    importCount++;
                 });
+
+                if (importCount === 0 && duplicateCount > 0) {
+                    ui.showToast(`所有笔记已存在，跳过 ${duplicateCount} 条重复`, false);
+                    return;
+                }
+
+                if (importCount === 0) {
+                    ui.showToast("没有有效的笔记内容", false);
+                    return;
+                }
+
                 ui.notes = newNotes;
 
                 // 保存到云端
+                let savedCount = 0;
                 for (const note of newNotes) {
                     if (note.isUnsynced) {
-                        await ui.saveToCloud(note);
+                        try {
+                            await ui.saveToCloud(note);
+                            savedCount++;
+                        } catch (err) {
+                            console.error('保存笔记失败:', err);
+                        }
                     }
                 }
 
                 ui.render();
-                ui.showToast("导入成功");
+
+                // 显示导入结果
+                let message = `导入成功：${importCount} 条笔记，已保存 ${savedCount} 条`;
+                if (duplicateCount > 0) {
+                    message += `，跳过 ${duplicateCount} 条重复`;
+                }
+                ui.showToast(message);
             } catch (err) {
-                ui.showToast("格式错误", false);
+                console.error('导入失败:', err);
+                ui.showToast("导入失败：文件格式错误", false);
             }
         };
+        reader.onerror = () => {
+            ui.showToast("文件读取失败", false);
+        };
         reader.readAsText(file);
+
+        // 清空文件输入，允许重复导入同一文件
+        e.target.value = '';
     }
 };
 

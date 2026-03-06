@@ -333,8 +333,18 @@
         <div class="form-group"><label>标题 *</label><input name="title" required></div>
         <div class="form-group"><label>描述</label><textarea name="description" rows="2"></textarea></div>
         <div class="form-row">
+          <div class="form-group"><label>全天</label><select name="allDay" id="todo-allDay-select"><option value="false">否</option><option value="true" selected>是</option></select></div>
           <div class="form-group"><label>优先级</label><select name="priority"><option value="1">低</option><option value="2" selected>中</option><option value="3">高</option></select></div>
-          <div class="form-group"><label>截止日期</label><input type="date" name="dueDate"></div>
+        </div>
+        <!-- 非全天待办的时间选择器 -->
+        <div class="form-row" id="todo-datetime-row" style="display:none">
+          <div class="form-group"><label>开始时间</label><input type="datetime-local" name="startTime"></div>
+          <div class="form-group"><label>截止时间</label><input type="datetime-local" name="dueDate"></div>
+        </div>
+        <!-- 全天待办的日期选择器 -->
+        <div class="form-row" id="todo-date-row">
+          <div class="form-group"><label>开始日期</label><input type="date" name="startDate"></div>
+          <div class="form-group"><label>截止日期</label><input type="date" name="dueDateDate"></div>
         </div>
         <div class="form-group"><label>提醒方式</label>
           <select name="reminderTime"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
@@ -361,9 +371,14 @@
           <div class="form-row">
             <div class="form-group"><label>全天</label><select name="allDay" id="allDay-select"><option value="false">否</option><option value="true">是</option></select></div>
             <div class="form-group"><label>重复</label>
-              <select name="recurrence" id="recurrence-select">
-                <option value="">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option>
-              </select>
+              <div style="display:flex;gap:4px;align-items:center">
+                <select name="recurrence" id="recurrence-select" style="flex:1">
+                  <option value="">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option>
+                </select>
+                <label id="lunar-checkbox-wrap" style="display:none; font-size:11px; white-space:nowrap; cursor:pointer">
+                  <input type="checkbox" name="isLunar" id="isLunar-checkbox" style="width:12px; height:12px; vertical-align:middle"> 农历
+                </label>
+              </div>
             </div>
           </div>
           <!-- 非全天事件的时间选择器 -->
@@ -420,7 +435,22 @@
     </div>
   </div>
 
+  <!-- 确认对话框 (精简版) -->
+  <div class="modal" id="confirm-modal">
+    <div class="modal-content" style="max-width: 280px;">
+      <div class="modal-body" style="padding: 20px 16px;">
+        <p id="confirm-message" style="margin-bottom: 20px; text-align: center; font-weight: 500; line-height: 1.5;"></p>
+        <div class="modal-actions" style="padding: 0; border: none; background: transparent !important; gap: 8px !important; margin-top: 0 !important;">
+          <button type="button" class="btn" id="confirm-cancel" style="flex: 1;">取消</button>
+          <button type="button" class="btn btn-primary" id="confirm-ok" style="flex: 1; background: var(--red) !important;">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <input type="file" id="ics-file-input" accept=".ics" style="display:none">
+  <input type="file" id="todos-file-input" accept=".json" style="display:none">
+  <input type="file" id="reminders-file-input" accept=".json" style="display:none">
   <script type="module">
     import wsManager from '/js/websocket.js';
     window.wsManager = wsManager;

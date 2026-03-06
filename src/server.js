@@ -3,6 +3,17 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const nodeCron = require('node-cron');
 
+// 全局异常处理 - 防止进程崩溃
+process.on('uncaughtException', (error) => {
+  console.error('[UncaughtException]', error);
+  // 不退出进程,继续运行
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UnhandledRejection]', reason);
+  // 不退出进程,继续运行
+});
+
 // 为 Express 添加 WebDAV 方法支持
 const webdavMethods = ['PROPFIND', 'REPORT', 'MKCALENDAR', 'MKCOL', 'COPY', 'MOVE', 'LOCK', 'UNLOCK'];
 webdavMethods.forEach(method => {

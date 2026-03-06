@@ -1737,6 +1737,184 @@ const UIManager = {
         this.showToast(`已成功移动 ${selectedCount} 篇笔记`);
     },
 
+    // 检查重复笔记
+    async checkDuplicates() {
+        // 创建去重选项对话框
+        const existingDialog = document.getElementById('deduplicate-dialog');
+        if (existingDialog) {
+            existingDialog.remove();
+            return;
+        }
+
+        const dialog = document.createElement('div');
+        dialog.id = 'deduplicate-dialog';
+        dialog.setAttribute('data-ms-editor', 'false');
+        dialog.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10000;
+            min-width: 320px;
+        `;
+
+        dialog.innerHTML = `
+            <h3 style="margin: 0 0 16px 0; font-size: 16px; color: var(--text);">选择去重模式</h3>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 4px; transition: background 0.15s;">
+                    <input type="radio" name="dedup-mode" value="both" checked autocomplete="off" style="width: 16px; height: 16px; accent-color: var(--accent);">
+                    <div>
+                        <div style="font-weight: 500; color: var(--text);">标题和内容完全相同</div>
+                        <div style="font-size: 12px; color: var(--gray);">最严格的去重，推荐使用</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 4px; transition: background 0.15s;">
+                    <input type="radio" name="dedup-mode" value="title" autocomplete="off" style="width: 16px; height: 16px; accent-color: var(--accent);">
+                    <div>
+                        <div style="font-weight: 500; color: var(--text);">仅标题相同</div>
+                        <div style="font-size: 12px; color: var(--gray);">内容可能不同，谨慎使用</div>
+                    </div>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: 4px; transition: background 0.15s;">
+                    <input type="radio" name="dedup-mode" value="content" autocomplete="off" style="width: 16px; height: 16px; accent-color: var(--accent);">
+                    <div>
+                        <div style="font-weight: 500; color: var(--text);">仅内容相同</div>
+                        <div style="font-size: 12px; color: var(--gray);">标题可能不同，谨慎使用</div>
+                    </div>
+                </label>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end;">
+                <button id="dedup-cancel" style="padding: 8px 16px; border: 1px solid var(--border); background: var(--side); color: var(--text); border-radius: 4px; cursor: pointer; font-size: 13px;">取消</button>
+                <button id="dedup-confirm" style="padding: 8px 16px; border: none; background: var(--accent); color: white; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">开始检查</button>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        // 添加悬停效果
+        dialog.querySelectorAll('label').forEach(label => {
+            label.onmouseenter = () => label.style.background = 'var(--side)';
+            label.onmouseleave = () => label.style.background = 'transparent';
+        });
+
+        // 取消按钮
+        dialog.querySelector('#dedup-cancel').onclick = () => dialog.remove();
+
+        // 确认按钮
+        dialog.querySelector('#dedup-confirm').onclick = () => {
+            const mode = dialog.querySelector('input[name="dedup-mode"]:checked').value;
+            if (overlay) overlay.remove();
+            dialog.remove();
+            
+            // 使用 setTimeout 延迟执行，避开 DOM 移除后的即时变动，给浏览器扩展留出处理时间
+            setTimeout(async () => {
+                await this.performDuplicateCheck(mode);
+            }, 100);
+        };
+
+        // 点击背景关闭
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+        `;
+        overlay.onclick = () => {
+            dialog.remove();
+            overlay.remove();
+        };
+        document.body.appendChild(overlay);
+    },
+
+    async performDuplicateCheck(mode) {
+        try {
+            this.showToast('正在检查重复笔记...', true);
+
+            const response = await fetch(`/api/notes/duplicates?mode=${mode}`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error('检查失败');
+            }
+
+            const result = await response.json();
+
+            if (result.totalDuplicates === 0) {
+                this.showToast('没有发现重复笔记');
+                return;
+            }
+
+            // 显示重复笔记详情
+            const modeText = {
+                'both': '标题和内容都相同',
+                'title': '标题相同',
+                'content': '内容相同'
+            };
+
+            let message = `发现 ${result.totalDuplicates} 组重复笔记（${modeText[mode]}）：\n\n`;
+            result.duplicates.slice(0, 5).forEach((dup, index) => {
+                const title = dup.title || '(无标题)';
+                message += `${index + 1}. "${title}" - ${dup.count} 个重复\n`;
+            });
+
+            if (result.duplicates.length > 5) {
+                message += `\n... 还有 ${result.duplicates.length - 5} 组`;
+            }
+
+            message += '\n\n是否执行批量去重？\n（将保留每组中最新的笔记，其他的移至回收站）';
+
+            if (confirm(message)) {
+                await this.deduplicateNotes(mode);
+            }
+        } catch (error) {
+            console.error('检查重复笔记失败:', error);
+            this.showToast('检查失败，请稍后重试', false);
+        }
+    },
+
+    // 批量去重笔记
+    async deduplicateNotes(mode = 'both') {
+        try {
+            this.showToast('正在执行去重...', true);
+
+            const response = await fetch('/api/notes/deduplicate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({ mode })
+            });
+
+            if (!response.ok) {
+                throw new Error('去重失败');
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.showToast(`去重完成！处理了 ${result.groupsProcessed} 组，移除了 ${result.deletedCount} 个重复笔记`);
+
+                // 重新加载笔记列表
+                const res = await fetch('/api/files');
+                if (res.ok) {
+                    this.notes = await res.json();
+                    this.render();
+                }
+            }
+        } catch (error) {
+            console.error('批量去重失败:', error);
+            this.showToast('去重失败，请稍后重试', false);
+        }
+    },
+
     // 滚动控制 - 使用适配器接口
     scrollControl(pos) {
         if (!this.editor) return;
@@ -2693,8 +2871,18 @@ const UIManager = {
                 body: JSON.stringify({ email })
             });
 
+            // 先检查响应类型
+            const contentType = res.headers.get('content-type');
+            let data = {};
+            if (contentType && contentType.includes('application/json')) {
+                data = await res.json();
+            }
+
             if (res.ok) {
                 this._showEmailModalFeedback('验证码已发送至您的邮箱', true);
+                const codeArea = document.getElementById('modal-code-area');
+                if (codeArea) codeArea.style.display = 'block';
+                
                 let count = 60;
                 btn.textContent = `${count}s`;
                 const timer = setInterval(() => {
@@ -2708,11 +2896,20 @@ const UIManager = {
                     }
                 }, 1000);
             } else {
-                const data = await res.json();
+                // 处理会话过期的情况
+                if (data.error && data.error.includes('会话已过期')) {
+                    this._showEmailModalFeedback('会话已过期，请重新登录', false);
+                    setTimeout(() => {
+                        window.location.href = '/login.html';
+                    }, 1500);
+                    return;
+                }
+                
                 this._showEmailModalFeedback(data.error || '发送失败', false);
                 btn.disabled = false;
             }
         } catch (e) {
+            console.error('[SendCode] 网络连接或解析异常:', e);
             this._showEmailModalFeedback('发送失败，请检查网络', false);
             btn.disabled = false;
         }
@@ -2720,6 +2917,12 @@ const UIManager = {
 
     // 验证并绑定邮箱
     async modalVerifyCode() {
+        // 防止重复点击
+        const btn = document.getElementById('modal-verify-btn');
+        if (btn.disabled) {
+            return;
+        }
+
         const email = document.getElementById('modal-email-input').value.trim();
         const code = document.getElementById('modal-code-input').value.trim();
 
@@ -2728,11 +2931,12 @@ const UIManager = {
             return;
         }
 
-        const btn = document.querySelector('#modal-code-area button');
         const originalText = btn.textContent;
         btn.disabled = true;
         btn.textContent = '验证中...';
         this._showEmailModalFeedback('正在验证验证码...', true);
+
+        let shouldKeepDisabled = false;
 
         try {
             const res = await fetch('/api/verify-bind-email', {
@@ -2742,32 +2946,50 @@ const UIManager = {
             });
 
             // 先检查响应类型
-            const contentType = res.headers.get('content-type');
             let data = {};
+            const contentType = res.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
-                data = await res.json();
+                try {
+                    data = await res.json();
+                } catch (e) {
+                    console.error('[VerifyEmail] JSON 解析失败:', e);
+                }
             }
 
             if (res.ok) {
-                this._showEmailModalFeedback('绑定成功！正在关闭...', true);
+                this._showEmailModalFeedback('绑定成功！正在刷新...', true);
+                shouldKeepDisabled = true;
                 setTimeout(() => {
-                    this.showToast('邮箱绑定成功', true);
-                    this.closeEmailModal();
-                    this.loadUserInfo();
+                    window.location.reload();
                 }, 1000);
             } else {
-                // 只有非 400 状态码才记录 warn，减少预期的业务错误日志
-                if (res.status !== 400) {
-                    console.warn(`[VerifyEmail] 服务器返回状态异常: ${res.status}`);
+                // 处理 502 等非业务错误
+                if (res.status === 502) {
+                    this._showEmailModalFeedback('服务器响应异常 (502)，请稍后重试', false);
+                    console.error(`[VerifyEmail] 服务器返回 502 错误`);
+                } else if (res.status === 401 || (data.error && data.error.includes('会话已过期'))) {
+                    // 处理会话过期的情况
+                    this._showEmailModalFeedback('会话已过期，请重新登录', false);
+                    shouldKeepDisabled = true;
+                    setTimeout(() => {
+                        window.location.href = '/login.html';
+                    }, 1500);
+                } else if (res.status === 400) {
+                    // 处理 400 错误（验证码错误等）
+                    this._showEmailModalFeedback(data.error || '验证码错误', false);
+                } else {
+                    this._showEmailModalFeedback(data.error || `验证失败 (${res.status})`, false);
                 }
-                this._showEmailModalFeedback(data.error || `验证失败 (${res.status})`, false);
             }
         } catch (e) {
             console.error('[VerifyEmail] 网络连接或解析异常:', e);
             this._showEmailModalFeedback('无法连接到服务器，请检查网络', false);
         } finally {
-            btn.disabled = false;
-            btn.textContent = originalText;
+            // 只有在不需要保持禁用状态时才重新启用按钮
+            if (!shouldKeepDisabled) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
         }
     },
 

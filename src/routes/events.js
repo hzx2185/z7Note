@@ -3,37 +3,9 @@ const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
 const TimeHelper = require('../utils/timeHelper');
 const { broadcast } = require('./ws');
+const lunarHelper = require('../utils/lunarHelper');
 
 const router = express.Router();
-
-/**
- * 稳健的时间戳解析逻辑
- * 确保所有进入数据库的时间戳均为 Unix 秒 (10位数字)
- */
-const safeParseTs = (val) => {
-  if (val === undefined) return undefined;
-  if (val === null || val === '') return null;
-  
-  let ts;
-  if (typeof val === 'number') {
-    ts = val;
-  } else {
-    // 尝试解析日期字符串
-    const d = new Date(val);
-    ts = d.getTime();
-    if (isNaN(ts)) {
-      // 尝试解析纯数字字符串
-      if (/^\d+$/.test(val)) {
-        ts = parseInt(val);
-      } else {
-        return null;
-      }
-    }
-  }
-  
-  // 关键：如果大于 10^11 (100,000,000,000)，判定为毫秒并转换
-  return ts > 100000000000 ? Math.floor(ts / 1000) : ts;
-};
 
 // 获取事件列表
 router.get('/', async (req, res) => {
@@ -96,6 +68,35 @@ router.delete('/batch', async (req, res) => {
   }
 });
 
+// 批量展开农历重复事件 (供月视图标记使用)
+router.get('/expand-lunar', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) return res.status(400).json({ error: '缺少范围参数' });
+
+    const start = parseInt(startDate);
+    const end = parseInt(endDate);
+    const db = getConnection();
+    
+    // 只查询带有农历重复规则的事件
+    const lunarMasters = await db.all(
+      "SELECT * FROM events WHERE username = ? AND recurrence LIKE '%lunar_%'",
+      [req.user]
+    );
+
+    const allExpanded = [];
+    for (const master of lunarMasters) {
+      const instances = lunarHelper.generateLunarRecurringEvents(master, start, end);
+      allExpanded.push(...instances);
+    }
+
+    res.json(allExpanded);
+  } catch (e) {
+    log('ERROR', '批量展开农历事件失败', { error: e.message });
+    res.status(500).json({ error: '展开失败' });
+  }
+});
+
 // 数据规范化/修复
 router.post('/format', async (req, res) => {
   try {
@@ -128,8 +129,8 @@ router.post('/format', async (req, res) => {
           }
       } else {
           // 非全天事件：修复可能存在的时间戳位数问题
-          newStart = safeParseTs(event.startTime);
-          newEnd = safeParseTs(event.endTime);
+          newStart = TimeHelper.parseToTs(event.startTime);
+          newEnd = TimeHelper.parseToTs(event.endTime);
           if (newStart !== event.startTime || newEnd !== event.endTime) {
               needsUpdate = true;
           }
@@ -195,75 +196,131 @@ router.post('/import', async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
 
     let imported = 0;
-    
+    let skipped = 0;
+    let updated = 0;
+
     // 导入事件
     for (const e of parsed.events) {
       const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
-      const existing = await db.get('SELECT id FROM events WHERE id = ? AND username = ?', [e.id, username]);
-      if (existing) {
-        await db.run(
-          'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
-          [e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, e.id, username]
-        );
-      } else {
-        await db.run(
-          'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-          [e.id, username, e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, now]
+
+      // 1. 检查是否存在相同的事件（通过ID）
+      let existing;
+      if (e.id) {
+        existing = await db.get('SELECT id, subscriptionId FROM events WHERE id = ? AND username = ?', [e.id, username]);
+      }
+
+      // 2. 如果没有ID或ID不存在，检查是否有相同标题和开始时间的事件
+      // 关键：同时检查常规事件和订阅事件
+      if (!existing && e.title && e.startTime) {
+        existing = await db.get(
+          'SELECT id, subscriptionId FROM events WHERE username = ? AND title = ? AND startTime = ?',
+          [username, e.title, e.startTime]
         );
       }
-      imported++;
+
+      if (existing) {
+        // 如果该事件属于订阅日历，直接跳过，不要导入为本地事件
+        if (existing.subscriptionId) {
+          skipped++;
+          continue;
+        }
+
+        // 更新现有本地事件
+        await db.run(
+          'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
+          [e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, existing.id, username]
+        );
+        updated++;
+      } else {
+        // 插入新事件
+        const eventId = e.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.run(
+          'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+          [eventId, username, e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, now]
+        );
+        imported++;
+      }
     }
 
     // 导入待办
     for (const t of parsed.todos) {
-      const existing = await db.get('SELECT id FROM todos WHERE id = ? AND username = ?', [t.id, username]);
-      if (existing) {
-        await db.run(
-          'UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?',
-          [t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, t.id, username]
-        );
-      } else {
-        await db.run(
-          'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
-          [t.id, username, t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, now]
+      // 检查是否存在相同的待办（通过ID或标题+截止日期）
+      let existing;
+      if (t.id) {
+        existing = await db.get('SELECT id FROM todos WHERE id = ? AND username = ?', [t.id, username]);
+      }
+
+      // 如果没有ID或ID不存在，检查是否有相同标题和截止日期的待办
+      if (!existing && t.title && t.dueDate) {
+        existing = await db.get(
+          'SELECT id FROM todos WHERE username = ? AND title = ? AND dueDate = ?',
+          [username, t.title, t.dueDate]
         );
       }
-      imported++;
+
+      if (existing) {
+        // 更新现有待办
+        await db.run(
+          'UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?',
+          [t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, existing.id, username]
+        );
+        updated++;
+        skipped++;
+      } else {
+        // 插入新待办
+        const todoId = t.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.run(
+          'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
+          [todoId, username, t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, now]
+        );
+        imported++;
+      }
     }
 
     broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
-    res.json({ success: true, imported, skipped: 0 });
+    res.json({ success: true, imported, skipped, updated });
   } catch (e) {
     log('ERROR', '导入日历失败', { error: e.message });
     res.status(500).json({ error: '导入失败: ' + e.message });
   }
 });
 
-// 清理重复事件 (基于标题和开始时间)
+// 清理重复事件 (基于标题、开始时间、结束时间、重复规则等全项匹配)
 router.post('/cleanup-duplicates', async (req, res) => {
   try {
     const db = getConnection();
     const username = req.user;
     
-    // 查找重复组：标题、开始时间完全相同
+    // 查找重复组：标题、开始时间、结束时间、重复规则、全天标志完全相同
     const duplicates = await db.all(`
-      SELECT title, startTime, COUNT(*) as count 
+      SELECT title, startTime, endTime, recurrence, allDay, COUNT(*) as count 
       FROM events 
       WHERE username = ? 
-      GROUP BY title, startTime 
+      GROUP BY title, startTime, endTime, COALESCE(recurrence, ''), allDay 
       HAVING count > 1
     `, [username]);
     
     let deletedCount = 0;
+    const now = Math.floor(Date.now() / 1000);
+    
     for (const dup of duplicates) {
-      // 对每一组重复项，保留 ID 最新（通常是最后存入）的一条，删除其他的
+      // 对每一组重复项，保留 ID 最新（更新时间最近）的一条，删除其他的
       const items = await db.all(
-        'SELECT id FROM events WHERE username = ? AND title = ? AND startTime = ? ORDER BY updatedAt DESC',
-        [username, dup.title, dup.startTime]
+        `SELECT id FROM events 
+         WHERE username = ? AND title = ? AND startTime = ? 
+         AND (endTime = ? OR (endTime IS NULL AND ? IS NULL))
+         AND (recurrence = ? OR (recurrence IS NULL AND ? IS NULL))
+         AND allDay = ?
+         ORDER BY updatedAt DESC`,
+        [username, dup.title, dup.startTime, dup.endTime, dup.endTime, dup.recurrence, dup.recurrence, dup.allDay]
       );
       
       const idsToDelete = items.slice(1).map(item => item.id);
       if (idsToDelete.length > 0) {
+        for (const id of idsToDelete) {
+          await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
+              [Date.now().toString(36) + Math.random().toString(36).slice(2), username, id, 'event', now]);
+        }
         const placeholders = idsToDelete.map(() => '?').join(',');
         await db.run(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [username, ...idsToDelete]);
         deletedCount += idsToDelete.length;
@@ -293,7 +350,7 @@ router.post('/', async (req, res) => {
     const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd } = req.body;
     if (!title) return res.status(400).json({ error: '标题不能为空' });
 
-    const startTs = safeParseTs(startTime);
+    const startTs = TimeHelper.parseToTs(startTime);
     if (!startTs) return res.status(400).json({ error: '开始时间无效' });
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -302,9 +359,9 @@ router.post('/', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, req.user, title.trim(), description || '',
-        startTs, safeParseTs(endTime), allDay ? 1 : 0, '#2563eb',
+        startTs, TimeHelper.parseToTs(endTime), allDay ? 1 : 0, '#2563eb',
         reminderEmail ? 1 : 0, reminderBrowser ? 1 : 0, reminderCaldav ? 1 : 0,
-        recurrence || null, safeParseTs(recurrenceEnd),
+        recurrence || null, TimeHelper.parseToTs(recurrenceEnd),
         Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)
       ]
     );
@@ -328,14 +385,14 @@ router.put('/:id', async (req, res) => {
     const fields = {
       title: (v) => v?.trim(),
       description: (v) => v,
-      startTime: safeParseTs,
-      endTime: safeParseTs,
+      startTime: TimeHelper.parseToTs,
+      endTime: TimeHelper.parseToTs,
       allDay: (v) => v ? 1 : 0,
       reminderEmail: (v) => v ? 1 : 0,
       reminderBrowser: (v) => v ? 1 : 0,
       reminderCaldav: (v) => v ? 1 : 0,
       recurrence: (v) => v || null,
-      recurrenceEnd: safeParseTs
+      recurrenceEnd: TimeHelper.parseToTs
     };
 
     for (const [key, parser] of Object.entries(fields)) {
@@ -443,6 +500,14 @@ router.get('/calendar/day/:date', async (req, res) => {
         // 重复事件，展开
         try {
           const r = typeof e.recurrence === 'string' ? JSON.parse(e.recurrence) : e.recurrence;
+          
+          // 处理农历重复
+          if (r.type && r.type.startsWith('lunar_')) {
+            const lunarEvents = lunarHelper.generateLunarRecurringEvents(e, start, end);
+            expandedEvents.push(...lunarEvents);
+            return;
+          }
+
           let cur = new Date(e.startTime * 1000);
           const maxEnd = e.recurrenceEnd ? new Date(e.recurrenceEnd * 1000) : dayEnd;
           

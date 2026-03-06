@@ -2,6 +2,7 @@ const express = require('express');
 const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
 const { broadcast } = require('./ws');
+const TimeHelper = require('../utils/timeHelper');
 
 const router = express.Router();
 
@@ -61,7 +62,7 @@ router.get('/api/todos/:id', async (req, res) => {
 // 创建待办事项
 router.post('/api/todos', async (req, res) => {
   try {
-    const { title, description, completed, priority, dueDate, noteId, reminderEmail, reminderBrowser } = req.body;
+    const { title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser } = req.body;
 
     // 数据验证
     if (!title || !title.trim()) {
@@ -80,14 +81,10 @@ router.post('/api/todos', async (req, res) => {
       return res.status(400).json({ error: '优先级必须是1、2或3' });
     }
 
-    if (dueDate && isNaN(parseInt(dueDate))) {
-      return res.status(400).json({ error: '无效的截止日期' });
-    }
-
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
     await getConnection().run(
-      `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, noteId, reminderEmail, reminderBrowser, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         req.user,
@@ -95,7 +92,9 @@ router.post('/api/todos', async (req, res) => {
         description ? description.trim() : '',
         completed ? 1 : 0,
         priority !== undefined ? parseInt(priority) : 1,
-        dueDate ? parseInt(dueDate) : null,
+        TimeHelper.parseToTs(dueDate),
+        TimeHelper.parseToTs(startTime),
+        allDay !== undefined ? (allDay ? 1 : 0) : 1,
         noteId || null,
         reminderEmail !== undefined ? (reminderEmail ? 1 : 0) : 0,
         reminderBrowser !== undefined ? (reminderBrowser ? 1 : 0) : 1,
@@ -136,7 +135,9 @@ router.put('/api/todos/:id', async (req, res) => {
       description: (v) => v,
       completed: (v) => v !== undefined ? (v ? 1 : 0) : undefined,
       priority: (v) => v !== undefined ? parseInt(v) : undefined,
-      dueDate: (v) => v !== undefined ? (v ? parseInt(v) : null) : undefined,
+      dueDate: TimeHelper.parseToTs,
+      startTime: TimeHelper.parseToTs,
+      allDay: (v) => v !== undefined ? (v ? 1 : 0) : undefined,
       noteId: (v) => v !== undefined ? v : undefined,
       reminderEmail: (v) => v !== undefined ? (v ? 1 : 0) : undefined,
       reminderBrowser: (v) => v !== undefined ? (v ? 1 : 0) : undefined
@@ -231,6 +232,69 @@ router.patch('/api/todos/:id/toggle', async (req, res) => {
   } catch (e) {
     log('ERROR', '切换待办事项状态失败', { username: req.user, todoId: req.params.id, error: e.message });
     res.status(500).json({ error: '操作失败' });
+  }
+});
+
+// 导入待办事项
+router.post('/api/todos/import', async (req, res) => {
+  try {
+    const { todosData } = req.body;
+    if (!todosData || !todosData.todos || !Array.isArray(todosData.todos)) {
+      return res.status(400).json({ error: '无效的待办数据格式' });
+    }
+
+    const db = getConnection();
+    const username = req.user;
+    const now = Math.floor(Date.now() / 1000);
+
+    let imported = 0;
+    let skipped = 0;
+    let updated = 0;
+
+    for (const todo of todosData.todos) {
+      if (!todo.title) continue;
+
+      // 检查是否存在相同的待办（通过ID或标题+截止日期）
+      let existing;
+      if (todo.id) {
+        existing = await db.get('SELECT id FROM todos WHERE id = ? AND username = ?', [todo.id, username]);
+      }
+
+      // 如果没有ID或ID不存在，检查是否有相同标题和截止日期的待办
+      const dueDateTs = TimeHelper.parseToTs(todo.dueDate);
+      
+      if (!existing && todo.title && dueDateTs) {
+        existing = await db.get(
+          'SELECT id FROM todos WHERE username = ? AND title = ? AND dueDate = ?',
+          [username, todo.title, dueDateTs]
+        );
+      }
+
+      if (existing) {
+        // 更新现有待办
+        await db.run(
+          'UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?',
+          [todo.title, todo.description || '', todo.priority || 5, dueDateTs, todo.completed ? 1 : 0, now, existing.id, username]
+        );
+        updated++;
+        skipped++;
+      } else {
+        // 插入新待办
+        const todoId = todo.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        await db.run(
+          'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
+          [todoId, username, todo.title, todo.description || '', todo.priority || 5, dueDateTs, todo.completed ? 1 : 0, now, now]
+        );
+        imported++;
+      }
+    }
+
+    broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
+    log('INFO', '导入待办事项', { username, imported, skipped, updated });
+    res.json({ success: true, imported, skipped, updated });
+  } catch (e) {
+    log('ERROR', '导入待办事项失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '导入失败: ' + e.message });
   }
 });
 

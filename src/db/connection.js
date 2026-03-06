@@ -14,21 +14,24 @@ let db = null;
 
 async function connect() {
   if (db) return db;
-  
+
   await fs.mkdir(config.paths.uploads, { recursive: true });
   await fs.mkdir(config.paths.backups, { recursive: true });
-  
+
   db = await open(dbConfig);
-  
+
   // 性能优化设置
   await db.exec('PRAGMA journal_mode = WAL');
   await db.exec('PRAGMA synchronous = NORMAL');
   await db.exec('PRAGMA foreign_keys = ON');
-  await db.exec('PRAGMA busy_timeout = 5000'); // 增加繁忙超时时间至5秒
-  
+  await db.exec('PRAGMA busy_timeout = 10000'); // 增加繁忙超时时间至10秒
+  await db.exec('PRAGMA cache_size = -64000'); // 64MB缓存
+  await db.exec('PRAGMA temp_store = MEMORY'); // 临时存储使用内存
+  await db.exec('PRAGMA mmap_size = 268435456'); // 256MB内存映射
+
   // 创建表结构
   await createTables();
-  
+
   return db;
 }
 
@@ -78,7 +81,8 @@ async function createTables() {
     useWebDAV INTEGER,
     webdavUrl TEXT,
     webdavUser TEXT,
-    webdavPassword TEXT
+    webdavPassword TEXT,
+    keepCount INTEGER DEFAULT 0
   )`);
 
   // 用户备份配置表
@@ -192,6 +196,9 @@ async function migrateSchema() {
   if (!backupColumns.includes('backupMode')) {
     await db.exec("ALTER TABLE backup_config ADD COLUMN backupMode TEXT DEFAULT 'incremental'");
   }
+  if (!backupColumns.includes('keepCount')) {
+    await db.exec("ALTER TABLE backup_config ADD COLUMN keepCount INTEGER DEFAULT 0");
+  }
 }
 
 async function runMigrations() {
@@ -225,6 +232,9 @@ async function runMigrations() {
 }
 
 function getConnection() {
+  if (!db) {
+    throw new Error('Database not connected');
+  }
   return db;
 }
 

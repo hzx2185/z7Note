@@ -123,7 +123,7 @@ function generateLunarRecurringEvents(masterEvent, startDate, endDate) {
         ...masterEvent,
         id: `${masterEvent.id}_${currentTimestamp}`,
         isRecurringInstance: true,
-        parentEventId: masterEvent.id,
+        _originalId: masterEvent.id, // 关键：与前端逻辑对齐
         startTime: currentTimestamp,
         endTime: masterEvent.endTime ? currentTimestamp + (masterEvent.endTime - masterEvent.startTime) : null
       };

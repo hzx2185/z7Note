@@ -195,6 +195,136 @@ router.delete('/api/notes/:id/permanent', async (req, res) => {
   }
 });
 
+// 查找重复笔记 - 必须在 /api/notes/:id 之前
+router.get('/api/notes/duplicates', async (req, res) => {
+  try {
+    const db = getConnection();
+    const username = req.user;
+    const { mode = 'both' } = req.query; // both, title, content
+
+    let duplicates;
+
+    if (mode === 'title') {
+      // 只按标题查找重复
+      duplicates = await db.all(`
+        SELECT title, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(updatedAt) as timestamps
+        FROM notes
+        WHERE username = ? AND deleted = 0
+        GROUP BY title
+        HAVING count > 1
+        ORDER BY count DESC
+      `, [username]);
+    } else if (mode === 'content') {
+      // 只按内容查找重复
+      duplicates = await db.all(`
+        SELECT content, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(updatedAt) as timestamps
+        FROM notes
+        WHERE username = ? AND deleted = 0
+        GROUP BY content
+        HAVING count > 1
+        ORDER BY count DESC
+      `, [username]);
+    } else {
+      // 按标题和内容都相同查找重复（默认）
+      duplicates = await db.all(`
+        SELECT title, content, COUNT(*) as count, GROUP_CONCAT(id) as ids, GROUP_CONCAT(updatedAt) as timestamps
+        FROM notes
+        WHERE username = ? AND deleted = 0
+        GROUP BY title, content
+        HAVING count > 1
+        ORDER BY count DESC
+      `, [username]);
+    }
+
+    // 解析结果
+    const result = duplicates.map(dup => ({
+      title: dup.title || '(无标题)',
+      content: dup.content ? dup.content.substring(0, 100) + (dup.content.length > 100 ? '...' : '') : '(无内容)',
+      count: dup.count,
+      ids: dup.ids.split(','),
+      timestamps: dup.timestamps.split(',').map(t => parseInt(t))
+    }));
+
+    res.json({ duplicates: result, totalDuplicates: duplicates.length, mode });
+  } catch (e) {
+    log('ERROR', '查找重复笔记失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '查找失败' });
+  }
+});
+
+// 批量去重笔记
+router.post('/api/notes/deduplicate', async (req, res) => {
+  try {
+    const db = getConnection();
+    const username = req.user;
+    const { mode = 'both' } = req.body; // both, title, content
+
+    let duplicates;
+
+    if (mode === 'title') {
+      // 只按标题查找重复
+      duplicates = await db.all(`
+        SELECT title, COUNT(*) as count, GROUP_CONCAT(id) as ids
+        FROM notes
+        WHERE username = ? AND deleted = 0
+        GROUP BY title
+        HAVING count > 1
+      `, [username]);
+    } else if (mode === 'content') {
+      // 只按内容查找重复
+      duplicates = await db.all(`
+        SELECT content, COUNT(*) as count, GROUP_CONCAT(id) as ids
+        FROM notes
+        WHERE username = ? AND deleted = 0
+        GROUP BY content
+        HAVING count > 1
+      `, [username]);
+    } else {
+      // 按标题和内容都相同查找重复（默认）
+      duplicates = await db.all(`
+        SELECT title, content, COUNT(*) as count, GROUP_CONCAT(id) as ids
+        FROM notes
+        WHERE username = ? AND deleted = 0
+        GROUP BY title, content
+        HAVING count > 1
+      `, [username]);
+    }
+
+    let deletedCount = 0;
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const dup of duplicates) {
+      const ids = dup.ids.split(',');
+      // 保留最新的一个（updatedAt最大），删除其他的
+      const notes = await db.all(
+        `SELECT id, updatedAt FROM notes WHERE id IN (${ids.map(() => '?').join(',')}) AND username = ?`,
+        [...ids, username]
+      );
+
+      // 按更新时间排序，保留最新的
+      notes.sort((a, b) => b.updatedAt - a.updatedAt);
+      const idsToDelete = notes.slice(1).map(n => n.id);
+
+      if (idsToDelete.length > 0) {
+        // 移动到回收站而不是直接删除
+        const placeholders = idsToDelete.map(() => '?').join(',');
+        await db.run(
+          `UPDATE notes SET deleted = 1, updatedAt = ? WHERE id IN (${placeholders}) AND username = ?`,
+          [now, ...idsToDelete, username]
+        );
+        deletedCount += idsToDelete.length;
+      }
+    }
+
+    broadcastNotesUpdate(username);
+    log('INFO', '批量去重笔记', { username, deletedCount, mode });
+    res.json({ success: true, deletedCount, groupsProcessed: duplicates.length, mode });
+  } catch (e) {
+    log('ERROR', '批量去重笔记失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '去重失败' });
+  }
+});
+
 // 获取单个笔记
 router.get('/api/notes/:id', async (req, res) => {
   try {

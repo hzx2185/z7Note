@@ -502,10 +502,6 @@ if (elements.sidebarSearch) {
     async loadDayData(dateStr) {
       try {
         const data = await api.getDayData(dateStr);
-          todos: data.todos.length,
-          events: data.events.length,
-          notes: data.notes.length
-        });
 
         if (!state.sidebar.dataByDate.has(dateStr)) {
           state.sidebar.dataByDate.set(dateStr, { todos: [], events: [], notes: [] });
@@ -932,6 +928,26 @@ if (elements.sidebarSearch) {
         metaHtml += `<span class="todo-priority ${utils.getPriorityClass(todo.priority)}">${utils.getPriorityLabel(todo.priority)}</span>`;
       }
 
+      // 处理时间显示
+      let timeHtml = '';
+      if (todo.allDay) {
+        if (todo.dueDate) {
+          const dateStr = utils.formatDate(new Date(todo.dueDate * 1000));
+          timeHtml = `<span style="margin-left:8px; font-size:10px; color:var(--gray)">截止: ${dateStr}</span>`;
+        }
+      } else {
+        const formatTime = (ts) => {
+          const d = new Date(ts * 1000);
+          return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        };
+        
+        if (todo.startTime && todo.dueDate) {
+          timeHtml = `<span style="margin-left:8px; font-size:10px; color:var(--gray)">${formatTime(todo.startTime)} - ${formatTime(todo.dueDate)}</span>`;
+        } else if (todo.dueDate) {
+          timeHtml = `<span style="margin-left:8px; font-size:10px; color:var(--gray)">截止: ${formatTime(todo.dueDate)}</span>`;
+        }
+      }
+
       let checkboxHtml = '<input type="checkbox" class="todo-checkbox" ' + (todo.completed ? 'checked' : '') + '>';
       if (state.batchSelect.enabled) {
         const key = `todo_${todo.id}`;
@@ -942,7 +958,10 @@ if (elements.sidebarSearch) {
       item.innerHTML = `
         ${checkboxHtml}
         <div class="todo-content" data-id="${todo.id}">
-          <div class="todo-title ${todo.completed ? 'completed' : ''}">${utils.escapeHtml(todo.title)}</div>
+          <div style="display:flex; align-items:center; justify-content:space-between">
+            <div class="todo-title ${todo.completed ? 'completed' : ''}">${utils.escapeHtml(todo.title)}</div>
+            ${timeHtml}
+          </div>
           ${metaHtml ? `<div class="todo-meta">${metaHtml}</div>` : ''}
         </div>
         <div class="todo-actions">
@@ -1662,13 +1681,12 @@ if (elements.sidebarSearch) {
         alert('请先选择要删除的项目');
         return;
       }
-      
-      if (!confirm(`确定要删除选中的 ${state.batchSelect.selectedItems.size} 个项目吗？`)) {
+
+      if (!(await this.showConfirm(`确定要删除选中的 ${state.batchSelect.selectedItems.size} 个项目吗？`))) {
         return;
       }
-      
-      try {
-        const eventIds = [];
+
+      try {        const eventIds = [];
         const todoIds = [];
         const noteIds = [];
 
@@ -1709,10 +1727,10 @@ if (elements.sidebarSearch) {
     },
 
     async clearAllEvents() {
-      if (!confirm('确定要清空所有日历事件吗？此操作不可恢复！')) {
+      if (!(await this.showConfirm('确定要清空所有日历事件吗？此操作不可恢复！'))) {
         return;
       }
-      if (!confirm('请再次确认：清空全部日历事件？')) {
+      if (!(await this.showConfirm('请再次确认：清空全部日历事件？'))) {
         return;
       }
 
@@ -1722,7 +1740,7 @@ if (elements.sidebarSearch) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ all: true })
         });
-        
+
         if (res.ok) {
           state.batchSelect.selectedItems.clear();
           if (state.batchSelect.enabled) this.toggleBatchSelect();
@@ -1739,16 +1757,16 @@ if (elements.sidebarSearch) {
     },
 
     async formatData() {
-      if (!confirm('将对所有日历事件进行规范化修复（修复时间戳格式、清理非法字符等），是否继续？')) {
+      if (!(await this.showConfirm('将对所有日历事件进行规范化修复（修复时间戳格式、清理非法字符等），是否继续？'))) {
         return;
       }
-      
+
       try {
         const res = await fetch('/api/events/format', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (res.ok) {
           const result = await res.json();
           alert(`修复完成！共修复 ${result.fixedCount} 条数据。`);
@@ -1764,16 +1782,16 @@ if (elements.sidebarSearch) {
     },
 
     async cleanupDuplicates() {
-      if (!confirm('将自动查找并删除标题和时间完全相同的重复事件，是否继续？')) {
+      if (!(await this.showConfirm('将自动查找并删除标题和时间完全相同的重复事件，是否继续？'))) {
         return;
       }
-      
+
       try {
         const res = await fetch('/api/events/cleanup-duplicates', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         });
-        
+
         if (res.ok) {
           const result = await res.json();
           alert(`去重完成！共删除 ${result.deletedCount} 条重复数据。`);
@@ -1786,8 +1804,7 @@ if (elements.sidebarSearch) {
       } catch (error) {
         alert('操作失败: ' + error.message);
       }
-    },
-    
+    },    
 
     prevMonth() {
       state.currentDate.setMonth(state.currentDate.getMonth() - 1);
@@ -1849,8 +1866,18 @@ if (elements.sidebarSearch) {
         // 新建模式：明确初始化所有字段
         elements.todoForm.reset();
         
+        const dateStr = utils.formatDate(state.selectedDate);
+        const allDayInput = elements.todoForm.querySelector('[name="allDay"]');
+        const startDateInput = elements.todoForm.querySelector('[name="startDate"]');
+        const dueDateDateInput = elements.todoForm.querySelector('[name="dueDateDate"]');
+        const startTimeInput = elements.todoForm.querySelector('[name="startTime"]');
         const dueDateInput = elements.todoForm.querySelector('[name="dueDate"]');
-        dueDateInput.value = utils.formatDate(state.selectedDate);
+        
+        allDayInput.value = 'true';
+        startDateInput.value = dateStr;
+        dueDateDateInput.value = dateStr;
+        startTimeInput.value = `${dateStr}T09:00`;
+        dueDateInput.value = `${dateStr}T18:00`;
         
         // 明确初始化checkbox状态
         const reminderEmailInput = elements.todoForm.querySelector('[name="reminderEmail"]');
@@ -1860,8 +1887,25 @@ if (elements.sidebarSearch) {
         
         const modalTitle = elements.todoModal.querySelector('.modal-title');
         if (modalTitle) modalTitle.textContent = '添加待办事项';
+
+        // 初始化显示状态
+        handlers.updateTodoAllDayUI(true);
       }
       elements.todoModal.classList.add('show');
+    },
+
+    // 更新待办事项全天选项的UI显示
+    updateTodoAllDayUI(isAllDay) {
+      const datetimeRow = document.getElementById('todo-datetime-row');
+      const dateRow = document.getElementById('todo-date-row');
+      
+      if (isAllDay) {
+        datetimeRow.style.display = 'none';
+        dateRow.style.display = 'flex';
+      } else {
+        datetimeRow.style.display = 'flex';
+        dateRow.style.display = 'none';
+      }
     },
 
     openEventModal() {
@@ -1874,6 +1918,7 @@ if (elements.sidebarSearch) {
         const allDayInput = elements.eventForm.querySelector('[name="allDay"]');
         const startDateInput = elements.eventForm.querySelector('[name="startDate"]');
         const endDateInput = elements.eventForm.querySelector('[name="endDate"]');
+        const recurrenceEndInput = elements.eventForm.querySelector('[name="recurrenceEnd"]');
 
         const dateStr = utils.formatDate(state.selectedDate);
         startTimeInput.value = `${dateStr}T09:00`;
@@ -1881,6 +1926,12 @@ if (elements.sidebarSearch) {
         allDayInput.value = 'true';
         startDateInput.value = dateStr;
         endDateInput.value = dateStr;
+        
+        // 初始化重复事件的结束日期为当前日期加上一年
+        const defaultEndDate = new Date();
+        defaultEndDate.setFullYear(defaultEndDate.getFullYear() + 1);
+        const recurrenceEndDateStr = utils.formatDate(defaultEndDate);
+        recurrenceEndInput.value = recurrenceEndDateStr;
         
         // 明确初始化checkbox状态
         const reminderEmailInput = elements.eventForm.querySelector('[name="reminderEmail"]');
@@ -1944,13 +1995,32 @@ if (elements.sidebarSearch) {
       const formData = new FormData(elements.todoForm);
       const data = Object.fromEntries(formData.entries());
 
-      // 显式处理复选框，因为未勾选的复选框不会出现在 FormData 中
+      // 显式处理复选框
       data.reminderEmail = elements.todoForm.querySelector('[name="reminderEmail"]')?.checked ? 1 : 0;
       data.reminderBrowser = elements.todoForm.querySelector('[name="reminderBrowser"]')?.checked ? 1 : 0;
+      
+      data.allDay = data.allDay === 'true';
 
-      if (data.dueDate) {
-        data.dueDate = Math.floor(new Date(data.dueDate).getTime() / 1000);
+      if (data.allDay) {
+        // 全天待办: 统一使用 UTC 00:00:00 存储
+        if (data.startDate) {
+          const [y, m, d] = data.startDate.split('-').map(Number);
+          data.startTime = Math.floor(Date.UTC(y, m - 1, d) / 1000);
+        }
+        if (data.dueDateDate) {
+          const [y, m, d] = data.dueDateDate.split('-').map(Number);
+          data.dueDate = Math.floor(Date.UTC(y, m - 1, d) / 1000);
+        }
+      } else {
+        // 非全天待办:使用时间选择器的值
+        if (data.startTime) {
+          data.startTime = Math.floor(new Date(data.startTime).getTime() / 1000);
+        }
+        if (data.dueDate) {
+          data.dueDate = Math.floor(new Date(data.dueDate).getTime() / 1000);
+        }
       }
+
       if (data.priority) {
         data.priority = parseInt(data.priority);
       }
@@ -2028,7 +2098,9 @@ if (elements.sidebarSearch) {
         }
 
       if (data.recurrence) {
-        data.recurrence = JSON.stringify({ type: data.recurrence });
+        const isLunar = elements.eventForm.querySelector('[name="isLunar"]')?.checked;
+        const recurrenceType = isLunar ? `lunar_${data.recurrence}` : data.recurrence;
+        data.recurrence = JSON.stringify({ type: recurrenceType });
         if (data.recurrenceEnd) {
           data.recurrenceEnd = Math.floor(new Date(data.recurrenceEnd).getTime() / 1000);
         }
@@ -2061,6 +2133,23 @@ if (elements.sidebarSearch) {
       }
     },
 
+    // 显示精简确认框
+    showConfirm(message) {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-modal');
+        const msgEl = document.getElementById('confirm-message');
+        const okBtn = document.getElementById('confirm-ok');
+        const cancelBtn = document.getElementById('confirm-cancel');
+
+        msgEl.textContent = message;
+        modal.classList.add('show');
+
+        okBtn.onclick = () => { modal.classList.remove('show'); resolve(true); };
+        cancelBtn.onclick = () => { modal.classList.remove('show'); resolve(false); };
+        modal.onclick = (e) => { if (e.target === modal) { modal.classList.remove('show'); resolve(false); } };
+      });
+    },
+
     async toggleTodo(id, completed) {
       try {
         await api.toggleTodo(id, completed);
@@ -2076,7 +2165,7 @@ if (elements.sidebarSearch) {
     },
 
     async deleteTodo(id) {
-      if (!confirm('确定要删除这个待办事项吗？')) return;
+      if (!(await this.showConfirm('确定要删除这个待办事项吗？'))) return;
 
       try {
         await api.deleteTodo(id);
@@ -2098,7 +2187,21 @@ if (elements.sidebarSearch) {
       elements.todoForm.querySelector('[name="title"]').value = todo.title || '';
       elements.todoForm.querySelector('[name="description"]').value = todo.description || '';
       elements.todoForm.querySelector('[name="priority"]').value = todo.priority || 2;
-      elements.todoForm.querySelector('[name="dueDate"]').value = todo.dueDate ? utils.formatDate(new Date(todo.dueDate * 1000)) : '';
+      
+      const allDay = todo.allDay === 1;
+      elements.todoForm.querySelector('[name="allDay"]').value = allDay ? 'true' : 'false';
+      
+      if (allDay) {
+        const startInfo = utils.getAllDayDisplayDate(todo.startTime, false);
+        const dueInfo = utils.getAllDayDisplayDate(todo.dueDate, false);
+        elements.todoForm.querySelector('[name="startDate"]').value = startInfo ? startInfo.str : '';
+        elements.todoForm.querySelector('[name="dueDateDate"]').value = dueInfo ? dueInfo.str : '';
+        this.updateTodoAllDayUI(true);
+      } else {
+        elements.todoForm.querySelector('[name="startTime"]').value = todo.startTime ? utils.toLocalISO(todo.startTime) : '';
+        elements.todoForm.querySelector('[name="dueDate"]').value = todo.dueDate ? utils.toLocalISO(todo.dueDate) : '';
+        this.updateTodoAllDayUI(false);
+      }
 
       // 显式回填待办提醒勾选状态
       const reminderEmailInput = elements.todoForm.querySelector('[name="reminderEmail"]');
@@ -2115,22 +2218,34 @@ if (elements.sidebarSearch) {
     },
 
     async deleteEvent(id) {
-      if (id && typeof id === 'string' && id.includes('_')) {
-        const originalId = id.split('_')[0];
-        if (confirm('这是一个重复事件实例。确定要删除整个重复事件系列吗？')) {
-          try {
-            await api.deleteEvent(originalId);
-            sidebarRenderer.refresh();
-            dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
-          } catch (error) {
-            console.error('删除事件失败:', error);
-            alert('删除失败，请重试');
-          }
+      if (id && typeof id === 'string') {
+        // 处理订阅日历事件 (由系统同步，通常不支持直接删除单个事件)
+        if (id.startsWith('sub_')) {
+          alert('这是订阅日历中的事件。订阅事件会自动随源同步，无法直接在此删除。如需移除，请在“订阅管理”中删除该订阅。');
+          return;
         }
-        return;
+
+        // 处理重复事件实例 (例如: ID_时间戳)
+        if (id.includes('_')) {
+          // 尝试从 ID 中切分，或者从缓存中找
+          let originalId = id.split('_')[0];
+          
+          // 如果是订阅日历 sub_ 开头，已经在上面被拦截，这里处理的是普通重复事件
+          if (await this.showConfirm('这是一个重复事件系列。确定要删除整个重复事件系列吗？')) {
+            try {
+              await api.deleteEvent(originalId);
+              sidebarRenderer.refresh();
+              dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
+            } catch (error) {
+              console.error('删除事件失败:', error);
+              alert('删除失败，请重试');
+            }
+          }
+          return;
+        }
       }
 
-      if (!confirm('确定要删除这个事件吗？')) return;
+      if (!(await this.showConfirm('确定要删除这个事件吗？'))) return;
 
       try {
         await api.deleteEvent(id);
@@ -2181,7 +2296,20 @@ if (elements.sidebarSearch) {
       if (event.recurrence) {
         try {
           const recurrenceObj = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
-          elements.eventForm.querySelector('[name="recurrence"]').value = recurrenceObj.type || '';
+          const type = recurrenceObj.type || '';
+          
+          const isLunar = type.startsWith('lunar_');
+          const baseType = isLunar ? type.replace('lunar_', '') : type;
+          
+          elements.eventForm.querySelector('[name="recurrence"]').value = baseType;
+          
+          const lunarCheckbox = document.getElementById('isLunar-checkbox');
+          const lunarWrap = document.getElementById('lunar-checkbox-wrap');
+          if (lunarCheckbox && lunarWrap) {
+            lunarCheckbox.checked = isLunar;
+            lunarWrap.style.display = (baseType === 'yearly' || baseType === 'monthly') ? 'inline-block' : 'none';
+          }
+
           if (event.recurrenceEnd) {
             const endDate = new Date(event.recurrenceEnd * 1000);
             elements.eventForm.querySelector('[name="recurrenceEnd"]').value = endDate.toISOString().slice(0, 10);
@@ -2215,35 +2343,161 @@ if (elements.sidebarSearch) {
       this.openEventModal();
     },
 
-    async exportCalendar() {
-      try {
-        const response = await fetch('/api/events/export', {
-          credentials: 'include'
-        });
+    showExportMenu: (event) => {
+      // 创建下拉菜单
+      const existingMenu = document.getElementById('export-dropdown-menu');
+      if (existingMenu) {
+        existingMenu.remove();
+        return;
+      }
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            alert('请先登录后再导出日历');
-            window.location.href = '/login.html';
-            return;
-          }
-          throw new Error('导出失败');
+      const menu = document.createElement('div');
+      menu.id = 'export-dropdown-menu';
+      menu.style.cssText = `
+        position: fixed;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        min-width: 160px;
+        padding: 4px 0;
+      `;
+
+      const options = [
+        { label: '日历事件 (.ics)', action: 'calendar' },
+        { label: '待办事项 (.json)', action: 'todos' },
+        { label: '提醒设置 (.json)', action: 'reminders' }
+      ];
+
+      options.forEach(opt => {
+        const item = document.createElement('div');
+        item.textContent = opt.label;
+        item.style.cssText = `
+          padding: 8px 16px;
+          cursor: pointer;
+          font-size: 13px;
+          color: var(--text);
+          transition: background 0.15s;
+        `;
+        item.onmouseenter = () => item.style.background = 'var(--side)';
+        item.onmouseleave = () => item.style.background = 'transparent';
+        item.onclick = () => {
+          handlers.exportData(opt.action);
+          menu.remove();
+        };
+        menu.appendChild(item);
+      });
+
+      // 定位菜单
+      const rect = event.target.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.left = `${rect.left}px`;
+
+      document.body.appendChild(menu);
+
+      // 点击其他地方关闭菜单
+      const closeMenu = (e) => {
+        if (!menu.contains(e.target) && e.target !== event.target) {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
         }
+      };
+      setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    },
 
-        const icsContent = await response.text();
-        const blob = new Blob([icsContent], { type: 'text/calendar' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `z7note-calendar-${new Date().toISOString().split('T')[0]}.ics`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+    async exportData(type) {
+      try {
+        if (type === 'calendar') {
+          // 导出日历事件
+          const response = await fetch('/api/events/export', {
+            credentials: 'include'
+          });
 
-        alert('日历导出成功!');
+          if (!response.ok) {
+            if (response.status === 401) {
+              alert('请先登录后再导出日历');
+              window.location.href = '/login.html';
+              return;
+            }
+            throw new Error('导出失败');
+          }
+
+          const icsContent = await response.text();
+          const blob = new Blob([icsContent], { type: 'text/calendar' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `z7note-calendar-${new Date().toISOString().split('T')[0]}.ics`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          alert('日历导出成功!');
+        } else if (type === 'todos') {
+          // 导出待办事项
+          const response = await fetch('/api/todos', {
+            credentials: 'include'
+          });
+
+          if (!response.ok) throw new Error('导出失败');
+
+          const todos = await response.json();
+          const todosData = {
+            username: 'export',
+            exportTime: new Date().toISOString(),
+            todos: todos.map(todo => ({
+              id: todo.id,
+              title: todo.title,
+              description: todo.description,
+              completed: todo.completed === 1,
+              priority: todo.priority,
+              dueDate: todo.dueDate ? new Date(todo.dueDate * 1000).toISOString() : null,
+              updatedAt: new Date(todo.updatedAt * 1000).toISOString()
+            }))
+          };
+
+          const blob = new Blob([JSON.stringify(todosData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `z7note-todos-${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          alert('待办事项导出成功!');
+        } else if (type === 'reminders') {
+          // 导出提醒设置
+          const response = await fetch('/api/reminders', {
+            credentials: 'include'
+          });
+
+          if (!response.ok) throw new Error('导出失败');
+
+          const settings = await response.json();
+          const remindersData = {
+            username: 'export',
+            exportTime: new Date().toISOString(),
+            reminders: settings
+          };
+
+          const blob = new Blob([JSON.stringify(remindersData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `z7note-reminders-${new Date().toISOString().split('T')[0]}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          alert('提醒设置导出成功!');
+        }
       } catch (error) {
-        console.error('导出日历失败:', error);
+        console.error('导出失败:', error);
         alert('导出失败,请重试');
       }
     },
@@ -2270,7 +2524,15 @@ if (elements.sidebarSearch) {
         const result = await response.json();
 
         if (result.success) {
-          alert(`导入成功!共导入 ${result.imported} 个事件${result.skipped > 0 ? `,跳过 ${result.skipped} 个已存在的事件` : ''}`);
+          let message = `导入成功！\n`;
+          message += `新增：${result.imported} 条\n`;
+          if (result.updated > 0) {
+            message += `更新：${result.updated} 条\n`;
+          }
+          if (result.skipped > 0) {
+            message += `跳过重复：${result.skipped} 条`;
+          }
+          alert(message);
 
           render.calendar();
           sidebarRenderer.refresh();
@@ -2278,6 +2540,149 @@ if (elements.sidebarSearch) {
       } catch (error) {
         console.error('导入日历失败:', error);
         alert('导入失败,请检查文件格式');
+      } finally {
+        e.target.value = '';
+      }
+    },
+
+    showImportMenu: (event) => {
+      // 创建下拉菜单
+      const existingMenu = document.getElementById('import-dropdown-menu');
+      if (existingMenu) {
+        existingMenu.remove();
+        return;
+      }
+
+      const menu = document.createElement('div');
+      menu.id = 'import-dropdown-menu';
+      menu.style.cssText = `
+        position: fixed;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 10000;
+        min-width: 160px;
+        padding: 4px 0;
+      `;
+
+      const options = [
+        { label: '日历事件 (.ics)', id: 'ics-file-input' },
+        { label: '待办事项 (.json)', id: 'todos-file-input' },
+        { label: '提醒设置 (.json)', id: 'reminders-file-input' }
+      ];
+
+      options.forEach(opt => {
+        const item = document.createElement('div');
+        item.textContent = opt.label;
+        item.style.cssText = `
+          padding: 8px 16px;
+          cursor: pointer;
+          font-size: 13px;
+          color: var(--text);
+          transition: background 0.15s;
+        `;
+        item.onmouseenter = () => item.style.background = 'var(--side)';
+        item.onmouseleave = () => item.style.background = 'transparent';
+        item.onclick = () => {
+          const fileInput = document.getElementById(opt.id);
+          if (fileInput) fileInput.click();
+          menu.remove();
+        };
+        menu.appendChild(item);
+      });
+
+      // 定位菜单
+      const rect = event.target.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.left = `${rect.left}px`;
+
+      document.body.appendChild(menu);
+
+      // 点击其他地方关闭菜单
+      const closeMenu = (e) => {
+        if (!menu.contains(e.target) && e.target !== event.target) {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    },
+
+    async importTodos(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const todosData = JSON.parse(text);
+
+        const response = await fetch('/api/todos/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ todosData })
+        });
+
+        if (!response.ok) {
+          throw new Error('导入失败');
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          let message = `导入成功！\n`;
+          message += `新增：${result.imported} 条\n`;
+          if (result.updated > 0) {
+            message += `更新：${result.updated} 条\n`;
+          }
+          if (result.skipped > 0) {
+            message += `跳过重复：${result.skipped} 条`;
+          }
+          alert(message);
+
+          render.calendar();
+          sidebarRenderer.refresh();
+        }
+      } catch (error) {
+        console.error('导入待办失败:', error);
+        alert('导入失败，请检查文件格式');
+      } finally {
+        e.target.value = '';
+      }
+    },
+
+    async importReminders(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const remindersData = JSON.parse(text);
+
+        const response = await fetch('/api/reminders/import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ remindersData })
+        });
+
+        if (!response.ok) {
+          throw new Error('导入失败');
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          alert('提醒设置导入成功！');
+        }
+      } catch (error) {
+        console.error('导入提醒设置失败:', error);
+        alert('导入失败，请检查文件格式');
       } finally {
         e.target.value = '';
       }
@@ -2509,6 +2914,8 @@ if (elements.sidebarSearch) {
     const importBtn = document.getElementById('import-btn');
     const subscriptionBtn = document.getElementById('subscription-btn');
     const icsFileInput = document.getElementById('ics-file-input');
+    const todosFileInput = document.getElementById('todos-file-input');
+    const remindersFileInput = document.getElementById('reminders-file-input');
 
     if (prevMonthBtn) prevMonthBtn.addEventListener('click', handlers.prevMonth);
     if (nextMonthBtn) nextMonthBtn.addEventListener('click', handlers.nextMonth);
@@ -2517,8 +2924,11 @@ if (elements.sidebarSearch) {
     if (eventAddBtn) eventAddBtn.addEventListener('click', handlers.openEventModal);
     if (newEventBtn) newEventBtn.addEventListener('click', handlers.openEventModal);
     if (subscriptionBtn) subscriptionBtn.addEventListener('click', handlers.openSubscriptionModal);
-    if (exportBtn) exportBtn.addEventListener('click', handlers.exportCalendar);
+    if (exportBtn) exportBtn.addEventListener('click', handlers.showExportMenu);
+    if (importBtn) importBtn.addEventListener('click', handlers.showImportMenu);
     if (icsFileInput) icsFileInput.addEventListener('change', handlers.importCalendar);
+    if (todosFileInput) todosFileInput.addEventListener('change', handlers.importTodos);
+    if (remindersFileInput) remindersFileInput.addEventListener('change', handlers.importReminders);
     
     // 绑定跳转按钮
     const jumpBtn = document.getElementById('jump-btn');
@@ -2547,9 +2957,32 @@ if (elements.sidebarSearch) {
     // 监听重复选项变化
     const recurrenceSelect = document.getElementById('recurrence-select');
     const recurrenceEndGroup = document.getElementById('recurrence-end-group');
+    const lunarCheckboxWrap = document.getElementById('lunar-checkbox-wrap');
+    
     if (recurrenceSelect && recurrenceEndGroup) {
       recurrenceSelect.addEventListener('change', (e) => {
-        recurrenceEndGroup.style.display = e.target.value ? 'block' : 'none';
+        const val = e.target.value;
+        recurrenceEndGroup.style.display = val ? 'block' : 'none';
+        
+        // 仅在“每年”或“每月”重复时显示农历选项
+        if (lunarCheckboxWrap) {
+          lunarCheckboxWrap.style.display = (val === 'yearly' || val === 'monthly') ? 'inline-block' : 'none';
+          if (lunarCheckboxWrap.style.display === 'none') {
+            document.getElementById('isLunar-checkbox').checked = false;
+          }
+        }
+        
+        // 当选择重复类型时，设置默认的结束日期
+        if (e.target.value) {
+          const recurrenceEndInput = elements.eventForm.querySelector('[name="recurrenceEnd"]');
+          if (!recurrenceEndInput.value) {
+            // 设置默认结束日期为当前日期加上一年
+            const defaultEndDate = new Date();
+            defaultEndDate.setFullYear(defaultEndDate.getFullYear() + 1);
+            const dateStr = utils.formatDate(defaultEndDate);
+            recurrenceEndInput.value = dateStr;
+          }
+        }
       });
     }
 
@@ -2573,6 +3006,28 @@ if (elements.sidebarSearch) {
             if (!endDateInput.value) {
               endDateInput.value = dateStr;
             }
+          }
+        });
+      }
+
+      // 监听待办全天选项变化
+      const todoAllDaySelect = document.getElementById('todo-allDay-select');
+      if (todoAllDaySelect) {
+        todoAllDaySelect.addEventListener('change', (e) => {
+          const isAllDay = e.target.value === 'true';
+          handlers.updateTodoAllDayUI(isAllDay);
+          
+          const dateStr = utils.formatDate(state.selectedDate);
+          if (isAllDay) {
+            const startDateInput = elements.todoForm.querySelector('[name="startDate"]');
+            const dueDateDateInput = elements.todoForm.querySelector('[name="dueDateDate"]');
+            if (!startDateInput.value) startDateInput.value = dateStr;
+            if (!dueDateDateInput.value) dueDateDateInput.value = dateStr;
+          } else {
+            const startTimeInput = elements.todoForm.querySelector('[name="startTime"]');
+            const dueDateInput = elements.todoForm.querySelector('[name="dueDate"]');
+            if (!startTimeInput.value) startTimeInput.value = `${dateStr}T09:00`;
+            if (!dueDateInput.value) dueDateInput.value = `${dateStr}T18:00`;
           }
         });
       }
@@ -2732,6 +3187,7 @@ if (elements.sidebarSearch) {
   }
 
   // ==================== 公开API ====================
+  window.CalendarAppHandlers = handlers;
   return {
     init,
     openTodoModal: () => handlers.openTodoModal(),

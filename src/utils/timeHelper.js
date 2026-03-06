@@ -33,19 +33,31 @@ class TimeHelper {
   }
 
   /**
-   * 格式化为 iCal 要求的日期格式 (YYYYMMDD)
-   * 关键：全天事件必须基于“当地意图”的日期，避免 UTC 偏移导致日期跳变
-   */
+    * 格式化为 iCal 要求的日期格式 (YYYYMMDD)
+    * 关键：全天事件必须基于“当地意图”的日期，避免 UTC 偏移导致日期跳变
+    */
   static toIcalDate(ts) {
     if (!ts) return '';
     const d = new Date(ts * 1000);
-    // 使用本地方法获取年月日，确保用户看到的 26 号在生成的 ICS 里也是 26 号
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}${m}${day}`;
-  }
 
+    try {
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      });
+      const parts = formatter.formatToParts(d);
+      const y = parts.find(p => p.type === 'year').value;
+      const m = parts.find(p => p.type === 'month').value;
+      const day = parts.find(p => p.type === 'day').value;
+      return `${y}${m}${day}`;
+    } catch (e) {
+      // 降级使用本地方法
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}${m}${day}`;
+    }
+  }
   /**
    * 前端专用：将时间戳转为 datetime-local 所需的字符串
    * 考虑时区偏移，确保 input 显示的是本地时间

@@ -174,7 +174,7 @@ function setupCron(configObj) {
     scheduledTask = null;
   }
 
-  if (configObj.schedule && configObj.schedule !== 'none') {
+  if (configObj && configObj.schedule && configObj.schedule !== 'none') {
     console.log('[备份] 正在设置定时任务，cron 表达式:', configObj.schedule);
     scheduledTask = cron.schedule(configObj.schedule, async () => {
       console.log('[备份] 定时任务触发，开始执行备份...');
@@ -189,7 +189,8 @@ function setupCron(configObj) {
 
 async function getBackupConfig() {
   const db = getConnection();
-  return await db.get('SELECT * FROM backup_config WHERE id = 1');
+  const config = await db.get('SELECT * FROM backup_config WHERE id = 1');
+  return config || {};
 }
 
 async function updateBackupConfig(configData) {
@@ -200,9 +201,9 @@ async function updateBackupConfig(configData) {
     sendEmail=excluded.sendEmail, emailAddress=excluded.emailAddress, useWebDAV=excluded.useWebDAV, 
     webdavUrl=excluded.webdavUrl, webdavUser=excluded.webdavUser, webdavPassword=excluded.webdavPassword,
     keepCount=excluded.keepCount`, 
-    [configData.schedule, configData.includeAttachments?1:0, configData.backupMode, 
-     configData.sendEmail?1:0, configData.emailAddress, configData.useWebDAV?1:0, 
-     configData.webdavUrl, configData.webdavUser, configData.webdavPassword,
+    [configData.schedule || 'none', configData.includeAttachments?1:0, configData.backupMode || 'incremental', 
+     configData.sendEmail?1:0, configData.emailAddress || '', configData.useWebDAV?1:0, 
+     configData.webdavUrl || '', configData.webdavUser || '', configData.webdavPassword || '',
      parseInt(configData.keepCount) || 0]);
   
   const newConfig = await getBackupConfig();

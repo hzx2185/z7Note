@@ -5,6 +5,7 @@
 
 const log = require('./logger');
 const TimeHelper = require('./timeHelper');
+const lunarHelper = require('./lunarHelper');
 
 class ICalGenerator {
   static eventToICal(event) {
@@ -83,8 +84,20 @@ class ICalGenerator {
     lines.push(`UID:${todo.id}`);
     lines.push(`DTSTAMP:${TimeHelper.toIcalUTC(todo.updatedAt || todo.createdAt || Date.now()/1000)}`);
     
-    if (todo.dueDate) {
-      lines.push(`DUE;TZID=Asia/Shanghai:${this.formatLocalTime(todo.dueDate)}`);
+    if (todo.allDay) {
+      if (todo.startTime) {
+        lines.push(`DTSTART;VALUE=DATE:${TimeHelper.toIcalDate(todo.startTime)}`);
+      }
+      if (todo.dueDate) {
+        lines.push(`DUE;VALUE=DATE:${TimeHelper.toIcalDate(todo.dueDate)}`);
+      }
+    } else {
+      if (todo.startTime) {
+        lines.push(`DTSTART;TZID=Asia/Shanghai:${this.formatLocalTime(todo.startTime)}`);
+      }
+      if (todo.dueDate) {
+        lines.push(`DUE;TZID=Asia/Shanghai:${this.formatLocalTime(todo.dueDate)}`);
+      }
     }
     
     if (todo.title) lines.push(`SUMMARY:${this.escapeText(todo.title)}`);
@@ -151,7 +164,28 @@ class ICalGenerator {
     const parts = [this.foldLines(calendarContent)];
 
     if (events && events.length > 0) {
-      events.forEach(e => parts.push(this.eventToICal(e)));
+      events.forEach(e => {
+        // 核心兼容性处理：农历重复事件无法在大部分客户端直接识别
+        // 我们将其展开为未来 5 年的独立公历事件进行同步
+        if (e.recurrence) {
+          try {
+            const r = typeof e.recurrence === 'string' ? JSON.parse(e.recurrence) : e.recurrence;
+            if (r.type && r.type.startsWith('lunar_')) {
+              const now = Math.floor(Date.now() / 1000);
+              const fiveYearsLater = now + (5 * 365 * 24 * 3600);
+              const expandedLunar = lunarHelper.generateLunarRecurringEvents(e, now - (365 * 24 * 3600), fiveYearsLater);
+              
+              expandedLunar.forEach(instance => {
+                parts.push(this.eventToICal(instance));
+              });
+              return;
+            }
+          } catch (err) {
+            log('WARN', 'ICS 生成中农历展开失败', { error: err.message });
+          }
+        }
+        parts.push(this.eventToICal(e));
+      });
     }
     
     if (todos && todos.length > 0) {
@@ -189,17 +223,42 @@ class ICalGenerator {
     }).join('\r\n');
   }
 
-  // 格式化本地时间 (YYYYMMDDTHHMMSS)
+  // 格式化本地时间 (YYYYMMDDTHHMMSS) - 显式使用 Asia/Shanghai 时区
   static formatLocalTime(ts) {
     if (!ts) return '';
     const d = new Date(ts * 1000);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    const s = String(d.getSeconds()).padStart(2, '0');
-    return `${y}${m}${day}T${h}${min}${s}`;
+    
+    try {
+      // 使用 Intl 确保无论服务器在什么时区,都按上海时区格式化
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+      });
+      
+      const parts = formatter.formatToParts(d);
+      const getPart = (type) => parts.find(p => p.type === type).value;
+      
+      const y = getPart('year');
+      const m = getPart('month');
+      const day = getPart('day');
+      let h = getPart('hour');
+      if (h === '24') h = '00';
+      const min = getPart('minute');
+      const s = getPart('second');
+      
+      return `${y}${m}${day}T${h}${min}${s}`;
+    } catch (e) {
+      // 降级方案
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const h = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      const s = String(d.getSeconds()).padStart(2, '0');
+      return `${y}${m}${day}T${h}${min}${s}`;
+    }
   }
 
   /**

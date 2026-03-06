@@ -8,6 +8,7 @@ const { sanitizeInput, validateUsername, validateEmail, validatePassword } = req
 const { sendMail } = require('../services/mailer');
 const { genToken } = require('../utils/helpers');
 const log = require('../utils/logger');
+const { emailVerifyRateLimit } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -215,8 +216,25 @@ router.post('/api/send-bind-code', async (req, res) => {
   }
 });
 
+// 数据库操作重试函数
+async function retryDbOperation(operation, maxRetries = 3, delay = 100) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (e) {
+      if ((e.code === 'SQLITE_BUSY' || e.message?.includes('database is locked')) && i < maxRetries - 1) {
+        log('WARN', '数据库繁忙,正在重试', { attempt: i + 1, error: e.message });
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 // 验证绑定邮箱
-router.post('/api/verify-bind-email', async (req, res) => {
+router.post('/api/verify-bind-email', emailVerifyRateLimit, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { email, token } = req.body;
     if (!req.user) {
@@ -227,10 +245,14 @@ router.post('/api/verify-bind-email', async (req, res) => {
       return res.status(400).json({ error: "邮箱和验证码不能为空" });
     }
 
-    const record = await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?',
-      [email, token]);
+    // 使用重试机制查询验证码
+    const record = await retryDbOperation(async () => {
+      return await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?',
+        [email, token]);
+    });
     
     if (!record) {
+      log('WARN', '验证码错误', { username: req.user, email, token });
       return res.status(400).json({ error: "验证码错误" });
     }
 
@@ -238,16 +260,42 @@ router.post('/api/verify-bind-email', async (req, res) => {
       return res.status(400).json({ error: "验证码已过期，请重新发送" });
     }
 
-    // 更新用户邮箱
-    await getConnection().run('UPDATE users SET email = ? WHERE username = ?', [email, req.user]);
-    // 成功后删除验证码
-    await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
+    // 使用事务和重试机制更新用户邮箱
+    await retryDbOperation(async () => {
+      const db = getConnection();
+      await db.run('BEGIN TRANSACTION');
+      try {
+        // 更新用户邮箱
+        await db.run('UPDATE users SET email = ? WHERE username = ?', [email, req.user]);
+
+        // 成功后删除验证码
+        await db.run('DELETE FROM reset_tokens WHERE email = ? AND token = ?', [email, token]);
+
+        await db.run('COMMIT');
+      } catch (e) {
+        try {
+          await db.run('ROLLBACK');
+        } catch (rollbackError) {
+          log('ERROR', '事务回滚失败', { error: rollbackError.message });
+        }
+        throw e;
+      }
+    });
     
-    log('INFO', '用户绑定邮箱成功', { username: req.user, email });
-    res.json({ status: "ok" });
+    const duration = Date.now() - startTime;
+    log('INFO', '用户绑定邮箱成功', { username: req.user, email, duration: `${duration}ms` });
+    res.status(200).json({ status: "ok" });
   } catch (e) {
-    log('ERROR', '验证并绑定邮箱异常', { username: req.user, error: e.message });
-    res.status(500).json({ error: "系统繁忙，请稍后再试" });
+    const duration = Date.now() - startTime;
+    log('ERROR', '验证并绑定邮箱异常', { username: req.user, error: e.message, stack: e.stack, duration: `${duration}ms` });
+    if (!res.headersSent) {
+      // 根据错误类型返回不同的错误信息
+      if (e.code === 'SQLITE_BUSY' || e.message?.includes('database is locked')) {
+        res.status(503).json({ error: "系统繁忙，请稍后再试" });
+      } else {
+        res.status(500).json({ error: "系统繁忙，请稍后再试" });
+      }
+    }
   }
 });
 

@@ -101,4 +101,88 @@ router.delete('/history', async (req, res) => {
   }
 });
 
+/**
+ * 导入提醒设置
+ */
+router.post('/import', async (req, res) => {
+  try {
+    const { remindersData } = req.body;
+    if (!remindersData || !remindersData.reminders) {
+      return res.status(400).json({ error: '无效的提醒数据格式' });
+    }
+
+    const { getConnection } = require('../db/connection');
+    const db = getConnection();
+    const username = req.user;
+    const reminders = remindersData.reminders;
+
+    // 检查是否已存在提醒设置
+    const existing = await db.get('SELECT * FROM reminder_settings WHERE username = ?', [username]);
+
+    if (existing) {
+      // 更新现有设置
+      await db.run(`
+        UPDATE reminder_settings SET
+          event_reminder_enabled = ?,
+          todo_reminder_enabled = ?,
+          reminder_advance_days = ?,
+          reminder_advance_hours = ?,
+          reminder_advance_minutes = ?,
+          notification_methods = ?,
+          email_reminder_enabled = ?,
+          browser_reminder_enabled = ?,
+          caldav_reminder_enabled = ?,
+          quiet_start_time = ?,
+          quiet_end_time = ?
+        WHERE username = ?
+      `, [
+        reminders.eventReminderEnabled ? 1 : 0,
+        reminders.todoReminderEnabled ? 1 : 0,
+        reminders.reminderAdvanceDays || 0,
+        reminders.reminderAdvanceHours || 0,
+        reminders.reminderAdvanceMinutes || 30,
+        reminders.notificationMethods || '["browser"]',
+        reminders.emailReminderEnabled ? 1 : 0,
+        reminders.browserReminderEnabled ? 1 : 0,
+        reminders.caldavReminderEnabled ? 1 : 0,
+        reminders.quietStartTime || null,
+        reminders.quietEndTime || null,
+        username
+      ]);
+
+      log('INFO', '导入提醒设置（更新）', { username });
+    } else {
+      // 插入新设置
+      await db.run(`
+        INSERT INTO reminder_settings (
+          username, event_reminder_enabled, todo_reminder_enabled,
+          reminder_advance_days, reminder_advance_hours, reminder_advance_minutes,
+          notification_methods, email_reminder_enabled, browser_reminder_enabled,
+          caldav_reminder_enabled, quiet_start_time, quiet_end_time
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        username,
+        reminders.eventReminderEnabled ? 1 : 0,
+        reminders.todoReminderEnabled ? 1 : 0,
+        reminders.reminderAdvanceDays || 0,
+        reminders.reminderAdvanceHours || 0,
+        reminders.reminderAdvanceMinutes || 30,
+        reminders.notificationMethods || '["browser"]',
+        reminders.emailReminderEnabled ? 1 : 0,
+        reminders.browserReminderEnabled ? 1 : 0,
+        reminders.caldavReminderEnabled ? 1 : 0,
+        reminders.quietStartTime || null,
+        reminders.quietEndTime || null
+      ]);
+
+      log('INFO', '导入提醒设置（新增）', { username });
+    }
+
+    res.json({ success: true, message: '提醒设置导入成功' });
+  } catch (e) {
+    log('ERROR', '导入提醒设置失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '导入失败: ' + e.message });
+  }
+});
+
 module.exports = router;

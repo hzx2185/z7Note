@@ -2,6 +2,64 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <script>
+        /**
+         * 极致错误拦截器 - 消除浏览器扩展及已知干扰报错
+         */
+        (function() {
+            const IGNORE_PATTERNS = [
+                'bootstrap-autofill', 'AutofillOverlayContentService', 
+                'extension://', 'non-passive event listener', 'purify.min.js.map'
+            ];
+
+            const isRedundantError = (msg, stack, file) => {
+                const searchStr = `${msg} ${stack} ${file}`;
+                return IGNORE_PATTERNS.some(p => searchStr.includes(p)) || !msg;
+            };
+
+            // 拦截 window 错误
+            window.addEventListener('error', (e) => {
+                if (isRedundantError(e.message, e.error?.stack, e.filename)) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                }
+            }, true);
+
+            // 拦截 Promise 拒绝
+            window.addEventListener('unhandledrejection', (e) => {
+                const stack = e.reason?.stack || '';
+                const msg = e.reason?.message || String(e.reason);
+                if (isRedundantError(msg, stack, '') || e.reason === null) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                }
+            }, true);
+
+            // 抑制 console 警告和错误
+            const originalWarn = console.warn;
+            const originalError = console.error;
+            
+            console.warn = (...args) => {
+                if (typeof args[0] === 'string' && IGNORE_PATTERNS.some(p => args[0].includes(p))) return;
+                originalWarn.apply(console, args);
+            };
+
+            console.error = (...args) => {
+                if (typeof args[0] === 'string' && IGNORE_PATTERNS.some(p => args[0].includes(p))) return;
+                originalError.apply(console, args);
+            };
+
+            // 全局拦截 EventTarget.addEventListener 以强制 passive: true (优化滚动性能)
+            const oAdd = EventTarget.prototype.addEventListener;
+            EventTarget.prototype.addEventListener = function(type, listener, options) {
+                if (['touchstart', 'touchmove', 'mousewheel', 'wheel'].includes(type)) {
+                    if (typeof options === 'object' && options !== null) options.passive = true;
+                    else options = { passive: true };
+                }
+                oAdd.call(this, type, listener, options);
+            };
+        })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <meta name="theme-color" content="#2563eb">
     <meta name="mobile-web-app-capable" content="yes">
@@ -20,10 +78,8 @@
     <link rel="stylesheet" href="/css/app.css?v=20250208110000">
 
     <!-- 非关键样式延迟加载 -->
-    <link rel="preload" href="/cdn/highlight-dark.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/cdn/highlight-dark.min.css"></noscript>
-    <link rel="preload" href="/cdn/github-markdown.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="/cdn/github-markdown.min.css"></noscript>
+    <link rel="stylesheet" href="/cdn/highlight-dark.min.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/cdn/github-markdown.min.css" media="print" onload="this.media='all'">
 
     <!-- 核心依赖库 - 立即加载 -->
     <script src="/cdn/marked.min.js"></script>
@@ -39,17 +95,6 @@
 
     <!-- 非核心功能 - 按需加载 -->
     <script>
-        // 抑制 CodeMirror 的 passive event listener 警告
-        const originalWarn = console.warn;
-        console.warn = function(...args) {
-            const message = args[0];
-            if (typeof message === 'string' && message.includes('non-passive event listener')) {
-                // 忽略 CodeMirror 的 passive 警告
-                return;
-            }
-            originalWarn.apply(console, args);
-        };
-
         // 动态加载 heavy 库
         function loadScript(src, callback) {
             const script = document.createElement('script');
@@ -108,7 +153,7 @@
         }
     </style>
 </head>
-<body>
+<body data-ms-editor="false">
     <div id="overlay" onclick="ui.toggleSidebar()"></div>
 
     <!-- 邮箱绑定模态框 -->
@@ -126,11 +171,11 @@
                         <button id="modal-send-btn" onclick="ui.modalSendCode()" style="background:var(--accent); color:white; border:none; padding:0 12px; border-radius:6px; cursor:pointer; font-size:12px; white-space:nowrap;">发送</button>
                     </div>
                 </div>
-                <div id="modal-code-area" style="border-top:1px solid var(--border); padding-top:12px; margin-top:4px;">
+                <div id="modal-code-area" style="border-top:1px solid var(--border); padding-top:12px; margin-top:4px; display:none;">
                     <label style="color:var(--gray); margin-bottom:4px; display:block; font-size:12px;">验证码</label>
                     <input type="text" id="modal-code-input" placeholder="6位数字" maxlength="6" style="width:100%; padding:10px; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:6px; outline:none; letter-spacing:2px; text-align:center;">
                     <div id="modal-email-feedback" style="font-size:12px; margin-top:10px; display:none; text-align:center; padding:8px; border-radius:4px; background:rgba(128,128,128,0.1);"></div>
-                    <button onclick="ui.modalVerifyCode()" style="background:var(--green); color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; width:100%; margin-top:12px;">确认绑定</button>
+                    <button id="modal-verify-btn" onclick="ui.modalVerifyCode()" style="background:var(--green); color:white; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; width:100%; margin-top:12px;">确认绑定</button>
                 </div>
             </div>
         </div>
@@ -164,10 +209,11 @@
         <!-- 侧边栏 -->
         <div id="sidebar">
             <div style="padding:10px; display: flex; flex-direction: column; gap: 8px;">
-                <input type="text" id="search" placeholder="搜索..." oninput="ui.debounceRender()" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);outline:none;">
+                <input type="text" id="search" name="search_notes" placeholder="搜索..." oninput="ui.debounceRender()" autocomplete="off" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);outline:none;">
                 <div style="display:flex;gap:3px;flex-wrap:wrap;">
                     <button onclick="ui.create(); if(window.innerWidth <= 768) ui.toggleSidebar();" class="tool-btn" style="flex:1 1 auto; font-size:11px; padding:5px 2px;min-width:50px;">新建</button>
                     <button onclick="ui.toggleBatchMode()" class="tool-btn" style="flex:1 1 auto; font-size:11px; padding:5px 2px;min-width:50px;">批量</button>
+                    <button onclick="ui.checkDuplicates()" class="tool-btn" style="flex:1 1 auto; font-size:11px; padding:5px 2px;min-width:50px;" title="查找并删除重复笔记">去重</button>
                     <button onclick="ui.toggleAllFolders(false)" class="tool-btn" style="flex:1 1 auto; font-size:11px; padding:5px 2px;min-width:50px;" title="折叠所有">折叠</button>
                     <button onclick="ui.toggleAllFolders(true)" class="tool-btn" style="flex:1 1 auto; font-size:11px; padding:5px 2px;min-width:50px;" title="展开所有">展开</button>
                 </div>
@@ -270,11 +316,11 @@
             <!-- 查找替换栏 -->
             <div id="search-replace-bar" class="search-bar" style="display:none;">
                 <div class="search-row">
-                    <input type="text" id="find-input" class="search-input" placeholder="查找内容..." onkeydown="if(event.key==='Enter') tools.findNext()">
+                    <input type="text" id="find-input" class="search-input" placeholder="查找内容..." onkeydown="if(event.key==='Enter') tools.findNext()" autocomplete="off">
                     <button class="tool-btn" onclick="tools.findNext()" title="查找下一个">下一个</button>
                 </div>
                 <div class="search-row">
-                    <input type="text" id="replace-input" class="search-input" placeholder="替换为...">
+                    <input type="text" id="replace-input" class="search-input" placeholder="替换为..." autocomplete="off">
                     <button class="tool-btn" onclick="tools.replaceAll()" style="color:var(--accent)">整篇</button>
                     <button class="tool-btn" onclick="tools.replaceAllNotes()" style="color:#f97316">全站</button>
                 </div>
@@ -285,9 +331,9 @@
                 <div id="editor-wrapper" style="display:flex; flex-direction:column; flex:1; min-width:0; background:var(--bg); border-right:1px solid var(--border); overflow:hidden;">
                     <div id="editor-scroller" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; background:var(--bg);">
                         <div id="note-title-wrapper" style="padding:10px 16px; background:var(--bg); width:100%; box-sizing:border-box; border-bottom:1px solid var(--border); display:flex; align-items:center;">
-                            <input type="text" id="note-title-input" placeholder="分类_标题" style="width:100%; border:none; background:transparent; font-size:18px; font-weight:700; color:var(--text); outline:none; padding:0; margin:0; line-height:1.4;" oninput="ui.handleTitleInput(this.value)">
+                            <input type="text" id="note-title-input" name="note_full_title" placeholder="分类_标题" style="width:100%; border:none; background:transparent; font-size:18px; font-weight:700; color:var(--text); outline:none; padding:0; margin:0; line-height:1.4;" oninput="ui.handleTitleInput(this.value)" autocomplete="off">
                         </div>
-                        <div id="editor-container" style="flex:1; width:100%;"></div>
+                        <div id="editor-container" data-ms-editor="false" style="flex:1; width:100%;"></div>
                     </div>
                 </div>
                 <div id="preview-wrapper">
@@ -335,7 +381,7 @@
                 <button onclick="document.getElementById('attachment-picker-modal').classList.remove('show')">×</button>
             </div>
             <div class="modal-actions" style="gap: 6px; padding: 8px 12px;">
-                <input type="text" id="attachment-picker-search" placeholder="搜索附件..." oninput="api.filterAttachmentsForPicker()" style="flex:1; min-width:120px; height:32px; padding:0 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); outline:none; font-size:13px;">
+                <input type="text" id="attachment-picker-search" name="attachment_picker_search" data-edge-autofill-field="false" placeholder="搜索附件..." oninput="api.filterAttachmentsForPicker()" style="flex:1; min-width:120px; height:32px; padding:0 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); outline:none; font-size:13px;" autocomplete="off">
                 <button class="tool-btn" onclick="api.loadAttachmentsForPicker()" style="height:32px; padding:0 12px;">刷新列表</button>
             </div>
             <div class="modal-body">
@@ -367,7 +413,7 @@
                     上传附件
                     <input type="file" id="attachment-file-input" style="display:none" onchange="api.handleDirectUpload(this)">
                 </label>
-                <input type="text" id="attachment-search" placeholder="搜索附件..." oninput="api.filterAttachments()" style="flex:1; min-width:120px; height:32px; padding:0 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); outline:none; font-size:13px;">
+                <input type="text" id="attachment-search" name="attachment_search" data-edge-autofill-field="false" placeholder="搜索附件..." oninput="api.filterAttachments()" style="flex:1; min-width:120px; height:32px; padding:0 10px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text); outline:none; font-size:13px;" autocomplete="off">
                 <div style="display:flex; gap:4px; flex-wrap:nowrap;">
                     <button class="tool-btn" onclick="api.toggleAttachmentView()" id="view-toggle-btn" title="切换视图" style="height:32px; padding:0 8px;">列表</button>
                     <button class="tool-btn" onclick="api.loadAttachments(true)" title="刷新列表" style="height:32px; padding:0 8px;">刷新</button>
