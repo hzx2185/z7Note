@@ -22,7 +22,7 @@ const config = {
   cookieName: 'z7note_user_session',
   cookieMaxAge: 2592000000, // 30天
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
-  cookieSecure: false, // 不强制 HTTPS，由 Nginx 处理
+  cookieSecure: process.env.COOKIE_SECURE === 'true',
 
   // 配额配置
   defaultNoteLimit: parseInt(process.env.DEFAULT_NOTE_LIMIT) || 10,

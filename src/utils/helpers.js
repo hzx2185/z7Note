@@ -1,12 +1,18 @@
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const config = require('../config');
 
 function genToken(len = 22) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let s = '';
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
-  return s;
+  const bytes = crypto.randomBytes(len);
+  let token = '';
+
+  for (let i = 0; i < len; i++) {
+    token += chars[bytes[i] % chars.length];
+  }
+
+  return token;
 }
 
 async function getUserFileSize(username) {

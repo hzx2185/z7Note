@@ -254,8 +254,8 @@ router.post('/api/attachments/fix-paths', async (req, res) => {
       if (note.content && note.content.includes(findText)) {
         const newContent = note.content.split(findText).join(replaceText);
         if (newContent !== note.content) {
-          await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ?',
-            [newContent, Math.floor(Date.now() / 1000), note.id]);
+          await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?',
+            [newContent, Math.floor(Date.now() / 1000), note.id, req.user]);
           count++;
         }
       }
@@ -356,6 +356,7 @@ router.post('/api/upload/chunk', createFileBasedUploadLimitMiddleware(), async (
 
     const result = await chunkUploadService.uploadChunk(
       uploadId,
+      req.user,
       parseInt(chunkIndex),
       chunkData
     );
@@ -370,7 +371,7 @@ router.post('/api/upload/chunk', createFileBasedUploadLimitMiddleware(), async (
 // 获取上传状态
 router.get('/api/upload/status/:uploadId', async (req, res) => {
   try {
-    const status = await chunkUploadService.getUploadStatus(req.params.uploadId);
+    const status = await chunkUploadService.getUploadStatus(req.params.uploadId, req.user);
     res.json(status);
   } catch (err) {
     res.status(500).json({ error: err.message });

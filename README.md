@@ -56,12 +56,13 @@
 
 ### 🔗 内容分享
 
-- **笔记分享**: 创建公开或私密分享链接
-- **文件分享**: 分享上传的文件
+- **笔记分享**: 创建公开分享链接
+- **文件分享**: 分享当前用户拥有的上传文件
 - **访问控制**:
   - 公开分享（无需密码）
-  - 密码保护（设置访问密码）
   - 过期时间（设置分享链接有效期）
+  - 资源归属校验（仅允许分享当前用户自己的笔记 / 文件 / 分类）
+- **说明**: 密码分享功能当前已停用，避免提供未完成的安全能力
 - **分享管理**: 查看、撤销、删除分享链接
 - **一键复制**: 快速复制分享链接到剪贴板
 
@@ -263,7 +264,7 @@
 
 ### 🔐 安全特性
 
-- **认证方式**: Cookie 会话认证
+- **认证方式**: 服务端会话表 + HttpOnly Cookie，会话状态以数据库为准，不信任 Cookie 内的用户名
 - **双因素认证**: 支持 TOTP 双因素认证（Google Authenticator、Authy 等）
   - 扫码绑定验证器应用
   - 生成备用代码（紧急登录使用）
@@ -274,6 +275,9 @@
 - **安全头**: Strict-Transport-Security、X-Content-Type-Options 等
 - **文件限制**: 文件类型和大小限制
 - **动态限流**: API 访问频率限制
+- **资源归属校验**: 分享、CalDAV 资源访问、分片上传会话均按当前登录用户校验
+- **安全随机值**: 登录态和敏感令牌使用加密安全随机数生成
+- **订阅安全**: 远程日历订阅仅允许 `http/https`，并避免 shell 拼接执行
 
 ## 🛠️ 技术栈
 
@@ -482,11 +486,27 @@ SMTP_USER=your-email@gmail.com
 SMTP_PASS=your-password
 
 # ====================================
+# 安全与认证配置
+# ====================================
+JWT_SECRET=your_random_jwt_secret_key_here   # 2FA 临时令牌密钥，部署时务必更换
+JWT_EXPIRES_IN=300                           # 2FA 临时令牌有效期（秒）
+# COOKIE_DOMAIN=yourdomain.com              # 生产环境建议设置具体域名
+COOKIE_SECURE=false                          # HTTPS 环境建议设为 true
+
+# ====================================
 # CalDAV 配置
 # ====================================
 CALDAV_ENABLED=true          # 是否启用 CalDAV 支持
 CALDAV_BASE=/caldav          # CalDAV 基础路径
 ```
+
+## 🕒 时间戳约定
+
+为兼容历史数据，项目目前同时存在秒级和毫秒级时间戳。新增代码请保持**同一字段单位一致**，不要在读写链路中混用。
+
+- **秒级字段**: `notes.updatedAt`、`events/todos` 相关时间、`contacts.*At`、`calendar_subscriptions.*At`、`user_backup_config.updatedAt/lastBackupTime`、`system_config.updatedAt`
+- **毫秒级字段**: `user_sessions.*At`、`reset_tokens.expires`、`upload_chunks.*At`、`shares.*At`
+- **接口兼容**: 个别对前端暴露的接口会继续返回毫秒值以兼容旧页面，例如备份配置中的 `lastBackupTime`
 
 ## 📁 目录结构
 
@@ -633,7 +653,7 @@ sudo certbot --nginx -d your-domain.com
 ### Q: 如何分享笔记？
 **A:** 方式1：在笔记列表中点击分享按钮
 方式2：在笔记内容中点击分享链接
-支持公开分享和密码保护分享，可设置过期时间。
+当前支持公开分享和过期时间设置；密码分享功能已暂时停用。
 
 ### Q: 如何备份数据到 WebDAV？
 **A:** 在侧边栏点击"备份"按钮：

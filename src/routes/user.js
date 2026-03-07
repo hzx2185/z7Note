@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
 const { isUsernameSafe } = require('../middleware/validateUser');
+const { safePath, isValidFilename } = require('../utils/path');
 
 const router = express.Router();
 
@@ -154,7 +155,10 @@ router.post('/api/import', async (req, res) => {
       await fs.mkdir(userDir, { recursive: true });
       for (const att of attachments) {
         try { 
-          await fs.writeFile(path.join(userDir, att.name), Buffer.from(att.content, 'base64')); 
+          if (!att || typeof att.name !== 'string' || !isValidFilename(att.name) || !att.content) {
+            continue;
+          }
+          await fs.writeFile(safePath(userDir, att.name), Buffer.from(att.content, 'base64')); 
         } catch (e) { console.error('Failed to import attachment:', att.name, e); }
       }
     }

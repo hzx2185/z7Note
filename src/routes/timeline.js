@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getConnection } = require('../db/connection');
 const { auth } = require('../middleware/auth');
+const { toClientCalendarId } = require('../utils/calendarIds');
 
 // 获取序时数据
 router.get('/', async (req, res) => {
@@ -87,18 +88,15 @@ router.get('/', async (req, res) => {
       let noteDateCondition = '';
       let noteDateParams = [];
       if (startDate && endDate) {
-        // 笔记的updatedAt是毫秒时间戳，需要转换
-        const startDateMs = parseInt(startDate) * 1000;
-        const endDateMs = parseInt(endDate) * 1000;
         noteDateCondition = 'AND updatedAt BETWEEN ? AND ?';
-        noteDateParams = [startDateMs, endDateMs];
+        noteDateParams = [parseInt(startDate), parseInt(endDate)];
       }
       const noteQuery = `
         SELECT 
           id,
           title,
           content as description,
-          updatedAt / 1000 as timestamp,
+          updatedAt as timestamp,
           'note' as type,
           updatedAt
         FROM notes
@@ -124,9 +122,11 @@ router.get('/', async (req, res) => {
       const date = new Date(item.timestamp * 1000);
       const now = new Date();
       const isOverdue = item.type === 'todo' && !item.completed && item.timestamp < Math.floor(now.getTime() / 1000);
-      
+      const clientId = (item.type === 'event' || item.type === 'todo') ? toClientCalendarId(username, item.id) : item.id;
+
       return {
         ...item,
+        id: clientId,
         dateDisplay: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
         isOverdue
       };

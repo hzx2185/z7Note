@@ -1,4 +1,5 @@
 const config = require('../config');
+const { getSession, clearSessionCookie } = require('../services/session');
 
 // 检测重定向循环
 function checkRedirectLoop(req) {
@@ -23,8 +24,26 @@ function checkRedirectLoop(req) {
   return false;
 }
 
-const auth = (req, res, next) => {
-  const user = req.cookies[config.cookieName];
+const auth = async (req, res, next) => {
+  if (req.user) {
+    return next();
+  }
+
+  const sessionId = req.cookies[config.cookieName];
+  let user = null;
+
+  try {
+    const session = await getSession(sessionId);
+    if (session) {
+      user = session.username;
+      req.sessionId = session.id;
+    } else if (sessionId) {
+      clearSessionCookie(req, res);
+    }
+  } catch (error) {
+    console.error('[AUTH] Session lookup failed:', error);
+    return res.status(500).json({ error: '会话校验失败，请稍后重试' });
+  }
 
   // 管理员路由检查
   if (req.path.startsWith('/api/admin') || req.path === '/admin') {
@@ -70,13 +89,26 @@ const auth = (req, res, next) => {
   res.redirect('/login.html');
 };
 
-const adminAuth = (req, res, next) => {
+const adminAuth = async (req, res, next) => {
   // 只对管理员路由进行检查
   if (!req.path.startsWith('/api/admin') && req.path !== '/admin') {
     return next();
   }
 
-  const username = req.cookies[config.cookieName];
+  let username = req.user;
+  if (!username) {
+    try {
+      const session = await getSession(req.cookies[config.cookieName]);
+      if (session) {
+        username = session.username;
+        req.sessionId = session.id;
+      }
+    } catch (error) {
+      console.error('[AUTH] Admin session lookup failed:', error);
+      return res.status(500).send('Internal Server Error');
+    }
+  }
+
   if (config.adminUsers.includes(username)) {
     req.user = username;
     next();

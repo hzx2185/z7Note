@@ -154,8 +154,8 @@ async function initDefaultConfig() {
   for (const [key, config] of Object.entries(DEFAULT_CONFIG)) {
     if (!existingKeySet.has(key)) {
       await db.run(
-        'INSERT INTO system_config (key, value, description) VALUES (?, ?, ?)',
-        [key, config.value, config.description]
+        'INSERT INTO system_config (key, value, description, updatedAt) VALUES (?, ?, ?, ?)',
+        [key, config.value, config.description, Math.floor(Date.now() / 1000)]
       );
     }
   }

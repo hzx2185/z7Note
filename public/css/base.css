@@ -692,3 +692,13 @@ button:disabled {
         font-size: 16px;
     }
 }
+
+.btn-danger {
+    background: #dc2626;
+    color: #fff;
+    border-color: transparent;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}

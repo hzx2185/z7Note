@@ -338,7 +338,8 @@
         // 格式化时间
         function formatTime(timestamp) {
             if (!timestamp) return '-';
-            const date = new Date(parseInt(timestamp));
+            const raw = parseInt(timestamp, 10);
+            const date = new Date(raw > 10000000000 ? raw : raw * 1000);
             const now = new Date();
             const diff = now - date;
             const days = Math.floor(diff / (1000 * 60 * 60 * 24));

@@ -3,8 +3,14 @@ const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
 const { broadcast } = require('./ws');
 const TimeHelper = require('../utils/timeHelper');
+const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 
 const router = express.Router();
+
+function mapTodoForClient(username, todo) {
+  if (!todo) return todo;
+  return { ...todo, id: toClientCalendarId(username, todo.id) };
+}
 
 // 获取待办事项列表
 router.get('/api/todos', async (req, res) => {
@@ -37,7 +43,7 @@ router.get('/api/todos', async (req, res) => {
     query += ' ORDER BY priority DESC, dueDate ASC, createdAt DESC';
 
     const todos = await getConnection().all(query, params);
-    res.json(todos);
+    res.json(todos.map(todo => mapTodoForClient(req.user, todo)));
   } catch (e) {
     log('ERROR', '获取待办事项失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '获取失败' });
@@ -47,12 +53,14 @@ router.get('/api/todos', async (req, res) => {
 // 获取单个待办事项
 router.get('/api/todos/:id', async (req, res) => {
   try {
+    const candidates = getCalendarIdCandidates(req.user, req.params.id);
+    const placeholders = candidates.map(() => '?').join(',');
     const todo = await getConnection().get(
-      'SELECT * FROM todos WHERE id = ? AND username = ?',
-      [req.params.id, req.user]
+      `SELECT * FROM todos WHERE username = ? AND id IN (${placeholders}) LIMIT 1`,
+      [req.user, ...candidates]
     );
     if (!todo) return res.status(404).json({ error: '待办事项不存在' });
-    res.json(todo);
+    res.json(mapTodoForClient(req.user, todo));
   } catch (e) {
     log('ERROR', '获取待办事项失败', { username: req.user, todoId: req.params.id, error: e.message });
     res.status(500).json({ error: '获取失败' });
@@ -64,7 +72,6 @@ router.post('/api/todos', async (req, res) => {
   try {
     const { title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser } = req.body;
 
-    // 数据验证
     if (!title || !title.trim()) {
       return res.status(400).json({ error: '标题不能为空' });
     }
@@ -103,12 +110,12 @@ router.post('/api/todos', async (req, res) => {
       ]
     );
 
-    const todo = await getConnection().get('SELECT * FROM todos WHERE id = ?', [id]);
+    const todo = await getConnection().get('SELECT * FROM todos WHERE id = ? AND username = ?', [id, req.user]);
     log('INFO', '创建待办事项', { username: req.user, todoId: id });
-    
+
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
-    
-    res.json(todo);
+
+    res.json(mapTodoForClient(req.user, todo));
   } catch (e) {
     log('ERROR', '创建待办事项失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '创建失败' });
@@ -118,9 +125,11 @@ router.post('/api/todos', async (req, res) => {
 // 更新待办事项
 router.put('/api/todos/:id', async (req, res) => {
   try {
+    const candidates = getCalendarIdCandidates(req.user, req.params.id);
+    const placeholders = candidates.map(() => '?').join(',');
     const existing = await getConnection().get(
-      'SELECT * FROM todos WHERE id = ? AND username = ?',
-      [req.params.id, req.user]
+      `SELECT * FROM todos WHERE username = ? AND id IN (${placeholders}) LIMIT 1`,
+      [req.user, ...candidates]
     );
 
     if (!existing) {
@@ -156,19 +165,18 @@ router.put('/api/todos/:id', async (req, res) => {
     if (updates.length > 0) {
       updates.push('updatedAt = ?');
       params.push(Math.floor(Date.now() / 1000));
+      params.push(existing.id, req.user);
 
-      params.push(req.params.id, req.user);
-      
       const query = `UPDATE todos SET ${updates.join(', ')} WHERE id = ? AND username = ?`;
       await getConnection().run(query, params);
     }
 
-    const todo = await getConnection().get('SELECT * FROM todos WHERE id = ?', [req.params.id]);
-    log('INFO', '更新待办事项', { username: req.user, todoId: req.params.id });
-    
+    const todo = await getConnection().get('SELECT * FROM todos WHERE id = ? AND username = ?', [existing.id, req.user]);
+    log('INFO', '更新待办事项', { username: req.user, todoId: existing.id });
+
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
-    
-    res.json(todo);
+
+    res.json(mapTodoForClient(req.user, todo));
   } catch (e) {
     log('ERROR', '更新待办事项失败', { username: req.user, todoId: req.params.id, error: e.message });
     res.status(500).json({ error: '更新失败' });
@@ -179,25 +187,30 @@ router.put('/api/todos/:id', async (req, res) => {
 router.delete('/api/todos/:id', async (req, res) => {
   const db = getConnection();
   const now = Math.floor(Date.now() / 1000);
-  
-  try {
-    // 记录删除记录供 CalDAV 同步
-    await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-        [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, req.params.id, 'todo', now]);
 
-    const result = await db.run(
-      'DELETE FROM todos WHERE id = ? AND username = ?',
-      [req.params.id, req.user]
+  try {
+    const candidates = getCalendarIdCandidates(req.user, req.params.id);
+    const placeholders = candidates.map(() => '?').join(',');
+    const todo = await db.get(
+      `SELECT id FROM todos WHERE username = ? AND id IN (${placeholders}) LIMIT 1`,
+      [req.user, ...candidates]
     );
 
-    if (result.changes === 0) {
+    if (!todo) {
       return res.status(404).json({ error: '待办事项不存在' });
     }
 
-    log('INFO', '删除待办事项', { username: req.user, todoId: req.params.id });
-    
+    await db.run(
+      'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+      [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, todo.id), 'todo', now]
+    );
+
+    await db.run('DELETE FROM todos WHERE id = ? AND username = ?', [todo.id, req.user]);
+
+    log('INFO', '删除待办事项', { username: req.user, todoId: todo.id });
+
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
-    
+
     res.json({ status: 'ok' });
   } catch (e) {
     log('ERROR', '删除待办事项失败', { username: req.user, todoId: req.params.id, error: e.message });
@@ -208,9 +221,11 @@ router.delete('/api/todos/:id', async (req, res) => {
 // 切换待办事项完成状态
 router.patch('/api/todos/:id/toggle', async (req, res) => {
   try {
+    const candidates = getCalendarIdCandidates(req.user, req.params.id);
+    const placeholders = candidates.map(() => '?').join(',');
     const todo = await getConnection().get(
-      'SELECT * FROM todos WHERE id = ? AND username = ?',
-      [req.params.id, req.user]
+      `SELECT * FROM todos WHERE username = ? AND id IN (${placeholders}) LIMIT 1`,
+      [req.user, ...candidates]
     );
 
     if (!todo) {
@@ -220,15 +235,15 @@ router.patch('/api/todos/:id/toggle', async (req, res) => {
     const newCompleted = todo.completed === 0 ? 1 : 0;
     await getConnection().run(
       'UPDATE todos SET completed = ?, updatedAt = ? WHERE id = ? AND username = ?',
-      [newCompleted, Math.floor(Date.now() / 1000), req.params.id, req.user]
+      [newCompleted, Math.floor(Date.now() / 1000), todo.id, req.user]
     );
 
-    const updated = await getConnection().get('SELECT * FROM todos WHERE id = ?', [req.params.id]);
-    log('INFO', '切换待办事项状态', { username: req.user, todoId: req.params.id, completed: newCompleted });
-    
+    const updated = await getConnection().get('SELECT * FROM todos WHERE id = ? AND username = ?', [todo.id, req.user]);
+    log('INFO', '切换待办事项状态', { username: req.user, todoId: todo.id, completed: newCompleted });
+
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
-    
-    res.json(updated);
+
+    res.json(mapTodoForClient(req.user, updated));
   } catch (e) {
     log('ERROR', '切换待办事项状态失败', { username: req.user, todoId: req.params.id, error: e.message });
     res.status(500).json({ error: '操作失败' });
@@ -254,15 +269,14 @@ router.post('/api/todos/import', async (req, res) => {
     for (const todo of todosData.todos) {
       if (!todo.title) continue;
 
-      // 检查是否存在相同的待办（通过ID或标题+截止日期）
       let existing;
+      const scopedTodoId = todo.id ? scopeExternalCalendarId(username, todo.id) : null;
       if (todo.id) {
-        existing = await db.get('SELECT id FROM todos WHERE id = ? AND username = ?', [todo.id, username]);
+        existing = await db.get('SELECT id FROM todos WHERE id IN (?, ?) AND username = ?', [todo.id, scopedTodoId, username]);
       }
 
-      // 如果没有ID或ID不存在，检查是否有相同标题和截止日期的待办
       const dueDateTs = TimeHelper.parseToTs(todo.dueDate);
-      
+
       if (!existing && todo.title && dueDateTs) {
         existing = await db.get(
           'SELECT id FROM todos WHERE username = ? AND title = ? AND dueDate = ?',
@@ -271,7 +285,6 @@ router.post('/api/todos/import', async (req, res) => {
       }
 
       if (existing) {
-        // 更新现有待办
         await db.run(
           'UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?',
           [todo.title, todo.description || '', todo.priority || 5, dueDateTs, todo.completed ? 1 : 0, now, existing.id, username]
@@ -279,8 +292,7 @@ router.post('/api/todos/import', async (req, res) => {
         updated++;
         skipped++;
       } else {
-        // 插入新待办
-        const todoId = todo.id || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const todoId = todo.id ? scopedTodoId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         await db.run(
           'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
           [todoId, username, todo.title, todo.description || '', todo.priority || 5, dueDateTs, todo.completed ? 1 : 0, now, now]

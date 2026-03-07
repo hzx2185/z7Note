@@ -9,6 +9,7 @@ const ICalGenerator = require('../utils/icalGenerator');
 const ICalParser = require('../utils/icalParser');
 const { basicAuthMiddleware } = require('../middleware/basicAuth');
 const { broadcast } = require('./ws');
+const { scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 
 const router = express.Router();
 
@@ -63,6 +64,7 @@ router.propfind('/', basicAuthMiddleware, async (req, res) => {
 // PROPFIND /principals/:username/
 router.propfind('/principals/:username/', basicAuthMiddleware, async (req, res) => {
   const { username } = req.params;
+  if (username !== req.user) return res.status(403).send();
   const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:response><D:href>/caldav/principals/${urlEsc(username)}/</D:href><D:propstat><D:prop><D:resourcetype><D:principal/></D:resourcetype><D:displayname>${esc(username)}</D:displayname><D:principal-URL><D:href>/caldav/principals/${urlEsc(username)}/</D:href></D:principal-URL><C:calendar-home-set><D:href>/caldav/${urlEsc(username)}/</D:href></C:calendar-home-set></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.status(207).send(xml);
@@ -91,7 +93,8 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     if (depth === '1') {
       const items = await getConnection().all(`SELECT DISTINCT id, updatedAt FROM (SELECT id, updatedAt FROM events WHERE username = ? UNION ALL SELECT id, updatedAt FROM todos WHERE username = ?) ORDER BY updatedAt DESC`, [username, username]);
       items.forEach(item => {
-        itemsXml += `<D:response><D:href>/caldav/${urlEsc(username)}/${urlEsc(item.id)}.ics</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
+        const clientId = toClientCalendarId(username, item.id);
+        itemsXml += `<D:response><D:href>/caldav/${urlEsc(username)}/${urlEsc(clientId)}.ics</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
       });
     }
 
@@ -104,6 +107,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
 // PROPPATCH
 router.proppatch('/:username/', basicAuthMiddleware, async (req, res) => {
   const { username } = req.params;
+  if (username !== req.user) return res.status(403).send();
   const xml = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/caldav/${urlEsc(username)}/</D:href><D:propstat><D:prop><D:calendar-color xmlns:apple="http://apple.com/ns/ical/"/><D:displayname/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.status(207).send(xml);
@@ -113,6 +117,7 @@ router.proppatch('/:username/', basicAuthMiddleware, async (req, res) => {
 router.report('/:username/', basicAuthMiddleware, async (req, res) => {
   try {
     const { username } = req.params;
+    if (username !== req.user) return res.status(403).send();
     const body = (typeof req.body === 'string' ? req.body : '') || '';
     let items = [], responses = '', newToken = null, seenHrefs = new Set();
 
@@ -121,7 +126,14 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
       const hrefs = body.match(/<[a-zA-Z0-9_:]*href[^>]*>([^<]+)/g) || [];
       hrefs.forEach(h => {
           const match = h.match(/\/([^\/]+)\.ics$/);
-          if (match) { try { ids.push(decodeURIComponent(match[1])); } catch (e) { ids.push(match[1]); } }
+          if (match) {
+            try {
+              const rawId = decodeURIComponent(match[1]);
+              ids.push(rawId, scopeExternalCalendarId(username, rawId));
+            } catch (e) {
+              ids.push(match[1], scopeExternalCalendarId(username, match[1]));
+            }
+          }
       });
       if (ids.length > 0) {
           const CHUNK = 100;
@@ -154,7 +166,8 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
       ]);
       items = [...ev, ...td].sort((a, b) => a.updatedAt - b.updatedAt).slice(0, limit);
       del.forEach(d => {
-          const href = `/caldav/${urlEsc(username)}/${urlEsc(d.item_id)}.ics`;
+          const clientId = toClientCalendarId(username, d.item_id);
+          const href = `/caldav/${urlEsc(username)}/${urlEsc(clientId)}.ics`; 
           if (!seenHrefs.has(href)) {
               responses += `<D:response><D:href>${href}</D:href><D:status>HTTP/1.1 404 Not Found</D:status></D:response>`;
               seenHrefs.add(href);
@@ -171,10 +184,12 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
     }
 
     for (const item of items) {
-      const href = `/caldav/${urlEsc(username)}/${urlEsc(item.id)}.ics`;
+      const clientId = toClientCalendarId(username, item.id);
+      const href = `/caldav/${urlEsc(username)}/${urlEsc(clientId)}.ics`;
       if (seenHrefs.has(href)) continue;
       seenHrefs.add(href);
-      let ical = ICalGenerator.generateCalendar(item.type === 'event' ? [item] : [], item.type === 'todo' ? [item] : [], username, []).replace(/]]>/g, ']] >');
+      const exportItem = { ...item, id: clientId };
+      let ical = ICalGenerator.generateCalendar(exportItem.type === 'event' ? [exportItem] : [], exportItem.type === 'todo' ? [exportItem] : [], username, []).replace(/]]>/g, ']] >');
       responses += `<D:response><D:href>${href}</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><C:calendar-data><![CDATA[${ical}]]></C:calendar-data></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
     }
     
@@ -185,33 +200,39 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
 
 router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
     const { username, filename } = req.params;
+    if (username !== req.user) return res.status(403).send();
     let id = filename.replace(/\.ics$/i, '');
     try { id = decodeURIComponent(id); } catch(e) {}
-    const item = await getConnection().get('SELECT *, "event" as type FROM events WHERE id = ? AND username = ?', [id, username]) ||
-                 await getConnection().get('SELECT *, "todo" as type FROM todos WHERE id = ? AND username = ?', [id, username]);
+    const scopedId = scopeExternalCalendarId(username, id);
+    const item = await getConnection().get('SELECT *, "event" as type FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]) ||
+                 await getConnection().get('SELECT *, "todo" as type FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
     if (!item) return res.status(404).end();
+    const exportItem = { ...item, id: toClientCalendarId(username, item.id) };
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('ETag', `"${item.updatedAt}"`);
-    res.send(ICalGenerator.generateCalendar(item.type==='event'?[item]:[],item.type==='todo'?[item]:[],username,[]));
+    res.send(ICalGenerator.generateCalendar(exportItem.type==='event'?[exportItem]:[],exportItem.type==='todo'?[exportItem]:[],username,[]));
 });
 
 router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
     try {
         const { username, filename } = req.params;
+        if (username !== req.user) return res.status(403).send();
         let id = filename.replace(/\.ics$/i, '');
         try { id = decodeURIComponent(id); } catch(e) {}
         const parsed = ICalParser.parse(req.body || '');
         const now = Math.floor(Date.now() / 1000);
         for (const e of parsed.events) {
             const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
-            const ex = await getConnection().get('SELECT id FROM events WHERE id = ? AND username = ?', [e.id, username]);
-            if (ex) await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, e.id, username]);
-            else await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [e.id, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, now]);
+            const eventId = scopeExternalCalendarId(username, e.id || id);
+            const ex = await getConnection().get('SELECT id FROM events WHERE id IN (?, ?) AND username = ?', [e.id || id, eventId, username]);
+            if (ex) await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
+            else await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, now]);
         }
         for (const t of parsed.todos) {
-            const ex = await getConnection().get('SELECT id FROM todos WHERE id = ? AND username = ?', [t.id, username]);
-            if (ex) await getConnection().run('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?', [t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, t.id, username]);
-            else await getConnection().run('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [t.id, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
+            const todoId = scopeExternalCalendarId(username, t.id || id);
+            const ex = await getConnection().get('SELECT id FROM todos WHERE id IN (?, ?) AND username = ?', [t.id || id, todoId, username]);
+            if (ex) await getConnection().run('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?', [t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, ex.id, username]);
+            else await getConnection().run('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [todoId, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
         }
         res.setHeader('ETag', `"${now}"`);
         res.status(201).end();
@@ -221,15 +242,21 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
 
 router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {
     const { username, filename } = req.params;
+    if (username !== req.user) return res.status(403).send();
     let id = filename.replace(/\.ics$/i, '');
     try { id = decodeURIComponent(id); } catch(e) {}
-    await getConnection().run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now().toString(36) + Math.random().toString(36).slice(2), username, id, 'event', Math.floor(Date.now() / 1000)]);
-    await getConnection().run('DELETE FROM events WHERE id = ? AND username = ?', [id, username]);
-    await getConnection().run('DELETE FROM todos WHERE id = ? AND username = ?', [id, username]);
+    const scopedId = scopeExternalCalendarId(username, id);
+    const tombstoneId = toClientCalendarId(username, scopedId);
+    await getConnection().run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now().toString(36) + Math.random().toString(36).slice(2), username, tombstoneId, 'event', Math.floor(Date.now() / 1000)]);
+    await getConnection().run('DELETE FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
+    await getConnection().run('DELETE FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
     res.status(204).end();
     debouncedBroadcast(username);
 });
 
-router.mkcalendar('/:username/:calendar', basicAuthMiddleware, (req, res) => res.status(201).end());
+router.mkcalendar('/:username/:calendar', basicAuthMiddleware, (req, res) => {
+  if (req.params.username !== req.user) return res.status(403).send();
+  return res.status(201).end();
+});
 
 module.exports = router;

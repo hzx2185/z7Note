@@ -5,8 +5,127 @@ const { getConnection } = require('../db/connection');
 const { genToken } = require('../utils/helpers');
 const config = require('../config');
 const log = require('../utils/logger');
+const { safePath: buildSafePath, isValidFilename } = require('../utils/path');
 
 const router = express.Router();
+
+function getUserUploadDir(username) {
+  return path.join(config.paths.uploads, username);
+}
+
+function resolveOwnedFilePath(username, target) {
+  if (typeof target !== 'string' || !target.trim()) {
+    throw new Error('缺少有效的文件路径');
+  }
+
+  const normalizedTarget = path.normalize(target).replace(/^([/\\])+/, '');
+  const userDir = getUserUploadDir(username);
+
+  return {
+    normalizedTarget,
+    filePath: buildSafePath(userDir, normalizedTarget)
+  };
+}
+
+async function ensureShareTargetOwned(type, target, owner) {
+  const db = getConnection();
+
+  if (type === 'note') {
+    const note = await db.get(
+      'SELECT id FROM notes WHERE id = ? AND username = ? AND deleted = 0',
+      [target, owner]
+    );
+    if (!note) {
+      throw new Error('笔记不存在或无权分享');
+    }
+    return target;
+  }
+
+  if (type === 'file') {
+    const { normalizedTarget, filePath } = resolveOwnedFilePath(owner, target);
+    try {
+      await fs.access(filePath);
+    } catch (error) {
+      throw new Error('文件不存在或无权分享');
+    }
+    return normalizedTarget;
+  }
+
+  if (type === 'category') {
+    const categoryNotes = await db.all(
+      'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
+      [owner, `${target}/%`]
+    );
+    if (categoryNotes.length === 0) {
+      throw new Error('该分类下没有笔记');
+    }
+    return target;
+  }
+
+  throw new Error('无效的分享类型');
+}
+
+function extractAttachmentCandidates(content) {
+  const candidates = new Set();
+  if (!content) {
+    return candidates;
+  }
+
+  const patterns = [
+    /!\[[^\]]*\]\(([^)]+)\)/g,
+    /\[[^\]]*\]\(([^)]+)\)/g,
+    /!\[\[([^\]]+)\]\]/g
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const rawValue = (match[1] || '').trim();
+      if (!rawValue || rawValue.startsWith('http://') || rawValue.startsWith('https://')) {
+        continue;
+      }
+
+      const cleaned = rawValue.split('?')[0].split('#')[0];
+      const basename = path.basename(cleaned);
+      if (basename) {
+        candidates.add(basename);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+async function isAttachmentAllowedForShare(share, requestedFilename) {
+  const basename = path.basename(requestedFilename || '');
+  if (!basename || !isValidFilename(basename)) {
+    return false;
+  }
+
+  const db = getConnection();
+
+  if (share.targetType === 'file') {
+    return path.basename(share.target) === basename;
+  }
+
+  if (share.targetType === 'note') {
+    const note = await db.get(
+      'SELECT content FROM notes WHERE id = ? AND username = ? AND deleted = 0',
+      [share.target, share.owner]
+    );
+    return !!note && extractAttachmentCandidates(note.content).has(basename);
+  }
+
+  if (share.targetType === 'category') {
+    const notes = await db.all(
+      'SELECT content FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
+      [share.owner, `${share.target}/%`]
+    );
+    return notes.some(note => extractAttachmentCandidates(note.content).has(basename));
+  }
+
+  return false;
+}
 
 // 创建分享
 router.post('/api/share/create', async (req, res) => {
@@ -30,29 +149,24 @@ router.post('/api/share/create', async (req, res) => {
       return res.status(400).json({ error: '无效的密码' });
     }
 
-    // 验证分类分享的有效性
-    if (type === 'category') {
-      const categoryNotes = await getConnection().all(
-        'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
-        [req.user, `${target}/%`]
-      );
-      if (categoryNotes.length === 0) {
-        return res.status(400).json({ error: '该分类下没有笔记' });
-      }
+    if (password) {
+      return res.status(400).json({ error: '暂不支持密码分享，请使用公开分享' });
     }
+
+    const normalizedTarget = await ensureShareTargetOwned(type, target, req.user);
 
     const token = genToken(24);
     const expiresAt = parsedExpiresMs ? (Date.now() + parsedExpiresMs) : 0;
     await getConnection().run(
       'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [token, req.user, type, target, isPublic?1:0, password || null, expiresAt]
+      [token, req.user, type, normalizedTarget, isPublic?1:0, null, expiresAt]
     );
 
     // 如果是分类分享，自动分享该分类下的所有笔记
     if (type === 'category') {
       const categoryNotes = await getConnection().all(
         'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
-        [req.user, `${target}/%`]
+        [req.user, `${normalizedTarget}/%`]
       );
 
       // 获取该用户已有的分享，避免重复
@@ -68,7 +182,7 @@ router.post('/api/share/create', async (req, res) => {
           const noteToken = genToken(24);
           await getConnection().run(
             'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [noteToken, req.user, 'note', note.id.toString(), isPublic?1:0, password || null, expiresAt]
+            [noteToken, req.user, 'note', note.id.toString(), isPublic?1:0, null, expiresAt]
           );
         }
       }
@@ -76,6 +190,9 @@ router.post('/api/share/create', async (req, res) => {
 
     res.json({ status: 'ok', token, url: `${req.protocol}://${req.get('host')}/s/${token}`, expiresAt, type });
   } catch (e) {
+    if (['笔记不存在或无权分享', '文件不存在或无权分享', '该分类下没有笔记', '无效的分享类型', '缺少有效的文件路径'].includes(e.message)) {
+      return res.status(400).json({ error: e.message });
+    }
     log('ERROR', '创建分享失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '创建失败，请稍后重试' });
   }
@@ -131,7 +248,7 @@ router.get('/api/share/list', async (req, res) => {
       [req.user]
     );
 
-    const now = Math.floor(Date.now() / 1000);
+    const now = Date.now();
     const validShares = [];
     const invalidTokens = [];
 
@@ -168,6 +285,16 @@ router.get('/api/share/list', async (req, res) => {
           continue;
         }
       }
+
+      if (share.targetType === 'file') {
+        try {
+          const { filePath } = resolveOwnedFilePath(req.user, share.target);
+          await fs.access(filePath);
+        } catch (error) {
+          invalidTokens.push(share.token);
+          continue;
+        }
+      }
       
       validShares.push(share);
     }
@@ -197,8 +324,8 @@ router.get('/api/share/public-list', async (req, res) => {
       let title = '', summary = '', category = '', ownerName = s.owner;
       if (s.targetType === 'note') {
         const note = await getConnection().get(
-          'SELECT id, title, content FROM notes WHERE id = ? AND deleted = 0', 
-          [s.target]
+          'SELECT id, title, content FROM notes WHERE id = ? AND username = ? AND deleted = 0', 
+          [s.target, s.owner]
         );
         if (note) {
           title = note.title || '无标题';
@@ -225,9 +352,8 @@ router.get('/api/share/public-list', async (req, res) => {
           title = null;
         }
       } else {
-        const safePath = path.normalize(s.target).replace(/^(\.\.(\/|\\|$))+/, '');
-        const filePath = path.join(config.paths.uploads, safePath);
         try {
+          const { filePath } = resolveOwnedFilePath(s.owner, s.target);
           await fs.access(filePath);
           title = s.target.split('/').pop() || s.target;
           summary = '文件分享';
@@ -299,15 +425,15 @@ router.get('/api/share/public/:token', async (req, res) => {
       
       // 自动为该笔记创建分享记录（如果还没有）
       const existingShare = await getConnection().get(
-        'SELECT * FROM shares WHERE targetType = ? AND target = ?',
-        ['note', noteId]
+        'SELECT * FROM shares WHERE owner = ? AND targetType = ? AND target = ?',
+        [categoryShare.owner, 'note', noteId]
       );
       
       if (!existingShare) {
         const noteToken = genToken(24);
         await getConnection().run(
           'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [noteToken, categoryShare.owner, 'note', noteId, categoryShare.public, categoryShare.password, categoryShare.expiresAt]
+          [noteToken, categoryShare.owner, 'note', noteId, categoryShare.public, null, categoryShare.expiresAt]
         );
       }
       
@@ -372,8 +498,8 @@ router.get('/api/share/public/:token', async (req, res) => {
       let category = '', title = '';
       if (s.targetType === 'note') {
         const note = await getConnection().get(
-          'SELECT id, title FROM notes WHERE id = ? AND deleted = 0',
-          [s.target]
+          'SELECT id, title FROM notes WHERE id = ? AND username = ? AND deleted = 0',
+          [s.target, s.owner]
         );
         if (note) {
           title = note.title || '无标题';
@@ -397,8 +523,8 @@ router.get('/api/share/public/:token', async (req, res) => {
 
     if (row.targetType === 'note') {
       const note = await getConnection().get(
-        'SELECT id, title, content, updatedAt FROM notes WHERE id = ? AND deleted = 0', 
-        [row.target]
+        'SELECT id, title, content, updatedAt FROM notes WHERE id = ? AND username = ? AND deleted = 0', 
+        [row.target, row.owner]
       );
       if (!note) {
         // 笔记已删除，自动清理分享记录
@@ -440,7 +566,7 @@ router.get('/api/share/public/:token', async (req, res) => {
           const noteToken = genToken(24);
           await getConnection().run(
             'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [noteToken, row.owner, 'note', note.id.toString(), row.public, row.password, row.expiresAt]
+            [noteToken, row.owner, 'note', note.id.toString(), row.public, null, row.expiresAt]
           );
         }
       }
@@ -496,11 +622,9 @@ router.get('/s/:token', async (req, res) => {
 
     if (row.targetType === 'file') {
       // 文件直接下载
-      const userDir = row.owner || '';
-      const safe = path.normalize(row.target).replace(/^(\.\.(\/|\\|$))+/, '');
-      const filePath = path.join(config.paths.uploads, userDir, safe);
-      if (!path.resolve(filePath).startsWith(path.resolve(config.paths.uploads))) return res.status(400).send('无效的文件路径');
+      let filePath = '';
       try {
+        ({ filePath } = resolveOwnedFilePath(row.owner || '', row.target));
         await fs.access(filePath);
         return res.sendFile(filePath);
       } catch (err) {
@@ -532,17 +656,17 @@ router.get('/api/share/attachment/:token/:filename(*)', async (req, res) => {
       return res.status(410).send('Share expired');
     }
 
-    const safeFilename = path.normalize(filename).replace(/^\.\//, '').replace(/^\.\\/, '');
-    if (safeFilename !== filename) {
+    const requestedName = path.basename(filename);
+    if (requestedName !== filename.split('/').pop() || !isValidFilename(requestedName)) {
       return res.status(400).send('Invalid filename');
     }
 
-    const filePath = path.join(config.paths.uploads, safeFilename);
-
-    if (!path.resolve(filePath).startsWith(path.resolve(config.paths.uploads))) {
-      return res.status(400).send('Bad request');
+    const allowed = await isAttachmentAllowedForShare(share, requestedName);
+    if (!allowed) {
+      return res.status(403).send('Forbidden');
     }
 
+    const { filePath } = resolveOwnedFilePath(share.owner, requestedName);
     try { await fs.access(filePath); } catch (err) { return res.status(404).send('File not found'); }
     return res.sendFile(filePath);
   } catch (err) { console.error('[Share Attachment] Error:', err); return res.status(500).send('Server error'); }

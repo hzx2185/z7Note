@@ -2,9 +2,60 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <script>
+        /**
+         * 极致错误拦截器 - 消除浏览器扩展及已知干扰报错
+         */
+        (function() {
+            const IGNORE_PATTERNS = [
+                'bootstrap-autofill', 'AutofillOverlayContentService', 'setQualifiedLoginFillType', 'isIgnoredField',
+                'extension://', 'non-passive event listener', 'purify.min.js.map', 'includes', 'TypeError'
+            ];
+
+            const isRedundantError = (msg, stack, file) => {
+                const searchStr = `${msg} ${stack} ${file}`;
+                return IGNORE_PATTERNS.some(p => searchStr.includes(p)) || !msg || msg.includes('Cannot read properties of null');
+            };
+
+            // 拦截 window 错误
+            window.addEventListener('error', (e) => {
+                if (isRedundantError(e.message, e.error?.stack, e.filename)) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    return false;
+                }
+            }, true);
+
+            // 拦截 Promise 拒绝
+            window.addEventListener('unhandledrejection', (e) => {
+                const stack = e.reason?.stack || '';
+                const msg = e.reason?.message || String(e.reason);
+                if (isRedundantError(msg, stack, '')) {
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                    return false;
+                }
+            }, true);
+
+            // 抑制 console 警告和错误
+            const originalWarn = console.warn;
+            const originalError = console.error;
+            
+            console.warn = (...args) => {
+                if (typeof args[0] === 'string' && IGNORE_PATTERNS.some(p => args[0].includes(p))) return;
+                originalWarn.apply(console, args);
+            };
+
+            console.error = (...args) => {
+                if (typeof args[0] === 'string' && IGNORE_PATTERNS.some(p => args[0].includes(p))) return;
+                originalError.apply(console, args);
+            };
+        })();
+    </script>
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
     <meta name="theme-color" content="#0d1117">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="z7Note">
     <title>z7Note - 用户登录</title>
@@ -51,7 +102,7 @@
             <input type="email" id="reset-email" name="email" placeholder="输入绑定的邮箱" autocomplete="email" required>
             <button type="button" id="send-code-btn" class="code-btn" onclick="sendCode()">获取验证码</button>
             <hr>
-            <input type="text" id="reset-token" placeholder="6位验证码" required>
+            <input type="text" id="reset-token" name="reset-token" placeholder="6位验证码" autocomplete="one-time-code" inputmode="numeric" maxlength="6" required>
             <input type="password" id="reset-new-pass" name="new-password" placeholder="新密码" autocomplete="new-password" required>
             <button type="submit">重置并登录</button>
             <button type="button" class="alt-btn" onclick="toggleForgot(false)">返回登录</button>
@@ -152,6 +203,36 @@
             return null;
         }
 
+        async function finalizeLogin(user, successText) {
+            try {
+                const sessionCheck = await fetch('/api/user-info', {
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                });
+
+                if (!sessionCheck.ok) {
+                    throw new Error(`session-check-${sessionCheck.status}`);
+                }
+
+                localStorage.setItem('z7note_username', user);
+                showToast(successText);
+                setTimeout(() => { window.location.href = '/'; }, 800);
+            } catch (err) {
+                console.error('[Login] Session not established:', err);
+                showError('auth-error', '登录成功，但浏览器未保存会话，请检查站点地址、HTTPS 与 COOKIE_SECURE 配置');
+                const btn = document.getElementById('submit-btn');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = isLoginMode ? '立即登录' : '注册并登录';
+                }
+                const tfaBtn = document.getElementById('tfa-submit-btn');
+                if (tfaBtn) {
+                    tfaBtn.disabled = false;
+                    tfaBtn.innerText = '验证';
+                }
+            }
+        }
+
         // 处理登录与注册请求
         async function handleAuth(e) {
             e.preventDefault();
@@ -179,6 +260,7 @@
             try {
                 const response = await fetch(url, {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ user, pass })
                 });
@@ -193,9 +275,7 @@
                         tempToken = data.tempToken;
                         showTFAForm();
                     } else { // 登录成功或注册成功
-                        localStorage.setItem('z7note_username', user);
-                        showToast(isLoginMode ? "登录成功" : "注册成功");
-                        setTimeout(() => { window.location.href = '/'; }, 800);
+                        await finalizeLogin(user, isLoginMode ? "登录成功" : "注册成功");
                     }
                 } else {
                     showError('auth-error', data.error || '操作失败');
@@ -232,6 +312,7 @@
                 console.log('[Login] Sending verify-tfa request...');
                 const response = await fetch('/api/verify-tfa', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ tempToken, tfaToken })
                 });
@@ -241,8 +322,7 @@
                 console.log('[Login] Response data:', data);
                 
                 if (response.ok && data.status === 'ok') {
-                    showToast("验证成功，正在登录...");
-                    setTimeout(() => { window.location.href = '/'; }, 800);
+                    await finalizeLogin(document.getElementById('username').value.trim(), "验证成功，正在登录...");
                 } else {
                     const errorMsg = data.error || '验证失败';
                     console.error('[Login] Error:', errorMsg);

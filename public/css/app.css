@@ -441,3 +441,78 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
 .shortcuts-table kbd { display: inline-block; padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: monospace; font-size: 12px; font-weight: 500; color: var(--text); margin: 0 2px; }
 .shortcuts-table kbd:first-child { margin-left: 0; }
 .shortcuts-table kbd:last-child { margin-right: 0; }
+
+
+#change-password-modal .compact-modal { width: min(420px, 92vw); }
+#change-password-modal .compact-form-body { padding: 16px 16px 14px; }
+#change-password-modal .compact-form { display: flex; flex-direction: column; gap: 10px; }
+#change-password-modal .compact-group { margin-bottom: 0; }
+#change-password-modal .compact-group label { font-size: 13px; font-weight: 500; }
+#change-password-modal .compact-group input { padding: 10px 12px; border-radius: 8px; }
+#change-password-modal .compact-group .hint { margin-top: 6px; font-size: 12px; }
+#change-password-modal .compact-error { color: var(--red); font-size: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.18); }
+#change-password-modal .compact-btn-group { margin-top: 2px; justify-content: flex-end; }
+#change-password-modal .compact-btn-group .btn { min-width: 88px; }
+@media (max-width: 640px) {
+  #change-password-modal .compact-modal { width: min(96vw, 420px); }
+  #change-password-modal .compact-form-body { padding: 14px; }
+  #change-password-modal .compact-btn-group { gap: 8px; }
+  #change-password-modal .compact-btn-group .btn { flex: 1; min-width: 0; }
+}
+
+#email-modal .compact-modal { width: min(440px, 92vw); }
+#email-modal .compact-form-body { padding: 16px 16px 14px; }
+#email-modal .compact-form { display: flex; flex-direction: column; gap: 10px; }
+#email-modal .compact-group { margin-bottom: 0; }
+#email-modal .compact-group label { font-size: 13px; font-weight: 500; }
+#email-modal .compact-group input { padding: 10px 12px; border-radius: 8px; }
+#email-modal .compact-inline-action { display: flex; gap: 8px; align-items: center; }
+#email-modal .compact-inline-action input { flex: 1; min-width: 0; }
+#email-modal .compact-inline-btn { white-space: nowrap; padding-inline: 12px; }
+#email-modal .compact-feedback { font-size: 12px; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; }
+#email-modal .compact-code-area { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+#email-modal .compact-hint { color: var(--gray); font-size: 12px; line-height: 1.5; }
+#email-modal .compact-btn-group { margin-top: 2px; justify-content: flex-end; }
+#email-modal .compact-btn-group .btn { min-width: 88px; }
+@media (max-width: 640px) {
+  #email-modal .compact-modal { width: min(96vw, 440px); }
+  #email-modal .compact-form-body { padding: 14px; }
+  #email-modal .compact-inline-action { flex-direction: column; align-items: stretch; }
+  #email-modal .compact-inline-btn { width: 100%; }
+  #email-modal .compact-btn-group { gap: 8px; }
+  #email-modal .compact-btn-group .btn { flex: 1; min-width: 0; }
+}
+
+.note-title-wrapper { padding: 8px 16px; background: var(--bg); width: 100%; box-sizing: border-box; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+.note-title-input { width: 100%; border: none; background: transparent; font-size: 16px; font-weight: 600; color: var(--text); outline: none; padding: 0; margin: 0; line-height: 1.35; }
+.note-title-input::placeholder { color: var(--gray); font-weight: 500; }
+
+#2fa-modal .compact-modal { width: min(460px, 92vw); overflow-x: hidden; }
+#2fa-modal .compact-form-body { padding: 16px; overflow-x: hidden; }
+#2fa-modal .twofa-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+#2fa-modal .twofa-header { text-align: center; }
+#2fa-modal .twofa-icon { font-size: 30px; margin-bottom: 6px; }
+#2fa-modal .twofa-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+#2fa-modal .twofa-subtitle { font-size: 12px; color: var(--gray); line-height: 1.5; }
+#2fa-modal .twofa-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-width: 0; overflow: hidden; text-align: center; }
+#2fa-modal .twofa-card-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; text-align: center; }
+#2fa-modal .twofa-qr { display: flex; justify-content: center; align-items: center; min-height: 144px; width: 100%; margin: 0 auto; text-align: center; }
+#2fa-modal .twofa-qr img { display: block; width: 132px; height: 132px; border-radius: 8px; margin: 0 auto; }
+#2fa-modal .twofa-secret { font-family: monospace; font-size: 12px; word-break: break-all; overflow-wrap: anywhere; line-height: 1.55; max-width: 100%; text-align: center; }
+#2fa-modal .twofa-uri-input { display: block; width: 100%; min-width: 100%; max-width: 100%; min-height: 104px; margin: 0; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; background: var(--side); color: var(--text); font-family: monospace; font-size: 12px; line-height: 1.55; overflow-y: auto; overflow-x: hidden; resize: none; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
+#2fa-modal .twofa-code-input { width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px; outline: none; text-align: center; font-size: 16px; letter-spacing: 2px; }
+#2fa-modal .twofa-backup-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+#2fa-modal .twofa-backup-code { background: var(--side); border: 1px solid var(--border); padding: 8px; border-radius: 8px; font-family: monospace; font-size: 12px; text-align: center; }
+#2fa-modal .twofa-actions { display: flex; gap: 8px; justify-content: center; min-width: 0; flex-wrap: wrap; width: 100%; }
+#2fa-modal .twofa-actions .btn { min-width: 96px; }
+#2fa-modal .twofa-feedback { color: var(--gray); font-size: 12px; line-height: 1.5; text-align: center; }
+#2fa-modal .twofa-warning { color: var(--accent); font-weight: 600; }
+@media (max-width: 640px) {
+  .note-title-wrapper { padding: 8px 12px; }
+  .note-title-input { font-size: 15px; }
+  #2fa-modal .compact-modal { width: min(96vw, 460px); }
+  #2fa-modal .compact-form-body { padding: 14px; }
+  #2fa-modal .twofa-actions { flex-direction: column; }
+  #2fa-modal .twofa-actions .btn { width: 100%; min-width: 0; }
+  #2fa-modal .twofa-backup-grid { grid-template-columns: 1fr; }
+}

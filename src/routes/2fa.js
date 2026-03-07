@@ -27,16 +27,11 @@ function generateBackupCodes(count = 8) {
  * 获取当前用户的2FA状态
  */
 router.get('/status', async (req, res) => {
-    console.log('[2FA Status] Request received');
-    console.log('[2FA Status] req.user:', req.user);
-    
     try {
         const db = getConnection();
         const user = await db.get('SELECT tfa_enabled, tfa_secret, tfa_backup_codes FROM users WHERE username = ?', [req.user]);
-        console.log('[2FA Status] User:', user);
-        
+
         if (!user) {
-            console.log('[2FA Status] User not found');
             return res.status(404).json({ message: '用户不存在' });
         }
         
@@ -49,10 +44,9 @@ router.get('/status', async (req, res) => {
             }
         }
         
-        console.log('[2FA Status] Responding with enabled:', !!user.tfa_enabled);
         res.json({ enabled: !!user.tfa_enabled, backupCodes });
     } catch (e) {
-        console.error('[2FA Status] 获取2FA状态失败:', e);
+        console.error('[2FA Status] 获取2FA状态失败:', e.message);
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -62,16 +56,12 @@ router.get('/status', async (req, res) => {
  * 为用户生成一个新的2FA密钥和二维码
  */
 router.post('/setup', async (req, res) => {
-    console.log('[2FA Setup] Request received');
-    console.log('[2FA Setup] req.user:', req.user);
-    
     try {
         const db = getConnection();
         
         // 先检查用户是否已有 tfa_secret
-        const existingUser = await db.get('SELECT tfa_secret, email FROM users WHERE username = ?', [req.user]);
+        const existingUser = await db.get('SELECT tfa_secret FROM users WHERE username = ?', [req.user]);
         if (!existingUser) {
-            console.log('[2FA Setup] User not found:', req.user);
             return res.status(404).json({ message: '用户不存在' });
         }
 
@@ -80,25 +70,20 @@ router.post('/setup', async (req, res) => {
         // 只有在用户没有 tfa_secret 时才生成新的
         if (!secret) {
             secret = authenticator.generateSecret();
-            console.log('[2FA Setup] Generated new secret:', secret);
             await db.run('UPDATE users SET tfa_secret = ? WHERE username = ?', [secret, req.user]);
-        } else {
-            console.log('[2FA Setup] Using existing secret:', secret);
         }
 
         const otpAuthUrl = authenticator.keyuri(req.user, 'z7note', secret);
-        console.log('[2FA Setup] Generated otpAuthUrl:', otpAuthUrl);
 
         qrcode.toDataURL(otpAuthUrl, (err, qrCode) => {
             if (err) {
-                console.error('[2FA Setup] 生成二维码失败:', err);
+                console.error('[2FA Setup] 生成二维码失败:', err.message);
                 return res.status(500).json({ message: '无法生成二维码' });
             }
-            console.log('[2FA Setup] QR code generated successfully');
-            res.json({ secret, qrCode });
+            res.json({ secret, qrCode, otpAuthUrl });
         });
     } catch (e) {
-        console.error('[2FA Setup] 设置2FA失败:', e);
+        console.error('[2FA Setup] 设置2FA失败:', e.message);
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -108,29 +93,18 @@ router.post('/setup', async (req, res) => {
  * 验证令牌并为用户启用2FA
  */
 router.post('/enable', async (req, res) => {
-    console.log('[2FA Enable] Request received');
-    console.log('[2FA Enable] req.body:', req.body);
-    console.log('[2FA Enable] req.user:', req.user);
-    
     const { token } = req.body;
     if (!token) {
-        console.log('[2FA Enable] No token provided');
         return res.status(400).json({ message: '需要提供验证码' });
     }
 
     try {
         const db = getConnection();
-        console.log('[2FA Enable] Querying user:', req.user);
         const user = await db.get('SELECT tfa_secret, tfa_enabled FROM users WHERE username = ?', [req.user]);
 
-        console.log('[2FA Enable] User found:', user);
-
         if (!user || !user.tfa_secret) {
-            console.log('[2FA Enable] User or secret missing');
             return res.status(400).json({ message: '2FA未设置或密钥丢失' });
         }
-
-        console.log('[2FA Enable] Checking token:', token, 'with secret:', user.tfa_secret);
         
         // 验证 token，使用 ±2 步的窗口以增加容错性
         let isValid = false;
@@ -147,8 +121,6 @@ router.post('/enable', async (req, res) => {
             }
         }
         
-        console.log('[2FA Enable] Token valid:', isValid);
-
         if (isValid) {
             // 生成备用代码
             const backupCodes = generateBackupCodes();
@@ -160,14 +132,12 @@ router.post('/enable', async (req, res) => {
                 [backupCodesJson, req.user]
             );
             
-            console.log('[2FA Enable] 2FA enabled successfully');
             res.json({ message: '2FA已成功启用', backupCodes });
         } else {
-            console.log('[2FA Enable] Invalid token');
             res.status(400).json({ message: '验证码无效' });
         }
     } catch (e) {
-        console.error('[2FA Enable] Error:', e);
+        console.error('[2FA Enable] Error:', e.message);
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -177,9 +147,6 @@ router.post('/enable', async (req, res) => {
  * 为用户禁用2FA
  */
 router.post('/disable', async (req, res) => {
-    console.log('[2FA Disable] Request received');
-    console.log('[2FA Disable] req.user:', req.user);
-    
     try {
         const db = getConnection();
         // 同时禁用并清空密钥和备用代码
@@ -187,10 +154,9 @@ router.post('/disable', async (req, res) => {
             'UPDATE users SET tfa_enabled = 0, tfa_secret = NULL, tfa_backup_codes = NULL WHERE username = ?', 
             [req.user]
         );
-        console.log('[2FA Disable] 2FA disabled successfully');
         res.json({ message: '2FA已成功禁用' });
     } catch (e) {
-        console.error('[2FA Disable] 禁用2FA失败:', e);
+        console.error('[2FA Disable] 禁用2FA失败:', e.message);
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -200,9 +166,6 @@ router.post('/disable', async (req, res) => {
  * 重新生成备用代码
  */
 router.post('/refresh-backup-codes', async (req, res) => {
-    console.log('[2FA Refresh Backup Codes] Request received');
-    console.log('[2FA Refresh Backup Codes] req.user:', req.user);
-    
     try {
         const db = getConnection();
         const user = await db.get('SELECT tfa_enabled FROM users WHERE username = ?', [req.user]);
@@ -219,10 +182,9 @@ router.post('/refresh-backup-codes', async (req, res) => {
             [backupCodesJson, req.user]
         );
         
-        console.log('[2FA Refresh Backup Codes] Backup codes refreshed');
         res.json({ backupCodes });
     } catch (e) {
-        console.error('[2FA Refresh Backup Codes] 刷新备用代码失败:', e);
+        console.error('[2FA Refresh Backup Codes] 刷新备用代码失败:', e.message);
         res.status(500).json({ message: '服务器内部错误' });
     }
 });

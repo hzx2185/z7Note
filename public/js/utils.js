@@ -8,6 +8,7 @@ export async function fetchWithTimeout(url, options = {}, timeout = 10000) {
 
     try {
         const response = await fetch(url, {
+            credentials: 'same-origin',
             ...options,
             signal: controller.signal
         });

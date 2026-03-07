@@ -2,6 +2,8 @@ const express = require('express');
 const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
 const { importFromICS } = require('../utils/icsExport');
+const { toClientCalendarId } = require('../utils/calendarIds');
+const { execFileSync } = require('child_process');
 
 const router = express.Router();
 
@@ -60,7 +62,7 @@ router.post('/', async (req, res) => {
 
     log('INFO', '添加订阅', { username: req.user, subscriptionId: id, name: name.trim() });
     
-    const subscription = await getConnection().get('SELECT * FROM calendar_subscriptions WHERE id = ?', [id]);
+    const subscription = await getConnection().get('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [id, req.user]);
     res.json(subscription);
   } catch (e) {
     log('ERROR', '添加订阅失败', { username: req.user, error: e.message });
@@ -105,7 +107,7 @@ router.put('/:id', async (req, res) => {
 
     log('INFO', '更新订阅', { username: req.user, subscriptionId: req.params.id });
     
-    const subscription = await getConnection().get('SELECT * FROM calendar_subscriptions WHERE id = ?', [req.params.id]);
+    const subscription = await getConnection().get('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [req.params.id, req.user]);
     res.json(subscription);
   } catch (e) {
     log('ERROR', '更新订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
@@ -144,7 +146,7 @@ router.delete('/:id', async (req, res) => {
       for (const event of events) {
         await db.run(
           'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-          [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, event.id, 'event', now]
+          [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, event.id), 'event', now]
         );
       }
 
@@ -191,6 +193,19 @@ async function syncSubscription(subscriptionId, username) {
     fetchUrl = 'https://' + fetchUrl.substring(9);
   }
 
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(fetchUrl);
+  } catch (e) {
+    throw new Error('订阅地址无效');
+  }
+
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw new Error('订阅地址协议不受支持');
+  }
+
+  fetchUrl = parsedUrl.toString();
+
   log('INFO', '开始同步订阅内容', { url: fetchUrl, subscriptionId });
 
   // 获取ICS内容
@@ -212,9 +227,12 @@ async function syncSubscription(subscriptionId, username) {
     icsContent = await response.text();
   } catch (fetchErr) {
     log('WARN', 'Fetch同步失败，尝试备用方案(curl)', { error: fetchErr.message });
-    const { execSync } = require('child_process');
     try {
-      icsContent = execSync(`curl -L -s -A "Mozilla/5.0" "${fetchUrl}"`, { encoding: 'utf8', timeout: 30000 });
+      icsContent = execFileSync(
+        'curl',
+        ['-L', '-sS', '-A', 'Mozilla/5.0', fetchUrl],
+        { encoding: 'utf8', timeout: 30000, maxBuffer: 10 * 1024 * 1024 }
+      );
       if (!icsContent || !icsContent.includes('BEGIN:VCALENDAR')) {
         throw new Error('curl 返回内容无效');
       }
@@ -264,8 +282,8 @@ async function syncSubscription(subscriptionId, username) {
 
     // 3. 更新最后同步时间
     await db.run(
-      'UPDATE calendar_subscriptions SET lastSync = ?, updatedAt = ? WHERE id = ?',
-      [now, now, subscriptionId]
+      'UPDATE calendar_subscriptions SET lastSync = ?, updatedAt = ? WHERE id = ? AND username = ?',
+      [now, now, subscriptionId, username]
     );
 
     await db.run('COMMIT');

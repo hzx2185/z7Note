@@ -9,6 +9,7 @@ const { sendMail } = require('../services/mailer');
 const { genToken } = require('../utils/helpers');
 const log = require('../utils/logger');
 const { emailVerifyRateLimit } = require('../middleware/rateLimit');
+const { createSession, destroySession, destroyUserSessions, getSessionCookieOptions, clearSessionCookie } = require('../services/session');
 
 const router = express.Router();
 
@@ -32,14 +33,8 @@ router.post('/api/register', async (req, res) => {
     await getConnection().run('INSERT INTO users (username, password, noteLimit, fileLimit) VALUES (?, ?, ?, ?)',
       [sanitizedUser, hashedPassword, isTargetAdmin ? 1000 : config.defaultNoteLimit, 
        isTargetAdmin ? 5000 : config.defaultFileLimit]);
-    res.cookie(config.cookieName, sanitizedUser, { 
-      maxAge: config.cookieMaxAge, 
-      httpOnly: true, 
-      secure: config.cookieSecure,
-      sameSite: 'strict',
-      path: '/', 
-      domain: config.cookieDomain
-    });
+    const session = await createSession(sanitizedUser);
+    res.cookie(config.cookieName, session.id, getSessionCookieOptions(req));
     res.json({ status: "ok" });
     log('INFO', '用户注册成功', { username: sanitizedUser });
   } catch (e) {
@@ -53,7 +48,6 @@ router.post('/api/register', async (req, res) => {
 
 // 登录
 router.post('/api/login', async (req, res) => {
-  console.log('[Login] Request received');
   const { user, pass } = req.body;
   try {
     if (!user || !pass) {
@@ -67,21 +61,11 @@ router.post('/api/login', async (req, res) => {
     if (row && await bcrypt.compare(sanitizeInput(pass, 100), row.password)) {
       // 密码正确，检查是否需要2FA
       if (row.tfa_enabled) {
-        // 需要2FA，生成临时令牌
-        console.log('[Login] 2FA enabled, generating temp token with expiresIn:', config.jwt.expiresIn);
         const tempToken = jwt.sign({ username: row.username }, config.jwt.secret, { expiresIn: config.jwt.expiresIn });
-        console.log('[Login] Temp token generated');
         return res.json({ status: "tfa_required", tempToken });
       } else {
-        // 不需要2FA，正常登录
-        res.cookie(config.cookieName, row.username, { 
-          maxAge: config.cookieMaxAge, 
-          httpOnly: true, 
-          secure: config.cookieSecure,
-          sameSite: 'strict',
-          path: '/', 
-          domain: config.cookieDomain
-        });
+        const session = await createSession(row.username);
+        res.cookie(config.cookieName, session.id, getSessionCookieOptions(req));
         return res.json({ status: "ok" });
       }
     }
@@ -94,26 +78,14 @@ router.post('/api/login', async (req, res) => {
 
 // 验证2FA并完成登录
 router.post('/api/verify-tfa', async (req, res) => {
-  console.log('[Verify TFA] Request received');
-  console.log('[Verify TFA] tempToken length:', req.body.tempToken?.length || 0);
-  console.log('[Verify TFA] tfaToken:', req.body.tfaToken);
-  
   const { tempToken, tfaToken } = req.body;
   if (!tempToken || !tfaToken) {
-    console.log('[Verify TFA] Missing tempToken or tfaToken');
     return res.status(400).json({ error: '缺少临时令牌或2FA验证码' });
   }
 
   try {
-    // 验证临时令牌
-    console.log('[Verify TFA] Verifying JWT token...');
-    console.log('[Verify TFA] JWT secret length:', config.jwt.secret.length);
-    
     const decoded = jwt.verify(tempToken, config.jwt.secret);
     const username = decoded.username;
-    console.log('[Verify TFA] JWT valid, username:', username);
-    console.log('[Verify TFA] Token exp (timestamp):', decoded.exp);
-    console.log('[Verify TFA] Current time (timestamp):', Math.floor(Date.now() / 1000));
 
     // 获取用户2FA密钥和备用代码
     const db = getConnection();
@@ -163,15 +135,8 @@ router.post('/api/verify-tfa', async (req, res) => {
     }
 
     if (isValid) {
-      // 验证成功，设置最终cookie并完成登录
-      res.cookie(config.cookieName, username, { 
-        maxAge: config.cookieMaxAge, 
-        httpOnly: true, 
-        secure: config.cookieSecure,
-        sameSite: 'strict',
-        path: '/', 
-        domain: config.cookieDomain 
-      });
+      const session = await createSession(username);
+      res.cookie(config.cookieName, session.id, getSessionCookieOptions(req));
       return res.json({ status: "ok", usedBackupCode });
     } else {
       return res.status(401).json({ error: '2FA验证码无效' });
@@ -189,9 +154,16 @@ router.post('/api/verify-tfa', async (req, res) => {
 });
 
 // 登出
-router.post('/api/logout', (req, res) => { 
-  res.clearCookie(config.cookieName); 
-  res.json({ status: "ok" }); 
+router.post('/api/logout', async (req, res) => {
+  try {
+    const sessionId = req.cookies[config.cookieName];
+    await destroySession(sessionId);
+    clearSessionCookie(req, res);
+    res.json({ status: 'ok' });
+  } catch (error) {
+    log('ERROR', '登出失败', { error: error.message });
+    res.status(500).json({ error: '登出失败' });
+  }
 });
 
 // 发送绑定邮箱验证码
@@ -367,6 +339,10 @@ router.post('/api/change-password', async (req, res) => {
     // 更新新密码
     const hashedNewPassword = await bcrypt.hash(newPass, 10);
     await getConnection().run('UPDATE users SET password = ? WHERE username = ?', [hashedNewPassword, req.user]);
+    await destroyUserSessions(req.user);
+
+    const session = await createSession(req.user);
+    res.cookie(config.cookieName, session.id, getSessionCookieOptions(req));
     
     log('INFO', '用户密码修改成功', { username: req.user });
     res.json({ status: "ok" });

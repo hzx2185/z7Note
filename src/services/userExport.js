@@ -7,6 +7,7 @@ const log = require('../utils/logger');
 const { exportToICS } = require('../utils/icsExport');
 const VCardGenerator = require('../utils/vCardGenerator');
 const WebDAVHelper = require('../utils/webdavHelper');
+const { toClientCalendarId } = require('../utils/calendarIds');
 
 // 用户定时备份任务管理
 const userBackupTasks = new Map();
@@ -40,7 +41,8 @@ async function exportUserData(username, backupConfig) {
     if (backupConfig.includeCalendar) {
       const events = await db.all('SELECT * FROM events WHERE username = ?', [username]);
       if (events.length > 0) {
-        const icsContent = exportToICS(events, { targetApp: 'standard', includeReminders: true });
+        const exportedEvents = events.map(event => ({ ...event, id: toClientCalendarId(username, event.id) }));
+        const icsContent = exportToICS(exportedEvents, { targetApp: 'standard', includeReminders: true });
         textFiles.push({ filename: `${username}-calendar.ics`, buffer: Buffer.from(icsContent, 'utf-8') });
       }
     }
@@ -49,7 +51,7 @@ async function exportUserData(username, backupConfig) {
     if (backupConfig.includeTodos) {
       const todos = await db.all('SELECT id, title, description, completed, priority, dueDate, noteId, updatedAt FROM todos WHERE username = ?', [username]);
       const todosData = { username, exportTime: new Date().toISOString(), todos: todos.map(todo => ({
-        id: todo.id, title: todo.title, description: todo.description, completed: todo.completed === 1,
+        id: toClientCalendarId(username, todo.id), title: todo.title, description: todo.description, completed: todo.completed === 1,
         priority: todo.priority, dueDate: todo.dueDate ? new Date(todo.dueDate * 1000).toISOString() : null,
         noteId: todo.noteId, updatedAt: new Date(todo.updatedAt * 1000).toISOString()
       }))};
@@ -203,7 +205,7 @@ async function getUserBackupConfig(username) {
     includeTodos: config.includeTodos !== undefined ? config.includeTodos === 1 : 1,
     includeContacts: config.includeContacts !== undefined ? config.includeContacts === 1 : 1,
     includeReminders: config.includeReminders !== undefined ? config.includeReminders === 1 : 1,
-    lastBackupTime: config.lastBackupTime
+    lastBackupTime: config.lastBackupTime > 10000000000 ? config.lastBackupTime : (config.lastBackupTime || 0) * 1000
   };
 }
 
@@ -244,7 +246,7 @@ async function updateUserBackupConfig(username, configData) {
     configData.includeTodos !== undefined ? (configData.includeTodos ? 1 : 0) : 1,
     configData.includeContacts !== undefined ? (configData.includeContacts ? 1 : 0) : 1,
     configData.includeReminders !== undefined ? (configData.includeReminders ? 1 : 0) : 1,
-    Date.now()
+    Math.floor(Date.now() / 1000)
   ]);
 
   log('INFO', '用户备份配置已更新', { username, enabled: configData.enabled });
@@ -298,7 +300,7 @@ async function updateUserBackupTime(username) {
   const db = getConnection();
   await db.run(
     'UPDATE user_backup_config SET lastBackupTime = ?, updatedAt = ? WHERE username = ?',
-    [Date.now(), Date.now(), username]
+    [Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), username]
   );
 }
 

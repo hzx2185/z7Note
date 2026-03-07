@@ -393,9 +393,9 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       const cleanTitle = filename.replace(/\.md$/i, '');
 
       if (note) {
-        await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ?', [contentStr, now, note.id]);
+        await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?', [contentStr, now, note.id, username]);
         // 通知 WebSocket 客户端
-        const updatedNote = await getConnection().get('SELECT * FROM notes WHERE id = ?', [note.id]);
+        const updatedNote = await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ?', [note.id, username]);
         if (updatedNote) {
           log('INFO', 'WebDAV 准备广播笔记更新', { noteId: updatedNote.id, title: updatedNote.title });
           broadcastNoteUpdate(updatedNote);
@@ -406,7 +406,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
         const id = 'note_' + crypto.randomBytes(8).toString('hex');
         await getConnection().run('INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)', [id, username, cleanTitle, contentStr, now]);
         // 通知 WebSocket 客户端
-        const newNote = await getConnection().get('SELECT * FROM notes WHERE id = ?', [id]);
+        const newNote = await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ?', [id, username]);
         if (newNote) {
           log('INFO', 'WebDAV 准备广播新笔记', { noteId: newNote.id, title: newNote.title });
           broadcastNoteUpdate(newNote);
@@ -418,7 +418,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
 
     if (method === 'DELETE') {
       if (note) {
-        await getConnection().run('UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ?', [Math.floor(Date.now() / 1000), note.id]);
+        await getConnection().run('UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?', [Math.floor(Date.now() / 1000), note.id, username]);
         // 通知 WebSocket 客户端
         broadcastNoteDelete(note.id);
       }

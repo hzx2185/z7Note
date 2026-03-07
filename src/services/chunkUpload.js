@@ -51,17 +51,17 @@ async function createUploadSession(username, filename, totalSize, chunkSize) {
 /**
  * 上传分片
  */
-async function uploadChunk(uploadId, chunkIndex, chunkData) {
+async function uploadChunk(uploadId, username, chunkIndex, chunkData) {
   const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ?', [uploadId]);
+  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
-    throw new Error('上传会话不存在或已过期');
+    throw new Error('上传会话不存在、已过期或无权访问');
   }
 
   // 检查会话是否过期
   if (session.expiresAt < Date.now()) {
-    await cleanupUploadSession(uploadId);
+    await cleanupUploadSession(uploadId, username);
     throw new Error('上传会话已过期');
   }
 
@@ -76,8 +76,8 @@ async function uploadChunk(uploadId, chunkIndex, chunkData) {
     uploadedChunks.sort((a, b) => a - b);
 
     await db.run(
-      'UPDATE upload_chunks SET uploadedChunks = ? WHERE id = ?',
-      [JSON.stringify(uploadedChunks), uploadId]
+      'UPDATE upload_chunks SET uploadedChunks = ? WHERE id = ? AND username = ?',
+      [JSON.stringify(uploadedChunks), uploadId, username]
     );
   }
 
@@ -91,12 +91,12 @@ async function uploadChunk(uploadId, chunkIndex, chunkData) {
 /**
  * 检查分片上传状态
  */
-async function getUploadStatus(uploadId) {
+async function getUploadStatus(uploadId, username) {
   const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ?', [uploadId]);
+  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
-    throw new Error('上传会话不存在或已过期');
+    throw new Error('上传会话不存在、已过期或无权访问');
   }
 
   const uploadedChunks = JSON.parse(session.uploadedChunks || '[]');
@@ -119,7 +119,7 @@ async function getUploadStatus(uploadId) {
  */
 async function mergeChunks(uploadId, username) {
   const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ?', [uploadId]);
+  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
     throw new Error('上传会话不存在');
@@ -151,7 +151,7 @@ async function mergeChunks(uploadId, username) {
   await writeStream.close();
 
   // 清理临时文件
-  await cleanupUploadSession(uploadId);
+  await cleanupUploadSession(uploadId, username);
 
   log('INFO', '分片合并成功', { uploadId, username, filename: finalFilename });
 
@@ -166,17 +166,13 @@ async function mergeChunks(uploadId, username) {
  */
 async function cancelUpload(uploadId, username) {
   const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ?', [uploadId]);
+  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
     throw new Error('上传会话不存在');
   }
 
-  if (session.username !== username) {
-    throw new Error('无权取消此上传');
-  }
-
-  await cleanupUploadSession(uploadId);
+  await cleanupUploadSession(uploadId, username);
 
   log('INFO', '取消分片上传', { uploadId, username });
   return { status: 'ok' };
@@ -185,11 +181,15 @@ async function cancelUpload(uploadId, username) {
 /**
  * 清理上传会话
  */
-async function cleanupUploadSession(uploadId) {
+async function cleanupUploadSession(uploadId, username = null) {
   const db = getConnection();
 
   // 删除数据库记录
-  await db.run('DELETE FROM upload_chunks WHERE id = ?', [uploadId]);
+  if (username) {
+    await db.run('DELETE FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+  } else {
+    await db.run('DELETE FROM upload_chunks WHERE id = ?', [uploadId]);
+  }
 
   // 删除临时文件
   const sessionDir = path.join(CHUNKS_DIR, uploadId);

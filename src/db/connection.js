@@ -101,6 +101,16 @@ async function createTables() {
     updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
   )`);
 
+  // 会话表
+  await db.exec(`CREATE TABLE IF NOT EXISTS user_sessions (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER NOT NULL,
+    lastSeenAt INTEGER NOT NULL,
+    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+  )`);
+
   // 分享表
   await db.exec(`CREATE TABLE IF NOT EXISTS shares (
     token TEXT PRIMARY KEY,
@@ -118,7 +128,7 @@ async function createTables() {
     key TEXT PRIMARY KEY,
     value TEXT,
     description TEXT,
-    updatedAt INTEGER DEFAULT (strftime('%s','now')*1000)
+    updatedAt INTEGER DEFAULT (strftime('%s','now'))
   )`);
 
   // 分片上传临时表
@@ -148,6 +158,8 @@ async function createTables() {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_public ON shares(public)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_expires_at ON shares(expiresAt)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_sessions_username ON user_sessions(username)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expiresAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_username ON upload_chunks(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_expires ON upload_chunks(expiresAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_backup_config_enabled ON user_backup_config(enabled)`);

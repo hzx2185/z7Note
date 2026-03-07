@@ -352,7 +352,7 @@ router.post('/api/notes', async (req, res) => {
       'INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)',
       [id, req.user, sanitizeTitle(title) || '新笔记', noteContent, Math.floor(Date.now() / 1000)]
     );
-    const note = await getConnection().get('SELECT * FROM notes WHERE id = ?', [id]);
+    const note = await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ?', [id, req.user]);
     res.json(note);
 
     // 广播笔记更新通知（SSE + WebSocket）
@@ -571,8 +571,8 @@ router.post('/api/notes/batch-replace', async (req, res) => {
         }
 
         await getConnection().run(
-          'UPDATE notes SET title = ?, content = ?, updatedAt = ? WHERE id = ?',
-          [newTitle, newContent, now, note.id]
+          'UPDATE notes SET title = ?, content = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [newTitle, newContent, now, note.id, req.user]
         );
 
         replacedCount++;
@@ -679,8 +679,8 @@ router.post('/api/notes/batch-move', async (req, res) => {
         }
 
         await getConnection().run(
-          'UPDATE notes SET title = ?, content = ?, updatedAt = ? WHERE id = ?',
-          [newTitle, newContent, now, note.id]
+          'UPDATE notes SET title = ?, content = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [newTitle, newContent, now, note.id, req.user]
         );
 
         movedCount++;
