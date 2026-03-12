@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>z7Note Admin - 管理后台</title>
+    <style>
+        :root {
+            --primary: #4a9eff;
+            --bg: #ffffff;
+            --bg-rgb: 255, 255, 255;
+            --text: #333333;
+            --gray: #888888;
+            --border: #e0e0e0;
+            --side: #f5f5f5;
+            --accent: #4a9eff;
+            --accent-rgb: 74, 158, 255;
+            --green: #28a745;
+            --red: #dc3545;
+            --orange: #ff8800;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #1a1a1a;
+                --bg-rgb: 26, 26, 26;
+                --text: #e0e0e0;
+                --gray: #999999;
+                --border: #333333;
+                --side: #252525;
+            }
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.5; }
+        
+        .admin-header { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 100; backdrop-filter: blur(12px); }
+        .admin-container { display: grid; grid-template-columns: 280px 1fr; gap: 20px; max-width: 1400px; margin: 68px auto 20px; padding: 0 20px; }
+        
+        .admin-sidebar { position: sticky; top: 68px; height: fit-content; display: flex; flex-direction: column; gap: 16px; }
+        .sidebar-section { padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+        .section-title { font-size: 12px; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+        
+        .db-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; font-size: 11px; }
+        .db-stat-item { background: var(--side); padding: 8px; border-radius: 6px; border: 1px solid var(--border); }
+        .db-stat-label { color: var(--gray); margin-bottom: 2px; }
+        .db-stat-value { font-weight: 600; color: var(--text); }
+
+        .admin-main { min-width: 0; }
+        .tabs { display: flex; gap: 4px; background: var(--side); padding: 4px; border-radius: 8px; margin-bottom: 16px; border: 1px solid var(--border); }
+        .tab-btn { flex: 1; padding: 6px 12px; border: none; background: transparent; font-size: 13px; cursor: pointer; border-radius: 6px; color: var(--gray); transition: all 0.2s; }
+        .tab-btn:hover { color: var(--text); background: rgba(128,128,128,0.1); }
+        .tab-btn.active { background: var(--bg); color: var(--primary); font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .data-table-wrapper { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { background: var(--side); padding: 10px 12px; text-align: left; font-weight: 600; color: var(--gray); border-bottom: 1px solid var(--border); white-space: nowrap; }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(var(--accent-rgb), 0.02); }
+
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 4px; font-weight: 500; }
+        .form-control { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg); color: var(--text); transition: all 0.2s; }
+        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1); }
+        
+        .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+        .modal.show { display: flex; }
+        .modal-card { background: var(--bg); width: 100%; max-width: 400px; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.3); border: 1px solid var(--border); }
+        .modal-header { padding: 16px; background: var(--side); border-bottom: 1px solid var(--border); font-weight: 600; }
+        .modal-body { padding: 16px; max-height: 70vh; overflow-y: auto; }
+        .modal-footer { padding: 12px 16px; display: flex; gap: 8px; border-top: 1px solid var(--border); background: var(--side); }
+
+        .user-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+        .u-badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: var(--side); border: 1px solid var(--border); display: flex; align-items: center; gap: 3px; }
+        .u-badge.active { border-color: var(--primary); color: var(--primary); background: rgba(var(--accent-rgb), 0.05); }
+        
+        .card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+        .tool-btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; cursor: pointer; transition: all 0.2s; }
+        .tool-btn:hover { background: var(--side); }
+        .badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .form-checkbox { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+        .form-checkbox input { width: 16px; height: 16px; cursor: pointer; }
+
+        @media (max-width: 900px) {
+            .admin-container { grid-template-columns: 1fr; margin-top: 60px; padding: 0 12px; }
+            .admin-sidebar { position: static; }
+            table { display: block; overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="admin-header">
+    <div style="display:flex;align-items:center;gap:10px">
+        <strong style="font-size:16px;letter-spacing:-0.5px">z7Note Admin</strong>
+        <span class="badge" style="background:var(--primary);color:white;border:none">V2</span>
+    </div>
+    <div style="display:flex;gap:8px">
+        <button class="tool-btn" onclick="Admin.refreshAll()" title="刷新全部数据">↻ 刷新</button>
+        <button class="tool-btn" onclick="location.href='/'">← 退出</button>
+    </div>
+</header>
+
+<div class="admin-container">
+    <aside class="admin-sidebar">
+        <section class="card sidebar-section">
+            <div class="section-title">系统状态</div>
+            <div class="db-stat-grid">
+                <div class="db-stat-item"><div class="db-stat-label">总计</div><div class="db-stat-value" id="db-total-size">-</div></div>
+                <div class="db-stat-item"><div class="db-stat-label">已用</div><div class="db-stat-value" id="db-used-size">-</div></div>
+                <div class="db-stat-item"><div class="db-stat-label">碎片</div><div class="db-stat-value" id="db-free-size" style="color:var(--orange)">-</div></div>
+                <div class="db-stat-item"><div class="db-stat-label">用户</div><div class="db-stat-value" id="stat-user-count">-</div></div>
+            </div>
+            <div style="display:flex;gap:6px">
+                <button class="tool-btn" style="flex:1" onclick="Admin.showSystemConfig()">参数</button>
+                <button class="tool-btn" style="flex:1" onclick="Admin.vacuumDatabase()">优化</button>
+            </div>
+        </section>
+
+        <section class="card sidebar-section">
+            <div class="section-title">SMTP 邮件配置</div>
+            <form id="smtp-config-form" onsubmit="Admin.saveSmtpConfig(event)">
+                <div class="form-group">
+                    <label>SMTP 服务器</label>
+                    <input type="text" class="form-control" id="smtp-host" placeholder="smtp.example.com">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div class="form-group"><label>端口</label><input type="number" class="form-control" id="smtp-port" placeholder="587"></div>
+                    <div class="form-group"><label>SSL/TLS</label>
+                        <select class="form-control" id="smtp-secure">
+                            <option value="false">禁用</option>
+                            <option value="true">启用</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>用户名（邮箱）</label>
+                    <input type="text" class="form-control" id="smtp-user" placeholder="your@email.com" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>密码/授权码</label>
+                    <input type="password" class="form-control" id="smtp-pass" placeholder="授权码或密码" autocomplete="new-password">
+                </div>
+                <div style="display:flex;gap:6px">
+                    <button type="submit" class="tool-btn" style="flex:1;background:var(--green);color:white;border:none">保存</button>
+                    <button type="button" onclick="Admin.testSmtpConfig()" class="tool-btn" style="flex:1">测试</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card sidebar-section">
+            <div class="section-title">自动化任务</div>
+            <form id="backup-config-form" onsubmit="Admin.saveBackupConfig(event)">
+                <div class="form-group">
+                    <label>备份策略</label>
+                    <select class="form-control" id="bc-schedule" onchange="Admin.toggleCustomSchedule(this)">
+                        <option value="none">已关闭</option>
+                        <option value="0 0 * * *">每天凌晨</option>
+                        <option value="0 0 * * 0">每周日凌晨</option>
+                        <option value="0 */6 * * *">每6小时</option>
+                        <option value="custom">自定义 Cron</option>
+                    </select>
+                </div>
+                <div id="bc-schedule-custom-container" style="display:none" class="form-group">
+                    <input type="text" class="form-control" id="bc-schedule-custom" placeholder="0 2 * * *">
+                </div>
+                <div class="form-group">
+                    <label>备份模式</label>
+                    <select class="form-control" id="bc-backupMode">
+                        <option value="incremental">增量备份</option>
+                        <option value="full">全量备份</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>保留份数 (WebDAV)</label>
+                    <input type="number" class="form-control" id="bc-keepCount" min="0" placeholder="0=不限制">
+                </div>
+                <div class="form-group">
+                    <label>WebDAV 地址</label>
+                    <input type="url" class="form-control" id="bc-webdavUrl" placeholder="https://...">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div class="form-group"><label>WebDAV 用户</label><input type="text" class="form-control" id="bc-webdavUser" autocomplete="off"></div>
+                    <div class="form-group"><label>WebDAV 密码</label><input type="password" class="form-control" id="bc-webdavPassword" autocomplete="new-password"></div>
+                </div>
+                <div class="form-group">
+                    <label>通知邮箱</label>
+                    <input type="email" class="form-control" id="bc-emailAddress" placeholder="">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+                    <label class="form-checkbox"><input type="checkbox" id="bc-useWebDAV"> <span>启用 WebDAV 同步</span></label>
+                    <label class="form-checkbox"><input type="checkbox" id="bc-sendEmail"> <span>发送备份成功邮件</span></label>
+                    <label class="form-checkbox"><input type="checkbox" id="bc-attachments"> <span>备份压缩包包含附件</span></label>
+                </div>
+                <div style="display:flex;gap:6px">
+                    <button type="submit" class="tool-btn" style="flex:1;background:var(--green);color:white;border:none">保存</button>
+                    <button type="button" onclick="Admin.backupNow()" class="tool-btn" style="flex:1">立即触发</button>
+                </div>
+            </form>
+        </section>
+    </aside>
+
+    <main class="admin-main">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="users" onclick="Admin.switchTab('users')">用户管理</button>
+            <button class="tab-btn" data-tab="shares" onclick="Admin.switchTab('shares')">分享审计</button>
+            <button class="tab-btn" data-tab="notes" onclick="Admin.switchTab('notes')">全量内容</button>
+        </div>
+
+        <div id="tab-users" class="tab-content active">
+            <div class="card" style="margin-bottom:12px;padding:12px;display:flex;gap:10px;align-items:center">
+                <input type="text" class="form-control" id="userSearch" placeholder="搜索用户名或邮箱..." oninput="Admin.debounce('userSearch', Admin.loadUsers)" style="margin-bottom:0">
+                <button class="tool-btn" onclick="Admin.showAddUser()" style="background:var(--green);color:white;border:none;white-space:nowrap;height:34px">+ 新增用户</button>
+            </div>
+            <div class="data-table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="cursor:pointer" onclick="Admin.sortUsers('username')">用户 ⇅</th>
+                            <th>存储数据概览</th>
+                            <th style="cursor:pointer" onclick="Admin.sortUsers('dbSize')">DB占用 ⇅</th>
+                            <th style="cursor:pointer" onclick="Admin.sortUsers('attachmentSize')">附件占用 ⇅</th>
+                            <th>限额(MB)</th>
+                            <th style="text-align:right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userList"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-shares" class="tab-content">
+            <div class="card" style="margin-bottom:12px;padding:12px;display:flex;gap:10px">
+                <button class="tool-btn" onclick="Admin.batchRevokeShares()" style="color:var(--red);border-color:var(--red)">批量撤销选中</button>
+            </div>
+            <div class="data-table-wrapper">
+                <table>
+                    <thead><tr><th><input type="checkbox" onchange="Admin.selectAll('share-cb', this.checked)"></th><th>所有者</th><th>内容标题</th><th>类型</th><th>创建时间</th><th>有效期</th><th style="text-align:right">操作</th></tr></thead>
+                    <tbody id="shareList"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-notes" class="tab-content">
+            <div class="card" style="margin-bottom:12px;padding:12px;display:flex;gap:10px;align-items:center">
+                <input type="text" class="form-control" id="noteSearch" placeholder="搜索全站内容标题..." oninput="Admin.debounce('noteSearch', Admin.loadNotes)">
+                <button class="tool-btn" onclick="Admin.emptyAllTrash()" style="color:var(--red);border-color:var(--red);white-space:nowrap">清空全站回收站</button>
+            </div>
+            <div class="data-table-wrapper">
+                <table>
+                    <thead><tr><th><input type="checkbox" onchange="Admin.selectAll('note-cb', this.checked)"></th><th>用户</th><th>笔记标题</th><th>状态</th><th style="text-align:right">操作</th></tr></thead>
+                    <tbody id="noteList"></tbody>
+                </table>
+            </div>
+            <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+                <div class="user-badges" id="note-batch-actions" style="visibility:hidden">
+                    <button class="tool-btn" onclick="Admin.batchDeleteNotes()" style="color:var(--red)">批量彻底销毁</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span id="pageInfo" style="color:var(--gray);font-size:12px"></span>
+                    <button id="prevBtn" onclick="Admin.changePage(-1)" class="tool-btn">上一页</button>
+                    <button id="nextBtn" onclick="Admin.changePage(1)" class="tool-btn">下一页</button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<div id="modal" class="modal" onclick="if(event.target===this) Admin.closeModal()">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header" id="modalTitle"></div>
+        <form id="modal-form" onsubmit="Admin.handleModalSubmit(event)">
+            <div class="modal-body" id="modalInputs"></div>
+            <div class="modal-footer">
+                <button type="button" onclick="Admin.closeModal()" class="tool-btn" style="flex:1">取消</button>
+                <button type="submit" class="tool-btn" style="flex:1;background:var(--green);color:white;border:none">确定操作</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const Admin = {
+    state: { currentPage: 1, totalPages: 1, userSort: { field: 'noteCount', order: 'desc' }, timers: {} },
+
+    async api(url, options = {}) {
+        try {
+            const res = await fetch(url, {
+                ...options,
+                headers: { 'Content-Type': 'application/json', ...options.headers }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || '请求失败');
+            return data;
+        } catch (e) {
+            alert(e.message);
+            throw e;
+        }
+    },
+
+    formatSize(b) {
+        if (!b) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0; while (b >= 1024 && i < 3) { b /= 1024; i++; }
+        return `${b.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+    },
+
+    debounce(name, fn, ms = 500) {
+        clearTimeout(this.state.timers[name]);
+        this.state.timers[name] = setTimeout(() => fn.call(this), ms);
+    },
+
+    async refreshAll() {
+        await Promise.all([this.loadDatabaseInfo(), this.loadUsers(), this.loadShares(), this.loadNotes(), this.loadBackupConfig(), this.loadSmtpConfig()]);
+    },
+
+    switchTab(tab) {
+        document.querySelectorAll('.tab-content, .tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+    },
+
+    async loadDatabaseInfo() {
+        const data = await this.api('/api/admin/database/info');
+        document.getElementById('db-total-size').textContent = data.totalSizeMB + ' MB';
+        document.getElementById('db-used-size').textContent = data.usedSizeMB + ' MB';
+        document.getElementById('db-free-size').textContent = (data.freeSpaceMB || 0) + ' MB';
+    },
+
+    async vacuumDatabase() {
+        if (!confirm('重建数据库以优化性能和回收碎片空间，可能需要几秒钟。继续？')) return;
+        await this.api('/api/admin/database/vacuum', { method: 'POST' });
+        alert('数据库优化完成');
+        this.loadDatabaseInfo();
+    },
+
+    async loadUsers() {
+        const { field, order } = this.state.userSort;
+        const search = document.getElementById('userSearch').value;
+        const users = await this.api(`/api/admin/users/stats?search=${encodeURIComponent(search)}&sort=${field}&order=${order}`);
+        document.getElementById('stat-user-count').textContent = users.length;
+        document.getElementById('userList').innerHTML = users.map(u => `
+            <tr>
+                <td><strong>${u.username}</strong><div style="font-size:10px;color:var(--gray)">${u.email||'未绑定邮箱'}</div></td>
+                <td>
+                    <div class="user-badges">
+                        <span class="u-badge ${u.noteCount?'active':''}" title="笔记数量">N ${u.noteCount}</span>
+                        <span class="u-badge ${u.eventCount?'active':''}" title="日程数量">E ${u.eventCount}</span>
+                        <span class="u-badge ${u.todoCount?'active':''}" title="待办数量">T ${u.todoCount}</span>
+                        <span class="u-badge ${u.contactCount?'active':''}" title="联系人数量">C ${u.contactCount}</span>
+                    </div>
+                </td>
+                <td>${this.formatSize(u.dbSize)}</td>
+                <td>${this.formatSize(u.attachmentSize)}</td>
+                <td>
+                    <div style="display:flex;gap:4px;align-items:center">
+                        <input type="number" value="${u.noteLimit}" class="form-control" style="width:50px;padding:2px 4px;font-size:11px" onchange="Admin.updateQuota('${u.username}', this.value, ${u.fileLimit})">
+                        <span style="color:var(--border)">/</span>
+                        <input type="number" value="${u.fileLimit}" class="form-control" style="width:50px;padding:2px 4px;font-size:11px" onchange="Admin.updateQuota('${u.username}', ${u.noteLimit}, this.value)">
+                    </div>
+                </td>
+                <td style="text-align:right">
+                    <div style="display:flex;gap:4px;justify-content:flex-end">
+                        <button class="tool-btn" onclick="Admin.showResetPass('${u.username}')">改密</button>
+                        <button class="tool-btn" style="color:var(--red)" onclick="Admin.deleteUser('${u.username}')">删除</button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+    },
+
+    sortUsers(field) {
+        this.state.userSort.order = (this.state.userSort.field === field && this.state.userSort.order === 'asc') ? 'desc' : 'asc';
+        this.state.userSort.field = field;
+        this.loadUsers();
+    },
+
+    async updateQuota(username, noteLimit, fileLimit) {
+        await this.api('/api/admin/users/update-quota', {
+            method: 'POST',
+            body: JSON.stringify({ username, noteLimit: parseInt(noteLimit), fileLimit: parseInt(fileLimit) })
+        });
+    },
+
+    async deleteUser(username) {
+        if (!confirm(`警告：彻底删除用户 "${username}" 及其所有数据？不可恢复！`)) return;
+        await this.api(`/api/admin/users/${username}`, { method: 'DELETE' });
+        this.loadUsers();
+    },
+
+    async loadShares() {
+        const shares = await this.api('/api/share/list');
+        const now = Date.now();
+        document.getElementById('shareList').innerHTML = shares.map(s => {
+            const isExpired = s.expiresAt && now > s.expiresAt;
+            const title = s.targetType === 'note' ? (s.noteTitle || s.target) : s.target.split('/').pop();
+            return `
+                <tr>
+                    <td><input type="checkbox" class="share-cb" value="${s.token}"></td>
+                    <td>${s.owner}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${title}">${title}</td>
+                    <td><span class="u-badge">${s.targetType==='note'?'笔记':'文件'}</span></td>
+                    <td>${new Date(s.createdAt).toLocaleDateString()}</td>
+                    <td style="${isExpired?'color:var(--red)':''}">${s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : '永久'}</td>
+                    <td style="text-align:right">
+                        <button class="tool-btn" onclick="Admin.revokeShare('${s.token}')">撤销</button>
+                    </td>
+                </tr>
+            `;
+        }).join('') || '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--gray)">暂无活跃分享</td></tr>';
+    },
+
+    async revokeShare(token) {
+        if (!confirm('确定撤销此分享？')) return;
+        await this.api('/api/share/revoke', { method: 'POST', body: JSON.stringify({ token }) });
+        this.loadShares();
+    },
+
+    async loadNotes(page = 1) {
+        const search = document.getElementById('noteSearch').value;
+        const data = await this.api(`/api/admin/notes/all?page=${page}&limit=15&search=${encodeURIComponent(search)}`);
+        this.state.currentPage = data.page;
+        this.state.totalPages = data.totalPages;
+        
+        document.getElementById('noteList').innerHTML = data.notes.map(n => `
+            <tr>
+                <td><input type="checkbox" class="note-cb" value="${n.id}"></td>
+                <td>${n.username}</td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">${n.title || '(无标题)'}</td>
+                <td>${n.deleted ? '<span style="color:var(--red)">回收站</span>' : '<span style="color:var(--green)">活跃</span>'}</td>
+                <td style="text-align:right">
+                    <button class="tool-btn" style="color:var(--red)" onclick="Admin.deleteNote('${n.id}')">销毁</button>
+                </td>
+            </tr>
+        `).join('');
+        
+        document.getElementById('pageInfo').textContent = `第 ${data.page} / ${data.totalPages || 1} 页`;
+        document.getElementById('prevBtn').disabled = data.page <= 1;
+        document.getElementById('nextBtn').disabled = data.page >= data.totalPages;
+    },
+
+    async deleteNote(id) {
+        if (!confirm('彻底从数据库销毁此笔记？')) return;
+        await this.api(`/api/admin/notes/${id}`, { method: 'DELETE' });
+        this.loadNotes(this.state.currentPage);
+    },
+
+    async emptyAllTrash() {
+        if (!confirm('清空全站所有用户的回收站？此操作不可逆！')) return;
+        const res = await this.api('/api/admin/trash/empty-all', { method: 'DELETE' });
+        alert(`已成功清理 ${res.count} 条记录`);
+        this.loadNotes(1);
+    },
+
+    async loadBackupConfig() {
+        const c = await this.api('/api/admin/backup/config');
+        if (!c.id) return;
+        const scheduleEl = document.getElementById('bc-schedule');
+        const isPreset = ['none', '0 0 * * *', '0 0 * * 0', '0 */6 * * *', '0 */12 * * *'].includes(c.schedule);
+        scheduleEl.value = isPreset ? (c.schedule || 'none') : 'custom';
+        this.toggleCustomSchedule(scheduleEl);
+        if (!isPreset) document.getElementById('bc-schedule-custom').value = c.schedule;
+        
+        document.getElementById('bc-backupMode').value = c.backupMode || 'incremental';
+        document.getElementById('bc-keepCount').value = c.keepCount || 0;
+        document.getElementById('bc-webdavUrl').value = c.webdavUrl || '';
+        document.getElementById('bc-webdavUser').value = c.webdavUser || '';
+        document.getElementById('bc-webdavPassword').value = c.webdavPassword || '';
+        document.getElementById('bc-emailAddress').value = c.emailAddress || '';
+        document.getElementById('bc-useWebDAV').checked = !!c.useWebDAV;
+        document.getElementById('bc-sendEmail').checked = !!c.sendEmail;
+        document.getElementById('bc-attachments').checked = !!c.includeAttachments;
+    },
+
+    toggleCustomSchedule(el) {
+        document.getElementById('bc-schedule-custom-container').style.display = el.value === 'custom' ? 'block' : 'none';
+    },
+
+    async saveBackupConfig(e) {
+        e.preventDefault();
+        const schedule = document.getElementById('bc-schedule').value === 'custom' 
+            ? document.getElementById('bc-schedule-custom').value.trim() 
+            : document.getElementById('bc-schedule').value;
+        
+        await this.api('/api/admin/backup/config', {
+            method: 'POST',
+            body: JSON.stringify({
+                schedule,
+                backupMode: document.getElementById('bc-backupMode').value,
+                keepCount: parseInt(document.getElementById('bc-keepCount').value) || 0,
+                webdavUrl: document.getElementById('bc-webdavUrl').value,
+                webdavUser: document.getElementById('bc-webdavUser').value,
+                webdavPassword: document.getElementById('bc-webdavPassword').value,
+                emailAddress: document.getElementById('bc-emailAddress').value,
+                useWebDAV: document.getElementById('bc-useWebDAV').checked,
+                sendEmail: document.getElementById('bc-sendEmail').checked,
+                includeAttachments: document.getElementById('bc-attachments').checked
+            })
+        });
+        alert('备份策略已更新');
+    },
+
+    async backupNow() {
+        if (!confirm('立即执行一次全系统备份并根据配置同步到 WebDAV？')) return;
+        await this.api('/api/admin/backup/now', { method: 'POST' });
+        alert('备份任务已在后台启动，完成后会根据设置发送邮件通知。');
+    },
+
+    selectAll(cls, checked) {
+        document.querySelectorAll(`.${cls}`).forEach(cb => cb.checked = checked);
+        if (cls === 'note-cb') document.getElementById('note-batch-actions').style.visibility = checked ? 'visible' : 'hidden';
+    },
+
+    changePage(delta) {
+        const target = this.state.currentPage + delta;
+        if (target >= 1 && target <= this.state.totalPages) this.loadNotes(target);
+    },
+
+    openModal(title, html, onConfirm) {
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalInputs').innerHTML = html;
+        this.state.onModalConfirm = onConfirm;
+        document.getElementById('modal').classList.add('show');
+    },
+
+    closeModal() { document.getElementById('modal').classList.remove('show'); },
+
+    handleModalSubmit(e) {
+        e.preventDefault();
+        if (this.state.onModalConfirm) this.state.onModalConfirm();
+    },
+
+    showAddUser() {
+        this.openModal('新增系统用户', `
+            <div class="form-group"><label>用户名</label><input type="text" id="m-u" class="form-control" required></div>
+            <div class="form-group"><label>安全邮箱</label><input type="email" id="m-e" class="form-control" required></div>
+            <div class="form-group"><label>初始密码</label><input type="password" id="m-p" class="form-control" required></div>
+        `, async () => {
+            await this.api('/api/admin/users/add', {
+                method: 'POST',
+                body: JSON.stringify({ username: $('#m-u').value, email: $('#m-e').value, password: $('#m-p').value })
+            });
+            this.closeModal();
+            this.loadUsers();
+        });
+    },
+
+    showResetPass(username) {
+        this.openModal(`重置用户密码: ${username}`, `
+            <div class="form-group"><label>新密码</label><input type="password" id="m-p" class="form-control" required></div>
+        `, async () => {
+            await this.api('/api/admin/users/reset-password', {
+                method: 'POST',
+                body: JSON.stringify({ username, newPassword: $('#m-p').value })
+            });
+            this.closeModal();
+            alert('密码已重置');
+        });
+    },
+
+    async showSystemConfig() {
+        const data = await this.api('/api/admin/system/config');
+        const c = data.config;
+        const fields = [
+            { k: 'maxFileSize', l: '单文件限制(MB)', v: c.maxFileSize?.value || 500 },
+            { k: 'allowedFileTypes', l: '允许类型(逗号分隔)', v: c.allowedFileTypes?.value || '', type: 'text' },
+            { k: 'chunkSize', l: '上传切片(MB)', v: c.chunkSize?.value || 5 },
+            { k: 'imageCompressionEnabled', l: '启用图片压缩', v: c.imageCompressionEnabled?.value || 'true', type: 'select', opts: [['true','启用'],['false','禁用']] },
+            { k: 'imageCompressionQuality', l: '压缩质量(0-100)', v: c.imageCompressionQuality?.value || 85 },
+            { k: 'imageCompressionMaxWidth', l: '最大宽度(px)', v: c.imageCompressionMaxWidth?.value || 1920 },
+            { k: 'dynamicRateLimitEnabled', l: '动态限流', v: c.dynamicRateLimitEnabled?.value || 'true', type: 'select', opts: [['true','启用'],['false','禁用']] }
+        ];
+        
+        const inputs = fields.map(f => {
+            if (f.type === 'select') {
+                return `<div class="form-group"><label>${f.l}</label><select id="sc-${f.k}" class="form-control">${f.opts.map(o=>`<option value="${o[0]}" ${f.v===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>`;
+            }
+            return `<div class="form-group"><label>${f.l}</label><input type="${f.type||'number'}" id="sc-${f.k}" class="form-control" value="${f.v}"></div>`;
+        }).join('');
+        
+        this.openModal('系统运行参数', inputs, async () => {
+            const configs = {};
+            fields.forEach(f => { configs[f.k] = document.getElementById(`sc-${f.k}`).value; });
+            await this.api('/api/admin/system/config', { method: 'POST', body: JSON.stringify({ configs }) });
+            this.closeModal();
+            alert('系统配置已更新');
+        });
+    },
+
+    async loadSmtpConfig() {
+        try {
+            const data = await this.api('/api/admin/smtp/config');
+            const c = data.config;
+            document.getElementById('smtp-host').value = c.host || '';
+            document.getElementById('smtp-port').value = c.port || 587;
+            document.getElementById('smtp-secure').value = c.secure ? 'true' : 'false';
+            document.getElementById('smtp-user').value = c.user || '';
+            document.getElementById('smtp-pass').value = c.pass || '';
+        } catch (e) {
+            console.error('加载 SMTP 配置失败:', e);
+        }
+    },
+
+    async saveSmtpConfig(e) {
+        e.preventDefault();
+        const config = {
+            host: document.getElementById('smtp-host').value,
+            port: parseInt(document.getElementById('smtp-port').value) || 587,
+            secure: document.getElementById('smtp-secure').value === 'true',
+            user: document.getElementById('smtp-user').value,
+            pass: document.getElementById('smtp-pass').value
+        };
+        
+        try {
+            await this.api('/api/admin/smtp/config', { method: 'POST', body: JSON.stringify(config) });
+            alert('SMTP 配置已保存');
+        } catch (e) {
+            console.error('保存 SMTP 配置失败:', e);
+        }
+    },
+
+    async testSmtpConfig() {
+        const email = prompt('请输入测试邮箱地址：');
+        if (!email) return;
+        
+        try {
+            await this.api('/api/admin/smtp/test', { method: 'POST', body: JSON.stringify({ to: email }) });
+            alert('测试邮件已发送，请检查收件箱');
+        } catch (e) {
+            console.error('SMTP 测试失败:', e);
+        }
+    }
+};
+
+const $ = s => document.querySelector(s);
+document.addEventListener('DOMContentLoaded', () => Admin.refreshAll());
+</script>
+</body>
+</html>

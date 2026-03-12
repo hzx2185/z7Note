@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>z7Note - 登录</title>
+    <style>
+        :root { --bg:#fff; --side:#f6f8fa; --border:#d0d7de; --text:#24292f; --green:#2da44e; --accent:#0969da; --red:#cf222e; }
+        .dark-mode { --bg:#0d1117; --side:#161b22; --border:#30363d; --text:#c9d1d9; }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .card { width:100%; max-width:340px; background:var(--side); border:1px solid var(--border); border-radius:12px; padding:28px; }
+        h2 { text-align:center; margin-bottom:20px; }
+        input { width:100%; padding:10px; margin-bottom:12px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); outline:none; }
+        input:focus { border-color:var(--accent); }
+        button { width:100%; padding:10px; border:none; border-radius:6px; cursor:pointer; margin-bottom:8px; }
+        .btn-main { background:var(--green); color:#fff; }
+        .btn-alt { background:transparent; color:var(--accent); border:1px solid var(--border); }
+        .error { color:var(--red); font-size:12px; margin-bottom:10px; display:none; }
+        .theme-btn { position:fixed; top:12px; right:12px; width:36px; height:36px; border:1px solid var(--border); border-radius:50%; background:var(--bg); cursor:pointer; }
+        #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:10px 20px; border-radius:6px; display:none; }
+        #modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; }
+        #modal > div { background:var(--bg); padding:24px; border-radius:12px; max-width:300px; text-align:center; }
+    </style>
+</head>
+<body>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+    <div id="toast"></div>
+    <div id="modal"><div><p id="modalMsg"></p><button class="btn-main" onclick="document.getElementById('modal').style.display='none'" style="margin-top:16px;width:auto;padding:8px 24px;">确定</button></div></div>
+
+    <div class="card">
+        <form id="authForm" onsubmit="handleAuth(event)">
+            <h2 id="title">用户登录</h2>
+            <div id="authErr" class="error"></div>
+            <input type="text" id="username" placeholder="用户名" autocomplete="username" required>
+            <input type="password" id="password" placeholder="密码" autocomplete="current-password" required>
+            <button class="btn-main" id="submitBtn">立即登录</button>
+            <button type="button" class="btn-alt" onclick="toggleMode()">没有账号？点击注册</button>
+            <button type="button" class="btn-alt" onclick="document.getElementById('authForm').style.display='none';document.getElementById('resetForm').style.display='block'">忘记密码？</button>
+        </form>
+
+        <form id="resetForm" style="display:none" onsubmit="doReset(event)">
+            <h2>找回密码</h2>
+            <input type="email" id="resetEmail" placeholder="邮箱" required>
+            <button type="button" class="btn-alt" id="codeBtn" onclick="sendCode()">获取验证码</button>
+            <input type="text" id="resetToken" placeholder="6位验证码" maxlength="6" required>
+            <input type="password" id="newPass" placeholder="新密码" required>
+            <button class="btn-main">重置并登录</button>
+            <button type="button" class="btn-alt" onclick="document.getElementById('resetForm').style.display='none';document.getElementById('authForm').style.display='block'">返回登录</button>
+        </form>
+
+        <form id="tfaForm" style="display:none" onsubmit="handleTFA(event)">
+            <h2>两步验证</h2>
+            <div id="tfaErr" class="error"></div>
+            <input type="text" id="tfaToken" placeholder="6位验证码或8位备用代码" maxlength="8" required>
+            <button class="btn-main" id="tfaBtn">验证</button>
+        </form>
+    </div>
+
+    <script>
+        let isLogin = true, tempToken = null;
+
+        // 主题
+        const initTheme = () => {
+            const t = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+            document.documentElement.classList.toggle('dark-mode', t === 'dark');
+            document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+        };
+        const toggleTheme = () => {
+            const isDark = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            document.getElementById('themeBtn').textContent = isDark ? '☀️' : '🌙';
+        };
+        initTheme();
+
+        // 工具函数
+        const show = (id, msg) => { const el = document.getElementById(id); el.textContent = msg; el.style.display = 'block'; };
+        const hide = id => document.getElementById(id).style.display = 'none';
+        const toast = msg => { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000); };
+        const modal = msg => { document.getElementById('modalMsg').textContent = msg; document.getElementById('modal').style.display = 'flex'; };
+
+        const toggleMode = () => {
+            isLogin = !isLogin;
+            document.getElementById('title').textContent = isLogin ? '用户登录' : '创建新账号';
+            document.getElementById('submitBtn').textContent = isLogin ? '立即登录' : '注册并登录';
+        };
+
+        const validateUser = u => {
+            if (u.includes('@')) return '用户名不能包含@';
+            if (!/^[a-zA-Z0-9_]+$/.test(u)) return '只能包含字母、数字、下划线';
+            if (u.length < 3 || u.length > 15) return '长度需3-15位';
+            return null;
+        };
+
+        const finalize = async (user, msg) => {
+            try {
+                const r = await fetch('/api/user-info', { credentials: 'same-origin', cache: 'no-store' });
+                if (!r.ok) throw new Error();
+                localStorage.setItem('z7note_username', user);
+                toast(msg);
+                setTimeout(() => location.href = '/', 800);
+            } catch {
+                show('authErr', '会话未建立，请检查HTTPS配置');
+                document.getElementById('submitBtn').disabled = false;
+            }
+        };
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value;
+            const btn = document.getElementById('submitBtn');
+
+            if (!isLogin) {
+                const err = validateUser(user);
+                if (err) return show('authErr', err);
+                if (pass.length < 6) return show('authErr', '密码至少6位');
+            }
+
+            btn.disabled = true;
+            btn.textContent = '验证中...';
+            hide('authErr');
+
+            try {
+                const r = await fetch(isLogin ? '/api/login' : '/api/register', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user, pass })
+                });
+                const d = await r.json();
+                if (r.ok) {
+                    if (d.status === 'tfa_required') {
+                        tempToken = d.tempToken;
+                        document.getElementById('authForm').style.display = 'none';
+                        document.getElementById('tfaForm').style.display = 'block';
+                    } else {
+                        await finalize(user, isLogin ? '登录成功' : '注册成功');
+                    }
+                } else {
+                    show('authErr', d.error || '失败');
+                    btn.disabled = false;
+                    btn.textContent = isLogin ? '立即登录' : '注册并登录';
+                }
+            } catch {
+                show('authErr', '网络错误');
+                btn.disabled = false;
+            }
+        }
+
+        async function handleTFA(e) {
+            e.preventDefault();
+            const token = document.getElementById('tfaToken').value.trim();
+            const btn = document.getElementById('tfaBtn');
+            if (token.length !== 6 && token.length !== 8) return show('tfaErr', '请输入6位验证码或8位备用代码');
+
+            btn.disabled = true;
+            btn.textContent = '验证中...';
+            hide('tfaErr');
+
+            try {
+                const r = await fetch('/api/verify-tfa', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tempToken, tfaToken: token })
+                });
+                const d = await r.json();
+                if (r.ok && d.status === 'ok') {
+                    await finalize(document.getElementById('username').value.trim(), '验证成功');
+                } else {
+                    show('tfaErr', d.error || '验证失败');
+                    btn.disabled = false;
+                    btn.textContent = '验证';
+                }
+            } catch {
+                show('tfaErr', '网络错误');
+                btn.disabled = false;
+            }
+        }
+
+        async function sendCode() {
+            const email = document.getElementById('resetEmail').value;
+            if (!email.includes('@')) return toast('请输入正确邮箱');
+            const btn = document.getElementById('codeBtn');
+            btn.disabled = true;
+            try {
+                const r = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                if (r.ok) {
+                    modal('验证码已发送');
+                    let c = 60;
+                    const t = setInterval(() => { btn.textContent = `${--c}s`; if (c <= 0) { clearInterval(t); btn.disabled = false; btn.textContent = '获取验证码'; } }, 1000);
+                } else {
+                    const d = await r.json();
+                    toast(d.error || '发送失败');
+                    btn.disabled = false;
+                }
+            } catch { toast('网络错误'); btn.disabled = false; }
+        }
+
+        async function doReset(e) {
+            e.preventDefault();
+            try {
+                const r = await fetch('/api/reset-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: document.getElementById('resetEmail').value,
+                        token: document.getElementById('resetToken').value,
+                        newPass: document.getElementById('newPass').value
+                    })
+                });
+                if (r.ok) {
+                    modal('密码已重置');
+                    document.getElementById('resetForm').style.display = 'none';
+                    document.getElementById('authForm').style.display = 'block';
+                } else {
+                    const d = await r.json();
+                    toast(d.error || '重置失败');
+                }
+            } catch { toast('网络错误'); }
+        }
+    </script>
+</body>
+</html>

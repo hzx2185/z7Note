@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>z7Note - 分享详情</title>
+    <link rel="stylesheet" href="/cdn/github-markdown.min.css">
+    <link rel="stylesheet" href="/cdn/highlight-light.min.css">
+    <script src="/cdn/marked.min.js" defer></script>
+    <script src="/cdn/highlight.min.js" defer></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* 完全覆盖 app.css 中的冲突样式 */
+        body, html {
+            height: auto !important;
+            min-height: 100vh;
+            overflow: auto !important;
+            width: 100%;
+        }
+
+        /* 强制重置 header 样式 */
+        body > .header {
+            position: sticky !important;
+            top: 0 !important;
+            left: auto !important;
+            right: auto !important;
+            width: 100% !important;
+            height: auto !important;
+            max-width: none !important;
+            padding: 16px 20px !important;
+            background: var(--side);
+            border-bottom: 1px solid var(--border);
+            z-index: 100 !important;
+        }
+
+        /* 强制重置 container 样式 */
+        body > .container {
+            position: static !important;
+            overflow: visible !important;
+            padding-top: 24px !important;
+            padding-bottom: 24px !important;
+            padding-left: 20px !important;
+            padding-right: 20px !important;
+            width: 100% !important;
+            max-width: 900px !important;
+            margin: 0 auto !important;
+            display: block !important;
+        }
+
+        :root {
+            --bg: #ffffff;
+            --side: #f6f8fa;
+            --text: #24292f;
+            --border: #d0d7de;
+            --accent: #0969da;
+            --gray: #8b949e;
+            --red: #cf222e;
+        }
+        body.dark-mode {
+            --bg: #0d1117;
+            --side: #161b22;
+            --text: #c9d1d9;
+            --border: #30363d;
+            --accent: #58a6ff;
+            --gray: #8b949e;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .header-content {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header a { color: var(--accent); text-decoration: none; font-size: 14px; }
+        .header a:hover { text-decoration: underline; }
+        .content-card {
+            background: var(--side);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .content-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+        .content-header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            word-break: break-all;
+        }
+        .content-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 13px;
+            color: var(--gray);
+        }
+        .content-meta span {
+            background: var(--bg);
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+        .content-body {
+            padding: 24px;
+        }
+        .content-body.markdown-body {
+            background: transparent;
+        }
+        .loading, .error {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray);
+        }
+        .error { color: var(--red); }
+
+        /* 修复白天模式 markdown 字体颜色 */
+        .markdown-body {
+            color: var(--text) !important;
+        }
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3,
+        .markdown-body h4,
+        .markdown-body h5,
+        .markdown-body h6 {
+            color: var(--text) !important;
+        }
+        .markdown-body p,
+        .markdown-body li,
+        .markdown-body td,
+        .markdown-body th {
+            color: var(--text) !important;
+        }
+        .markdown-body a {
+            color: var(--accent) !important;
+        }
+        .markdown-body code {
+            color: var(--text) !important;
+        }
+        .markdown-body pre {
+            background: var(--bg) !important;
+            border: 1px solid var(--border) !important;
+        }
+
+        /* 文件预览 */
+        .file-preview {
+            text-align: center;
+            padding: 40px;
+        }
+        .file-preview img {
+            max-width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .download-btn {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 24px;
+            background: var(--accent);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        .download-btn:hover { opacity: 0.9; }
+
+        /* PDF预览 */
+        .pdf-preview-container {
+            width: 100%;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--bg);
+        }
+        .pdf-preview-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .pdf-placeholder {
+            width: 100%;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: var(--side);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .pdf-placeholder:hover {
+            background: var(--border);
+        }
+        .pdf-placeholder-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        .pdf-placeholder-text {
+            font-size: 14px;
+            color: var(--text);
+        }
+        .pdf-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 70vh;
+            min-height: 400px;
+            max-height: 800px;
+        }
+        .pdf-loading-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .pdf-loading-text {
+            margin-top: 12px;
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .pdf-preview-container,
+            .pdf-placeholder,
+            .pdf-loading {
+                height: 60vh;
+                min-height: 300px;
+                max-height: 600px;
+            }
+        }
+        @media (max-width: 480px) {
+            .pdf-preview-container,
+            .pdf-placeholder,
+            .pdf-loading {
+                height: 50vh;
+                min-height: 250px;
+                max-height: 500px;
+            }
+        }
+
+        /* 导航 */
+        .nav-links {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+        .nav-links a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .nav-links a:hover { text-decoration: underline; }
+        .nav-links a.disabled {
+            color: var(--gray);
+            pointer-events: none;
+        }
+
+        /* 分类笔记列表 */
+        .note-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .note-item {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .note-item a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .note-item a:hover { text-decoration: underline; }
+        .note-item .date {
+            font-size: 12px;
+            color: var(--gray);
+        }
+
+        /* 主题切换 */
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text);
+        }
+        .theme-toggle:hover { border-color: var(--accent); }
+
+        @media (max-width: 640px) {
+            .content-header h1 { font-size: 18px; }
+            .container { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <a href="/shares.html" id="back-link">← 分享中心</a>
+            <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="content-card" id="content-card" style="display: none;">
+            <div class="content-header">
+                <h1 id="title">加载中...</h1>
+                <div class="content-meta" id="meta"></div>
+            </div>
+            <div class="content-body" id="content">
+                <div class="loading">⏳ 加载中...</div>
+            </div>
+        </div>
+
+        <div class="nav-links" id="nav-links" style="display: none;">
+            <a href="#" id="prev-link">← 上一篇</a>
+            <a href="#" id="next-link">下一篇 →</a>
+        </div>
+
+        <div class="loading" id="loading">⏳ 加载中...</div>
+        <div class="error" id="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        // 主题管理
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            setTheme(savedTheme === 'dark' || (!savedTheme && prefersDark) ? 'dark' : 'light');
+        }
+
+        function setTheme(theme) {
+            document.body.classList.toggle('dark-mode', theme === 'dark');
+            localStorage.setItem('theme', theme);
+            document.querySelector('.theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
+
+            // 切换代码高亮主题
+            const hlLink = document.querySelector('link[href*="highlight"]');
+            if (hlLink) {
+                hlLink.href = theme === 'dark' ? '/cdn/highlight-dark.min.css' : '/cdn/highlight-light.min.css';
+            }
+        }
+
+        function toggleTheme() {
+            setTheme(document.body.classList.contains('dark-mode') ? 'light' : 'dark');
+        }
+
+        initTheme();
+
+        // 格式化时间
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            const raw = parseInt(timestamp, 10);
+            const ms = raw > 10000000000 ? raw : raw * 1000;
+            return new Date(ms).toLocaleString('zh-CN');
+        }
+
+        // 格式化有效期
+        function formatExpiry(expiresAt) {
+            if (!expiresAt || expiresAt === '0') return '永久有效';
+            const exp = parseInt(expiresAt);
+            const now = Date.now();
+            const diff = exp - now;
+            if (diff <= 0) return '已过期';
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            if (days > 0) return `剩余 ${days} 天`;
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            return `剩余 ${hours} 小时`;
+        }
+
+        // 加载分享内容
+        async function loadShare() {
+            const params = new URLSearchParams(location.search);
+            const token = params.get('token');
+
+            if (!token) {
+                showError('无效的分享链接');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/share/public/${encodeURIComponent(token)}`);
+                if (!res.ok) {
+                    const data = await res.json().catch(() => null);
+                    if (data?.error === 'expired') {
+                        showError('⏰ 此分享链接已过期');
+                    } else {
+                        showError('⚠️ 分享内容不存在或已被删除');
+                    }
+                    return;
+                }
+
+                const data = await res.json();
+
+                // 更新返回链接
+                if (data.owner) {
+                    document.getElementById('back-link').href = `/shares.html?user=${encodeURIComponent(data.owner)}`;
+                    document.getElementById('back-link').textContent = `← ${data.owner} 的分享`;
+                }
+
+                if (data.type === 'note') {
+                    renderNote(data, token);
+                } else if (data.type === 'category') {
+                    await renderCategory(data);
+                } else if (data.type === 'file') {
+                    renderFile(data, token);
+                }
+            } catch (e) {
+                showError('❌ 网络错误，请检查连接后重试');
+            }
+        }
+
+        // 渲染笔记
+        function renderNote(data, token) {
+            const note = data.note;
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content-card').style.display = 'block';
+
+            document.getElementById('title').textContent = (note.title || '无标题').split('/').pop() || note.title;
+            document.getElementById('meta').innerHTML = `
+                <span>📝 笔记</span>
+                <span>${data.category || '未分类'}</span>
+                <span>📅 ${formatTime(note.updatedAt)}</span>
+            `;
+
+            // 处理内容中的图片链接
+            let content = note.content || '';
+            content = content.replace(/!\[([^\]]*)\]\(\/api\/uploads\/([^)]+)\)/g,
+                (_, alt, path) => `![${alt}](/api/share/attachment/${encodeURIComponent(token)}/${encodeURIComponent(path)})`);
+            content = content.replace(/\[([^\]]+)\]\(\/api\/uploads\/([^)]+)\)/g,
+                (_, alt, path) => `[${alt}](/api/share/attachment/${encodeURIComponent(token)}/${encodeURIComponent(path)})`);
+
+            document.getElementById('content').innerHTML = marked.parse(content);
+            document.getElementById('content').classList.add('markdown-body');
+
+            // 代码高亮
+            if (window.hljs) {
+                document.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+            }
+
+            // 上下篇导航
+            renderNav(data.prevShare, data.nextShare);
+        }
+
+        // 渲染分类
+        async function renderCategory(data) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content-card').style.display = 'block';
+
+            document.getElementById('title').textContent = `${data.category} (${data.notes.length} 篇)`;
+            document.getElementById('meta').innerHTML = `
+                <span>📁 分类分享</span>
+                <span>👤 ${data.owner}</span>
+            `;
+
+            if (!data.notes || data.notes.length === 0) {
+                document.getElementById('content').innerHTML = '<div class="error">该分类下暂无笔记</div>';
+                return;
+            }
+
+            // 获取该用户的分享列表以找到每篇笔记的分享token
+            let allShares = [];
+            try {
+                const res = await fetch('/api/share/public-list');
+                if (res.ok) {
+                    allShares = await res.json();
+                }
+            } catch (e) { console.error('获取分享列表失败:', e); }
+
+            // 按笔记ID建立索引
+            const shareByNoteId = {};
+            allShares.filter(s => s.type === 'note').forEach(s => {
+                shareByNoteId[s.target] = s.token;
+            });
+
+            let html = '<div class="note-list">';
+            data.notes.forEach(note => {
+                const title = note.title.split('/').pop() || note.title;
+                const noteToken = shareByNoteId[note.id] || '';
+                const shareLink = noteToken ? `/share.html?token=${noteToken}` : 'javascript:void(0)';
+                const linkStyle = noteToken ? '' : 'style="color:var(--gray);cursor:not-allowed;"';
+                html += `
+                    <div class="note-item">
+                        <a href="${shareLink}" target="_blank" ${linkStyle}>${escapeHtml(title)}</a>
+                        <span class="date">${formatTime(note.updatedAt)}${noteToken ? '' : ' · 未分享'}</span>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            document.getElementById('content').innerHTML = html;
+        }
+
+        // 渲染文件
+        function renderFile(data, token) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('content-card').style.display = 'block';
+
+            const fileName = data.target.split('/').pop() || data.target;
+            const fileExt = fileName.split('.').pop().toLowerCase();
+
+            document.getElementById('title').textContent = fileName;
+            document.getElementById('meta').innerHTML = `
+                <span>📎 附件</span>
+                <span>👤 ${data.owner}</span>
+            `;
+
+            const url = `/s/${encodeURIComponent(token)}`;
+
+            // 图片预览
+            if (/\.(png|jpe?g|gif|webp|svg)$/i.test(data.target)) {
+                document.getElementById('content').innerHTML = `
+                    <div class="file-preview">
+                        <img src="${url}" alt="${escapeHtml(fileName)}">
+                        <br>
+                        <a href="${url}" download class="download-btn">📥 下载图片</a>
+                    </div>
+                `;
+            }
+            // PDF预览
+            else if (fileExt === 'pdf') {
+                document.getElementById('content').innerHTML = `
+                    <div class="pdf-placeholder" id="pdf-placeholder">
+                        <div class="pdf-placeholder-icon">📄</div>
+                        <div class="pdf-placeholder-text">点击加载PDF预览</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <a href="${url}" download class="download-btn">📥 下载PDF</a>
+                    </div>
+                `;
+
+                // 添加PDF加载逻辑
+                const placeholder = document.getElementById('pdf-placeholder');
+                if (placeholder) {
+                    placeholder.onclick = function() {
+                        // 显示加载状态
+                        this.innerHTML = `
+                            <div class="pdf-loading">
+                                <div class="pdf-loading-spinner"></div>
+                                <div class="pdf-loading-text">加载中...</div>
+                            </div>
+                        `;
+
+                        // 创建iframe
+                        const iframe = document.createElement('iframe');
+                        iframe.style.width = '100%';
+                        iframe.style.maxWidth = '100%';
+                        iframe.style.height = '70vh';
+                        iframe.style.minHeight = '400px';
+                        iframe.style.maxHeight = '800px';
+                        iframe.style.border = 'none';
+                        iframe.style.display = 'block';
+                        iframe.style.overflow = 'hidden';
+                        iframe.allow = 'fullscreen';
+                        iframe.allowFullscreen = true;
+                        iframe.referrerPolicy = 'no-referrer';
+
+                        iframe.onload = function() {
+                            console.log('[Share PDF] 加载成功');
+                        };
+
+                        iframe.onerror = function() {
+                            console.error('[Share PDF] 加载失败');
+                            placeholder.innerHTML = `
+                                <div style="padding:20px;text-align:center;">
+                                    <div style="font-size:64px;margin-bottom:16px;">❌</div>
+                                    <div style="font-size:16px;color:var(--red);">PDF加载失败</div>
+                                </div>
+                            `;
+                        };
+
+                        // 延迟加载
+                        setTimeout(() => {
+                            this.replaceWith(iframe);
+                            iframe.src = url;
+                        }, 100);
+                    };
+                }
+            }
+            // 其他文件类型
+            else {
+                document.getElementById('content').innerHTML = `
+                    <div class="file-preview">
+                        <div style="font-size: 64px; margin-bottom: 16px;">📄</div>
+                        <div style="font-size: 16px; color: var(--gray); margin-bottom: 20px;">${escapeHtml(fileName)}</div>
+                        <a href="${url}" download class="download-btn">📥 下载文件</a>
+                    </div>
+                `;
+            }
+
+            renderNav(data.prevShare, data.nextShare);
+        }
+
+        // 渲染导航
+        function renderNav(prev, next) {
+            const navDiv = document.getElementById('nav-links');
+            const prevLink = document.getElementById('prev-link');
+            const nextLink = document.getElementById('next-link');
+
+            if (prev) {
+                prevLink.href = `/share.html?token=${encodeURIComponent(prev.token)}`;
+                prevLink.textContent = `← ${prev.title}`;
+                prevLink.classList.remove('disabled');
+            } else {
+                prevLink.href = '#';
+                prevLink.textContent = '← 无';
+                prevLink.classList.add('disabled');
+            }
+
+            if (next) {
+                nextLink.href = `/share.html?token=${encodeURIComponent(next.token)}`;
+                nextLink.textContent = `${next.title} →`;
+                nextLink.classList.remove('disabled');
+            } else {
+                nextLink.href = '#';
+                nextLink.textContent = '无 →';
+                nextLink.classList.add('disabled');
+            }
+
+            navDiv.style.display = 'flex';
+        }
+
+        function showError(msg) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').textContent = msg;
+            document.getElementById('error').style.display = 'block';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 启动
+        if (typeof marked !== 'undefined') {
+            loadShare();
+        } else {
+            window.addEventListener('load', loadShare);
+        }
+    </script>
+</body>
+</html>

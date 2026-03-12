@@ -1,0 +1,75 @@
+# 依赖
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# 数据和日志
+data/
+logs/
+*.log
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# 临时文件
+*.tmp
+.DS_Store
+Thumbs.db
+
+# 测试
+test/
+tests/
+coverage/
+.nyc_output/
+
+# 文档
+README.md
+*.md
+docs/
+
+# 部署文档
+DEPLOY.md
+QUICKSTART.md
+deploy.sh
+DEPLOYMENT-GUIDE.md
+
+# 配置文件（开发用）
+.eslintrc.json
+.prettierrc
+.prettierrcignore
+
+# 环境文件
+.env
+.env.*
+!.env.example
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# 其他
+.editorconfig
+.npmrc
+.yarnrc
+babel.config.js
+tsconfig.json
+vitest.config.js
+jest.config.js

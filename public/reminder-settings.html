@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>提醒设置 - z7Note</title>
+  <link rel="stylesheet" href="/css/app.css?v=20250312-FINAL-FIX">
+  <style>
+    :root { --card-bg: var(--side); --font-size: 13px; }
+    body { padding: 12px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; line-height: 1.4; margin: 0; }
+    
+    /* 顶部导航 */
+    .nav-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 0 4px; }
+    .nav-header h1 { font-size: 1.2rem; margin: 0; font-weight: 800; }
+    .btn-back { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 12px; }
+
+    /* 主容器：并排布局 */
+    .main-wrapper { display: flex; gap: 16px; max-width: 1000px; margin: 0 auto; align-items: flex-start; }
+    @media (max-width: 768px) { .main-wrapper { flex-direction: column; align-items: stretch; } }
+
+    /* 左侧设置区 */
+    .settings-col { flex: 3; min-width: 0; }
+    /* 右侧历史区 */
+    .history-col { flex: 2; position: sticky; top: 12px; min-width: 0; }
+
+    .section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .section-title { display: block; font-weight: 800; margin-bottom: 10px; font-size: 12px; color: var(--gray); text-transform: uppercase; }
+    
+    .grid-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+    .check-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; background: var(--bg); }
+    .check-row:hover { border-color: var(--accent); }
+    .check-row input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+    .check-label { font-weight: 600; font-size: 13px; }
+
+    .input-row { display: flex; gap: 6px; margin-top: 8px; }
+    .input-box { flex: 1; position: relative; }
+    .input-box input { width: 100%; padding: 6px 24px 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; text-align: center; }
+    .input-box .unit { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--gray); pointer-events: none; }
+
+    .time-flex { display: flex; gap: 8px; }
+    .time-flex div { flex: 1; }
+    .time-flex label { display: block; font-size: 11px; color: var(--gray); margin-bottom: 2px; font-weight: bold; }
+    .time-flex input { width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; }
+
+    .btn-save { width: 100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 800; cursor: pointer; margin-top: 4px; box-shadow: 0 4px 10px rgba(9, 105, 218, 0.2); }
+    
+    /* 历史列表精简 */
+    .history-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; height: calc(100vh - 80px); display: flex; flex-direction: column; }
+    @media (max-width: 768px) { .history-card { height: auto; max-height: 400px; } }
+    .history-list { flex: 1; overflow-y: auto; font-size: 12px; }
+    .history-item { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .status-badge { font-size: 10px; padding: 1px 4px; border-radius: 4px; font-weight: bold; }
+    .status-sent { background: rgba(45, 164, 78, 0.1); color: var(--green); }
+    .status-failed { background: rgba(207, 34, 46, 0.1); color: var(--red); }
+
+    #loading { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 1000; font-size: 13px; color: var(--gray); }
+    #loading.hidden { display: none; }
+    .notification { position: fixed; top: 12px; left: 50%; transform: translateX(-50%) translateY(-100px); padding: 8px 20px; border-radius: 8px; color: white; z-index: 2000; transition: 0.3s; font-weight: bold; font-size: 13px; box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+    .notification.show { transform: translateX(-50%) translateY(0); }
+    .notification.success { background: var(--green); }
+    .notification.error { background: var(--red); }
+  </style>
+</head>
+<body>
+  <div id="loading">⌛ 同步中...</div>
+
+  <div class="nav-header" style="max-width: 1000px; margin: 0 auto 12px;">
+    <h1>提醒配置</h1>
+    <a href="/calendar.html" class="btn-back">← 返回日历</a>
+  </div>
+
+  <div class="main-wrapper">
+    <!-- 左侧：设置表单 -->
+    <div class="settings-col">
+      <form id="reminder-settings-form">
+        <div class="section">
+          <span class="section-title">⏰ 核心开关</span>
+          <div class="grid-row">
+            <label class="check-row"><input type="checkbox" name="event_reminder_enabled"><span class="check-label">日历事件</span></label>
+            <label class="check-row"><input type="checkbox" name="todo_reminder_enabled"><span class="check-label">待办事项</span></label>
+          </div>
+          <div class="input-row">
+            <div class="input-box"><input type="number" name="reminder_advance_days" min="0" placeholder="0"><span class="unit">天</span></div>
+            <div class="input-box"><input type="number" name="reminder_advance_hours" min="0" max="23" placeholder="0"><span class="unit">时</span></div>
+            <div class="input-box"><input type="number" name="reminder_advance_minutes" min="0" max="59" placeholder="0"><span class="unit">分</span></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <span class="section-title">📡 通知通道</span>
+          <div class="grid-row">
+            <label class="check-row"><input type="checkbox" name="email_reminder_enabled"><span class="check-label">邮件</span></label>
+            <label class="check-row"><input type="checkbox" name="browser_reminder_enabled"><span class="check-label">浏览器</span></label>
+            <label class="check-row"><input type="checkbox" name="caldav_reminder_enabled"><span class="check-label">CalDAV</span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <span class="section-title">🌙 勿扰时段</span>
+          <div class="time-flex">
+            <div><label>静默开始</label><input type="time" name="quiet_start_time"></div>
+            <div><label>恢复时间</label><input type="time" name="quiet_end_time"></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <span class="section-title">✅ 归档自动化</span>
+          <label class="check-row" style="margin-bottom: 8px;"><input type="checkbox" name="todo_complete_to_event"><span class="check-label">待办完成转事件</span></label>
+          <div id="delete-after-convert-group" style="display:none; padding-left: 24px; border-left: 2px solid var(--border);">
+            <label class="check-row"><input type="checkbox" name="delete_todo_after_convert"><span class="check-label">转换后删除原待办</span></label>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-save">💾 保存并生效</button>
+      </form>
+    </div>
+
+    <!-- 右侧：提醒历史 -->
+    <div class="history-col">
+      <div class="history-card">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span class="section-title" style="margin:0;">📋 历史记录</span>
+          <button onclick="clearHistory()" style="font-size:10px; cursor:pointer; background:none; border:1px solid var(--border); border-radius:4px; padding:0 6px; color:var(--gray);">清空</button>
+        </div>
+        <div id="history-list" class="history-list">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="notification" class="notification"></div>
+  <script src="/js/reminder-settings.js?v=20250312-FINAL-FIX"></script>
+</body>
+</html>
