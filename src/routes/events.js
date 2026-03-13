@@ -8,6 +8,46 @@ const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } =
 
 const router = express.Router();
 
+// 批量创建
+router.post('/batch', async (req, res) => {
+  try {
+    const { events } = req.body;
+    if (!Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: '无效的事件数据' });
+    }
+
+    const db = getConnection();
+    const now = Math.floor(Date.now() / 1000);
+    let successCount = 0;
+
+    for (const e of events) {
+      const { title, description, startTime, endTime, allDay } = e;
+      if (!title) continue;
+
+      const startTs = TimeHelper.parseToTs(startTime);
+      if (!startTs) continue;
+
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+      await db.run(
+        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, req.user, title.trim(), description || '',
+          startTs, TimeHelper.parseToTs(endTime), allDay ? 1 : 0, '#2563eb',
+          now, now
+        ]
+      );
+      successCount++;
+    }
+
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+    res.json({ success: true, count: successCount });
+  } catch (e) {
+    log('ERROR', '批量创建事件失败', { error: e.message });
+    res.status(500).json({ error: '批量创建失败' });
+  }
+});
+
 // 获取事件列表
 router.get('/', async (req, res) => {
   try {

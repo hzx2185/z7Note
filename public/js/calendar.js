@@ -57,6 +57,70 @@ const CalendarApp = (function() {
 
   // ==================== 工具函数 ====================
   const utils = {
+    // 批量解析输入
+    parseBatchInput(text) {
+      const lines = text.split('\n').filter(line => line.trim());
+      const results = [];
+      const now = new Date();
+      const currentYear = now.getFullYear();
+
+      // Regex for Date:
+      // 1. YYYY-MM-DD or YYYY/MM/DD or YYYY年MM月DD日
+      // 2. MM-DD or MM/DD or MM月DD日 (assume current year)
+      // 3. M.D (assume current year)
+      // 4. "Today", "Tomorrow" (in Chinese: 今天, 明天, 后天)
+      
+      const dateRegex = /(\d{4}[-\/年]\d{1,2}[-\/月]\d{1,2}日?)|(\d{1,2}[-\/月]\d{1,2}日?)|(\d{1,2}\.\d{1,2})|(今天|明天|后天)/;
+
+      lines.forEach(line => {
+        const match = line.match(dateRegex);
+        if (match) {
+          let dateStr = match[0];
+          let date = null;
+
+          if (dateStr === '今天') {
+            date = new Date();
+          } else if (dateStr === '明天') {
+            date = new Date();
+            date.setDate(date.getDate() + 1);
+          } else if (dateStr === '后天') {
+            date = new Date();
+            date.setDate(date.getDate() + 2);
+          } else if (dateStr.includes('.')) {
+            // M.D
+            const parts = dateStr.split('.');
+            date = new Date(currentYear, parseInt(parts[0]) - 1, parseInt(parts[1]));
+          } else {
+            // Normalize separators
+            const normalized = dateStr.replace(/[年\/]/g, '-').replace(/[月]/g, '-').replace(/[日]/g, '');
+            const parts = normalized.split('-');
+            
+            if (parts.length === 3) {
+              // YYYY-MM-DD
+              date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            } else if (parts.length === 2) {
+              // MM-DD
+              date = new Date(currentYear, parseInt(parts[0]) - 1, parseInt(parts[1]));
+            }
+          }
+
+          // Title is the rest of the line
+          let title = line.replace(dateStr, '').trim();
+          // Remove common separators like :, -, space
+          title = title.replace(/^[:：\-\s]+|[:：\-\s]+$/g, '');
+
+          if (title && !isNaN(date.getTime())) {
+            results.push({
+              title: title,
+              date: this.formatDate(date), // YYYY-MM-DD
+              original: line
+            });
+          }
+        }
+      });
+      return results;
+    },
+
     formatDate(date) {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -1653,6 +1717,140 @@ const CalendarApp = (function() {
 
   // ==================== 事件处理 ====================
   const handlers = {
+    // 批量添加相关方法
+    openBatchTextModal() {
+      const modal = document.getElementById('batch-text-modal');
+      if (modal) {
+        // 重置状态
+        document.getElementById('batch-text-input').value = '';
+        document.getElementById('batch-preview-area').style.display = 'none';
+        document.getElementById('batch-preview-list').innerHTML = '';
+        const importBtn = document.getElementById('batch-import-btn');
+        importBtn.disabled = true;
+        importBtn.textContent = '导入';
+        
+        modal.classList.add('show');
+        document.getElementById('batch-text-input').focus();
+      }
+    },
+
+    closeBatchTextModal() {
+      const modal = document.getElementById('batch-text-modal');
+      if (modal) {
+        modal.classList.remove('show');
+        document.getElementById('batch-text-input').value = '';
+        document.getElementById('batch-preview-area').style.display = 'none';
+        document.getElementById('batch-preview-list').innerHTML = '';
+        const importBtn = document.getElementById('batch-import-btn');
+        importBtn.disabled = true;
+        importBtn.textContent = '导入';
+      }
+    },
+
+    previewBatchText() {
+      const text = document.getElementById('batch-text-input').value;
+      const results = utils.parseBatchInput(text);
+      const list = document.getElementById('batch-preview-list');
+      const importBtn = document.getElementById('batch-import-btn');
+      
+      list.innerHTML = '';
+      if (results.length > 0) {
+        results.forEach(item => {
+          const div = document.createElement('div');
+          div.style.padding = '4px 8px';
+          div.style.borderBottom = '1px solid var(--border)';
+          div.style.fontSize = '12px';
+          div.style.display = 'flex';
+          div.style.alignItems = 'center';
+          div.style.gap = '8px';
+          div.style.whiteSpace = 'nowrap';
+          div.style.overflow = 'hidden';
+          
+          const dateSpan = document.createElement('span');
+          dateSpan.style.color = 'var(--accent)';
+          dateSpan.style.fontFamily = 'monospace';
+          dateSpan.style.flexShrink = '0';
+          dateSpan.style.width = '80px';
+          dateSpan.textContent = item.date;
+          
+          const titleSpan = document.createElement('span');
+          titleSpan.style.overflow = 'hidden';
+          titleSpan.style.textOverflow = 'ellipsis';
+          titleSpan.textContent = item.title;
+          
+          div.appendChild(dateSpan);
+          div.appendChild(titleSpan);
+          list.appendChild(div);
+        });
+        document.getElementById('batch-preview-area').style.display = 'block';
+        importBtn.disabled = false;
+        importBtn.textContent = `导入 (${results.length}项)`;
+        importBtn.dataset.items = JSON.stringify(results);
+      } else {
+        document.getElementById('batch-preview-area').style.display = 'none';
+        importBtn.disabled = true;
+        importBtn.textContent = '导入';
+        alert('未识别到有效内容，请确保格式为: 日期 标题');
+      }
+    },
+
+    async importBatchText() {
+      const btn = document.getElementById('batch-import-btn');
+      const items = JSON.parse(btn.dataset.items || '[]');
+      const type = document.querySelector('input[name="batch-type"]:checked').value;
+      
+      if (items.length === 0) return;
+      
+      btn.disabled = true;
+      btn.textContent = '导入中...';
+      state.isImporting = true;
+      
+      try {
+        let result;
+        if (type === 'event') {
+          const eventsData = items.map(item => ({
+            title: item.title,
+            startTime: `${item.date}T09:00`,
+            endTime: `${item.date}T10:00`,
+            allDay: true,
+            description: '批量导入'
+          }));
+          
+          result = await api.request('/api/events/batch', {
+            method: 'POST',
+            body: JSON.stringify({ events: eventsData })
+          });
+        } else {
+          const todosData = items.map(item => ({
+            title: item.title,
+            dueDate: `${item.date}T18:00`,
+            priority: 2,
+            allDay: true,
+            description: '批量导入'
+          }));
+          
+          result = await api.request('/api/todos/import', {
+            method: 'POST',
+            body: JSON.stringify({ todosData: { todos: todosData } })
+          });
+        }
+        
+        const successCount = result.count || result.imported || items.length;
+        alert(`成功导入 ${successCount} 项`);
+        
+        this.closeBatchTextModal();
+        render.calendar();
+        sidebarRenderer.refresh();
+      } catch (error) {
+        console.error('批量导入失败:', error);
+        alert('导入失败: ' + error.message);
+      } finally {
+        state.isImporting = false;
+        btn.disabled = false;
+        btn.textContent = '导入';
+      }
+    },
+
     // 批量选择相关方法
     toggleBatchSelect() {
       state.batchSelect.enabled = !state.batchSelect.enabled;
@@ -3340,6 +3538,31 @@ const CalendarApp = (function() {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') handlers.closeModals();
     });
+
+    // 批量添加文本事件绑定
+    const batchAddTextBtn = document.getElementById('batch-add-text-btn');
+    if (batchAddTextBtn) {
+      batchAddTextBtn.addEventListener('click', handlers.openBatchTextModal);
+    }
+    
+    const batchTextModal = document.getElementById('batch-text-modal');
+    if (batchTextModal) {
+      batchTextModal.addEventListener('click', (e) => {
+        if (e.target === batchTextModal) handlers.closeBatchTextModal();
+      });
+      
+      const closeBtn = batchTextModal.querySelector('.batch-text-modal-close');
+      if (closeBtn) closeBtn.addEventListener('click', handlers.closeBatchTextModal);
+      
+      const cancelBtn = batchTextModal.querySelector('.batch-text-modal-cancel');
+      if (cancelBtn) cancelBtn.addEventListener('click', handlers.closeBatchTextModal);
+      
+      const previewBtn = document.getElementById('batch-preview-btn');
+      if (previewBtn) previewBtn.addEventListener('click', handlers.previewBatchText);
+      
+      const importBtn = document.getElementById('batch-import-btn');
+      if (importBtn) importBtn.addEventListener('click', () => handlers.importBatchText());
+    }
 
     // 初始化侧边栏
     sidebarRenderer.init();

@@ -268,6 +268,7 @@
             <span id="sidebar-lunar" style="font-size: 12px; color: var(--gray);"></span>
           </div>
           <div style="display:flex; gap: 4px;">
+            <button class="tool-btn" id="batch-add-text-btn" title="批量添加">📋</button>
             <button class="tool-btn" id="todo-add-btn" title="添加待办">☑</button>
             <button class="tool-btn" id="event-add-btn" title="添加事件">📅</button>
             <button class="tool-btn" id="batch-select-btn" title="批量选择">✓</button>
@@ -433,6 +434,39 @@
           <button type="submit" class="btn btn-primary">保存</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 批量添加文本 -->
+  <div class="modal" id="batch-text-modal">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header" style="padding: 8px 12px;">
+        <h3 style="font-size:14px">批量添加</h3>
+        <button class="batch-text-modal-close" style="font-size:18px">×</button>
+      </div>
+      <div class="modal-body" style="padding: 12px;">
+        <div class="form-group" style="margin-bottom: 8px;">
+          <textarea id="batch-text-input" rows="8" placeholder="格式: 日期 标题 (每行一条)&#10;3.15 买菜&#10;明天 下午开会" style="font-size:14px; padding:8px; line-height:1.5; resize: vertical; min-height: 150px;"></textarea>
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display:flex; align-items:center; gap:15px; font-size:12px; flex-shrink: 0;">
+            <label style="margin:0; color:var(--gray); white-space:nowrap;">类型:</label>
+            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap;"><input type="radio" name="batch-type" value="event" checked style="margin:0"> 事件</label>
+            <label style="cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap;"><input type="radio" name="batch-type" value="todo" style="margin:0"> 待办</label>
+          </div>
+          <button type="button" class="btn btn-primary" id="batch-preview-btn" style="height:24px; font-size:11px; padding:0 8px; width:auto; white-space:nowrap;">预览</button>
+        </div>
+
+        <div id="batch-preview-area" style="display:none; border-top:1px solid var(--border); margin-top:8px; padding-top:8px;">
+          <div id="batch-preview-list" style="max-height:150px; overflow-y:auto; background:var(--side); border:1px solid var(--border); border-radius:4px; font-size:11px;"></div>
+        </div>
+        
+        <div class="modal-actions" style="padding: 8px 12px; margin-top: 8px;">
+          <button type="button" class="btn btn-secondary batch-text-modal-cancel">取消</button>
+          <button type="button" class="btn btn-primary" id="batch-import-btn" disabled>导入</button>
+        </div>
+      </div>
     </div>
   </div>
 
