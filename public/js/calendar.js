@@ -1748,52 +1748,66 @@ const CalendarApp = (function() {
     },
 
     previewBatchText() {
-      const text = document.getElementById('batch-text-input').value;
-      const results = utils.parseBatchInput(text);
-      const list = document.getElementById('batch-preview-list');
-      const importBtn = document.getElementById('batch-import-btn');
-      
-      list.innerHTML = '';
-      if (results.length > 0) {
-        results.forEach(item => {
-          const div = document.createElement('div');
-          div.style.padding = '4px 8px';
-          div.style.borderBottom = '1px solid var(--border)';
-          div.style.fontSize = '12px';
-          div.style.display = 'flex';
-          div.style.alignItems = 'center';
-          div.style.gap = '8px';
-          div.style.whiteSpace = 'nowrap';
-          div.style.overflow = 'hidden';
-          
-          const dateSpan = document.createElement('span');
-          dateSpan.style.color = 'var(--accent)';
-          dateSpan.style.fontFamily = 'monospace';
-          dateSpan.style.flexShrink = '0';
-          dateSpan.style.width = '80px';
-          dateSpan.textContent = item.date;
-          
-          const titleSpan = document.createElement('span');
-          titleSpan.style.overflow = 'hidden';
-          titleSpan.style.textOverflow = 'ellipsis';
-          titleSpan.textContent = item.title;
-          
-          div.appendChild(dateSpan);
-          div.appendChild(titleSpan);
-          list.appendChild(div);
-        });
-        document.getElementById('batch-preview-area').style.display = 'block';
-        importBtn.disabled = false;
-        importBtn.textContent = `导入 (${results.length}项)`;
-        importBtn.dataset.items = JSON.stringify(results);
-      } else {
-        document.getElementById('batch-preview-area').style.display = 'none';
-        importBtn.disabled = true;
-        importBtn.textContent = '导入';
-        alert('未识别到有效内容，请确保格式为: 日期 标题');
+      try {
+        const textInput = document.getElementById('batch-text-input');
+        if (!textInput) return;
+
+        const text = textInput.value;
+        if (!text.trim()) {
+          alert('请输入要添加的内容');
+          return;
+        }
+
+        const results = utils.parseBatchInput(text);
+        const list = document.getElementById('batch-preview-list');
+        const importBtn = document.getElementById('batch-import-btn');
+        const previewArea = document.getElementById('batch-preview-area');
+
+        list.innerHTML = '';
+        if (results.length > 0) {
+          results.forEach(item => {
+            const div = document.createElement('div');
+            div.style.padding = '4px 8px';
+            div.style.borderBottom = '1px solid var(--border)';
+            div.style.fontSize = '12px';
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.gap = '8px';
+            div.style.whiteSpace = 'nowrap';
+            div.style.overflow = 'hidden';
+
+            const dateSpan = document.createElement('span');
+            dateSpan.style.color = 'var(--accent)';
+            dateSpan.style.fontFamily = 'monospace';
+            dateSpan.style.flexShrink = '0';
+            dateSpan.style.width = '80px';
+            dateSpan.textContent = item.date;
+
+            const titleSpan = document.createElement('span');
+            titleSpan.style.overflow = 'hidden';
+            titleSpan.style.textOverflow = 'ellipsis';
+            titleSpan.textContent = item.title;
+
+            div.appendChild(dateSpan);
+            div.appendChild(titleSpan);
+            list.appendChild(div);
+          });
+          previewArea.style.display = 'block';
+          previewArea.classList.remove('hidden'); // 确保移除 hidden 类
+          importBtn.disabled = false;
+          importBtn.textContent = `导入 (${results.length}项)`;
+          importBtn.dataset.items = JSON.stringify(results);
+        } else {
+          previewArea.style.display = 'none';
+          importBtn.disabled = true;
+          importBtn.textContent = '导入';
+          alert('未识别到有效内容，请确保格式为: 日期 标题\n例如: 3.15 买菜');
+        }
+      } catch (error) {
+        console.error('预览失败:', error);
+        alert('预览功能出错，请查看控制台日志');
       }
     },
-
     async importBatchText() {
       const btn = document.getElementById('batch-import-btn');
       const items = JSON.parse(btn.dataset.items || '[]');
@@ -1810,8 +1824,8 @@ const CalendarApp = (function() {
         if (type === 'event') {
           const eventsData = items.map(item => ({
             title: item.title,
-            startTime: `${item.date}T09:00`,
-            endTime: `${item.date}T10:00`,
+            startTime: `${item.date}T00:00`,
+            endTime: `${item.date}T23:59`,
             allDay: true,
             description: '批量导入'
           }));
@@ -1823,7 +1837,7 @@ const CalendarApp = (function() {
         } else {
           const todosData = items.map(item => ({
             title: item.title,
-            dueDate: `${item.date}T18:00`,
+            dueDate: `${item.date}T23:59`,
             priority: 2,
             allDay: true,
             description: '批量导入'
@@ -2082,21 +2096,24 @@ const CalendarApp = (function() {
       const yijiContent = document.getElementById('yiji-content');
       const yiEl = document.getElementById('yiji-yi');
       const jiEl = document.getElementById('yiji-ji');
-      
+
       try {
         const data = await api.request(`/api/lunar/${dateStr}`);
         if (data && lunarEl) {
           lunarEl.textContent = data.fullText;
           if (yiEl) yiEl.textContent = data.yi.join(' ');
           if (jiEl) jiEl.textContent = data.ji.join(' ');
-          if (yijiContent) yijiContent.style.display = 'block';
+
+          if (yijiContent) {
+            yijiContent.classList.remove('hidden');
+            yijiContent.style.display = ''; // 清除可能残留的内联样式
+          }
         }
       } catch (e) {
         console.error('获取农历失败:', e);
-        if (yijiContent) yijiContent.style.display = 'none';
+        if (yijiContent) yijiContent.classList.add('hidden');
       }
     },
-
     openTodoModal() {
       if (!elements.todoForm.dataset.todoId) {
         // 新建模式：明确初始化所有字段
@@ -2136,11 +2153,11 @@ const CalendarApp = (function() {
       const dateRow = document.getElementById('todo-date-row');
       
       if (isAllDay) {
-        datetimeRow.style.display = 'none';
-        dateRow.style.display = 'flex';
+        datetimeRow.classList.add('hidden');
+        dateRow.classList.remove('hidden');
       } else {
-        datetimeRow.style.display = 'flex';
-        dateRow.style.display = 'none';
+        datetimeRow.classList.remove('hidden');
+        dateRow.classList.add('hidden');
       }
     },
 
@@ -2195,14 +2212,14 @@ const CalendarApp = (function() {
       
       if (isAllDay) {
         // 全天事件:显示日期选择器,隐藏时间选择器
-        datetimeRow.style.display = 'none';
-        dateRow.style.display = 'flex';
+        datetimeRow.classList.add('hidden');
+        dateRow.classList.remove('hidden');
         startTimeInput.removeAttribute('required');
         startDateInput.setAttribute('required', '');
       } else {
         // 非全天事件:显示时间选择器,隐藏日期选择器
-        datetimeRow.style.display = 'flex';
-        dateRow.style.display = 'none';
+        datetimeRow.classList.remove('hidden');
+        dateRow.classList.add('hidden');
         startTimeInput.setAttribute('required', '');
         startDateInput.removeAttribute('required');
       }

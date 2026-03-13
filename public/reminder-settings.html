@@ -7,7 +7,9 @@
   <link rel="stylesheet" href="/css/app.css?v=20250312-FINAL-FIX">
   <style>
     :root { --card-bg: var(--side); --font-size: 13px; }
-    body { padding: 12px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; line-height: 1.4; margin: 0; }
+    /* 覆盖 app.css 的全局设置，确保设置页面可以正常滚动 */
+    body, html { height: auto !important; overflow-y: auto !important; margin: 0; padding: 0; }
+    body { padding: 12px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; line-height: 1.4; }
     
     /* 顶部导航 */
     .nav-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 0 4px; }
@@ -15,8 +17,12 @@
     .btn-back { color: var(--accent); text-decoration: none; font-weight: 600; font-size: 12px; }
 
     /* 主容器：并排布局 */
-    .main-wrapper { display: flex; gap: 16px; max-width: 1000px; margin: 0 auto; align-items: flex-start; }
-    @media (max-width: 768px) { .main-wrapper { flex-direction: column; align-items: stretch; } }
+    .main-wrapper { display: flex; gap: 16px; max-width: 1000px; margin: 0 auto; align-items: flex-start; padding-bottom: 40px; }
+    @media (max-width: 768px) { 
+      .main-wrapper { flex-direction: column; align-items: stretch; } 
+      .history-col { position: static !important; }
+      .history-card { height: auto !important; max-height: none !important; }
+    }
 
     /* 左侧设置区 */
     .settings-col { flex: 3; min-width: 0; }
@@ -46,7 +52,7 @@
     
     /* 历史列表精简 */
     .history-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; height: calc(100vh - 80px); display: flex; flex-direction: column; }
-    @media (max-width: 768px) { .history-card { height: auto; max-height: 400px; } }
+    
     .history-list { flex: 1; overflow-y: auto; font-size: 12px; }
     .history-item { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
     .status-badge { font-size: 10px; padding: 1px 4px; border-radius: 4px; font-weight: bold; }
