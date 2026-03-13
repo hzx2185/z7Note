@@ -138,7 +138,13 @@ router.post('/api/import', async (req, res) => {
             updatedAt = Math.floor(new Date(updatedAt).getTime() / 1000);
           } else if (typeof updatedAt === 'number' && updatedAt > 2000000000) {
             updatedAt = Math.floor(updatedAt / 1000);
-          } else if (!updatedAt) {
+          } else if (!updatedAt || updatedAt === 0) {
+            // 如果时间戳为空、null、undefined 或 0，使用当前时间
+            updatedAt = Math.floor(Date.now() / 1000);
+          }
+
+          // 最终验证：确保时间戳是有效的正整数
+          if (!updatedAt || updatedAt <= 0 || isNaN(updatedAt)) {
             updatedAt = Math.floor(Date.now() / 1000);
           }
 

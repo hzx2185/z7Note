@@ -798,12 +798,18 @@ router.post('/api/files', async (req, res) => {
       );
 
       for (const item of validItems) {
+        // 处理时间戳：确保不为空或 0
+        let timestamp = item.updatedAt;
+        if (!timestamp || timestamp === 0 || isNaN(timestamp)) {
+          timestamp = Math.floor(Date.now() / 1000);
+        }
+
         await stmt.run([
           item.id,
           req.user,
           item.title || '未命名',
           item.content || '',
-          item.updatedAt || Math.floor(Date.now() / 1000),
+          timestamp,
           item.deleted ? 1 : 0
         ]);
 
