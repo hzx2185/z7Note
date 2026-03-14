@@ -343,8 +343,16 @@ const UIManager = {
                 return;
             }
 
-            // 清理旧的编辑器内容
-            container.innerHTML = '';
+            if (window.EditorAdapterManager && typeof window.EditorAdapterManager.destroyCurrentEditor === 'function') {
+                window.EditorAdapterManager.destroyCurrentEditor();
+            } else if (this.editor && typeof this.editor.destroy === 'function') {
+                try {
+                    this.editor.destroy();
+                } catch (e) {
+                    console.error('旧编辑器销毁失败:', e);
+                }
+            }
+            this.editor = null;
 
             // 使用适配器系统创建编辑器
             this.editor = await window.EditorAdapterManager.createEditor(container, content, {
@@ -990,44 +998,158 @@ const UIManager = {
     // 保存笔记 - 使用防抖减少频繁写入
     _saveDebounceTimer: null,
     _isSaving: false, // 防止重复保存
+    _scheduledSavePromise: null,
+    _scheduledSaveResolve: null,
+    _scheduledSaveReject: null,
+    _lastSavedSignature: '',
+    _saveCooldownUntil: 0,
+    _saveFailureCount: 0,
+    
+    _consumeScheduledSaveSettlers() {
+        const resolve = this._scheduledSaveResolve;
+        const reject = this._scheduledSaveReject;
+        this._scheduledSavePromise = null;
+        this._scheduledSaveResolve = null;
+        this._scheduledSaveReject = null;
+        return { resolve, reject };
+    },
+
+    _resolveScheduledSave(result = true) {
+        const { resolve } = this._consumeScheduledSaveSettlers();
+        if (resolve) resolve(result);
+    },
+
+    _rejectScheduledSave(error) {
+        const { reject } = this._consumeScheduledSaveSettlers();
+        if (reject) reject(error);
+    },
+
+    _getSaveDebounceDelay() {
+        const host = window.location.hostname;
+        if (host === '127.0.0.1' || host === 'localhost') {
+            return 3000;
+        }
+        return 10000;
+    },
+
+    _getSaveCooldownMs() {
+        const host = window.location.hostname;
+        if (host === '127.0.0.1' || host === 'localhost') {
+            return 4000;
+        }
+        return 8000;
+    },
+
+    _buildNoteSignature(note, contentOverride) {
+        if (!note) return '';
+        const content = contentOverride !== undefined ? contentOverride : (note.content || '');
+        return `${note.id}|${note.title || ''}|${content}`;
+    },
+
+    _captureActiveNoteSnapshot() {
+        if (!this.activeId) return null;
+        const idx = this.notes.findIndex(x => x.id.toString() === this.activeId.toString());
+        if (idx === -1) return null;
+
+        const note = this.notes[idx];
+        const content = this.editor && this.editor.getValue ? this.editor.getValue() : (note.content || '');
+        return {
+            ...note,
+            content
+        };
+    },
+
+    _hasPendingSave() {
+        const snapshot = this._captureActiveNoteSnapshot();
+        if (!snapshot) return false;
+        return this._buildNoteSignature(snapshot, snapshot.content) !== this._lastSavedSignature;
+    },
+
+    async flushPendingSave(options = {}) {
+        clearTimeout(this._saveDebounceTimer);
+        const snapshot = options.noteSnapshot || this._captureActiveNoteSnapshot();
+        if (!snapshot) {
+            this._resolveScheduledSave(true);
+            return true;
+        }
+        if (this._buildNoteSignature(snapshot, snapshot.content) === this._lastSavedSignature) {
+            this._resolveScheduledSave(true);
+            return true;
+        }
+        try {
+            const result = await this._saveSnapshot(snapshot, options);
+            this._resolveScheduledSave(result);
+            return result;
+        } catch (error) {
+            this._rejectScheduledSave(error);
+            throw error;
+        }
+    },
 
     async save() {
         // 输入法期间完全禁止保存
         if (this._isComposing) {
-            return;
+            return false;
         }
-        if (!this.activeId || !this.editor || this._isSaving) {
-            return;
+        if (!this.activeId || !this.editor) {
+            return false;
+        }
+        if (!this._hasPendingSave()) {
+            return true;
         }
 
         clearTimeout(this._saveDebounceTimer);
+        if (!this._scheduledSavePromise) {
+            this._scheduledSavePromise = new Promise((resolve, reject) => {
+                this._scheduledSaveResolve = resolve;
+                this._scheduledSaveReject = reject;
+            });
+        }
+        const debounceDelay = this._getSaveDebounceDelay();
+        const cooldownDelay = Math.max(0, this._saveCooldownUntil - Date.now());
+        const finalDelay = Math.max(debounceDelay, cooldownDelay);
+
         this._saveDebounceTimer = setTimeout(async () => {
-            await this._doSave();
-        }, 1500); // 增加到1500ms，与编辑器保持一致
+            try {
+                const result = await this._doSave();
+                this._resolveScheduledSave(result);
+            } catch (error) {
+                this._rejectScheduledSave(error);
+            }
+        }, finalDelay);
+
+        return this._scheduledSavePromise;
     },
     
     // 实际保存逻辑 - 云端优先
-    async _doSave() {
-        if (!this.activeId || !this.editor) return;
+    async _doSave(options = {}) {
+        if (!this.activeId || !this.editor) return false;
 
         // 二次检查输入法状态，确保不会在输入时保存
         if (this._isComposing) {
-            return;
+            return false;
         }
 
-        let content = "";
-        if (this.editor.getValue) {
-            content = this.editor.getValue();
-        }
+        const snapshot = this._captureActiveNoteSnapshot();
+        if (!snapshot) return false;
+        if (this._buildNoteSignature(snapshot, snapshot.content) === this._lastSavedSignature) return true;
+        return await this._saveSnapshot(snapshot, options);
+    },
 
-        const idx = this.notes.findIndex(x => x.id.toString() === this.activeId.toString());
-        if (idx === -1) return;
+    async _saveSnapshot(snapshot, options = {}) {
+        if (!snapshot || snapshot.id === undefined || snapshot.id === null) return false;
+
+        const idx = this.notes.findIndex(x => x.id.toString() === snapshot.id.toString());
+        if (idx === -1) return false;
+
+        const content = snapshot.content || '';
+        const currentNote = this.notes[idx];
+        const isCurrentActiveNote = this.activeId && this.activeId.toString() === snapshot.id.toString();
 
         // 检查是否是临时笔记且内容为空
-        const currentNote = this.notes[idx];
         if (currentNote.isTemp && (!content || content.trim().length === 0)) {
             // 删除临时笔记
-            this.notes = this.notes.filter(n => n.id.toString() !== this.activeId.toString());
+            this.notes = this.notes.filter(n => n.id.toString() !== snapshot.id.toString());
 
             // 切换到第一个有内容的笔记
             const notesWithContent = this.notes.filter(n => {
@@ -1039,15 +1161,19 @@ const UIManager = {
 
             if (notesWithContent.length > 0) {
                 const latest = notesWithContent.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
-                this.switch(latest.id);
+                if (isCurrentActiveNote) {
+                    this.switch(latest.id);
+                }
             } else {
-                this.activeId = null;
-                if (this.editor) this.editor.destroy();
-                this.updatePreview("");
+                if (isCurrentActiveNote) {
+                    this.activeId = null;
+                    if (this.editor) this.editor.destroy();
+                    this.updatePreview("");
+                }
             }
 
             this.render();
-            return;
+            return true;
         }
 
         // 如果是临时笔记且有内容，转为正式笔记
@@ -1068,38 +1194,40 @@ const UIManager = {
         this._editorLastUpdateTime = now * 1000; // UI 内部计时仍可保留 ms 用于防抖比较，但在 note 结构中存秒
 
         // 直接调用API保存到云端
-        await this.saveToCloud(this.notes[idx]);
+        return await this.saveToCloud(this.notes[idx], 1, options);
     },
 
     _isSaving: false,
     _pendingSave: null,
 
     // 保存到云端
-    async saveToCloud(note) {
+    async saveToCloud(note, attempt = 1, options = {}) {
         // 如果正在保存，将当前笔记存入等待队列，确保最后一次修改不丢失
         if (this._isSaving) {
             this._pendingSave = note;
-            return;
+            return 'queued';
         }
 
         try {
             // 输入法期间完全禁止云端同步
             if (this._isComposing) {
-                return;
+                return false;
             }
 
             this._isSaving = true;
             // 修正：后端 /api/files 期望接收数组格式
-            const res = await fetch('/api/files', {
+            const res = await fetchWithTimeout('/api/files', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
+                keepalive: Boolean(options.keepalive),
                 body: JSON.stringify([{
                     id: note.id,
                     title: note.title,
                     content: note.content,
                     updatedAt: note.updatedAt
                 }])
-            });
+            }, 20000);
 
             const contentType = res.headers.get('content-type');
             let result;
@@ -1122,20 +1250,42 @@ const UIManager = {
                         };
                     }
                 }
+                this._lastSavedSignature = this._buildNoteSignature(this.notes[idx] || noteToUpdate || note);
+                this._saveFailureCount = 0;
+                this._saveCooldownUntil = 0;
+                return true;
             } else {
+                if (res.status === 502 && attempt < 2) {
+                    console.warn('[Save] 网关异常，准备重试一次');
+                    await new Promise(resolve => setTimeout(resolve, 2500));
+                    this._isSaving = false;
+                    return await this.saveToCloud(note, attempt + 1, options);
+                }
+                this._saveFailureCount += 1;
+                this._saveCooldownUntil = Date.now() + this._getSaveCooldownMs();
                 console.error('[Save] 服务器返回错误:', res.status);
-                this.showToast(res.status === 502 ? '服务器繁忙，请稍后再试' : '保存失败，请检查网络连接', false);
+                this.showToast(res.status === 502 ? '保存通道不稳定，请稍后重试' : '保存失败，请检查网络连接', false);
+                return false;
             }
         } catch (e) {
+            if ((e.message === '请求超时' || e.name === 'AbortError') && attempt < 2) {
+                console.warn('[Save] 保存超时，准备重试一次');
+                await new Promise(resolve => setTimeout(resolve, 2500));
+                this._isSaving = false;
+                return await this.saveToCloud(note, attempt + 1, options);
+            }
+            this._saveFailureCount += 1;
+            this._saveCooldownUntil = Date.now() + this._getSaveCooldownMs();
             console.error('[Save] 请求异常:', e);
             this.showToast('无法连接服务器，请稍后重试', false);
+                return false;
         } finally {
             this._isSaving = false;
             // 如果在保存期间有新的修改，立即执行最后一次待办保存
             if (this._pendingSave) {
                 const nextNote = this._pendingSave;
                 this._pendingSave = null;
-                this.saveToCloud(nextNote);
+                void this.saveToCloud(nextNote);
             }
         }
     },
@@ -1403,6 +1553,10 @@ const UIManager = {
             return;
         }
 
+        if (this.activeId && this.editor && this._hasPendingSave()) {
+            void this.flushPendingSave({ noteSnapshot: this._captureActiveNoteSnapshot() });
+        }
+
         this._lastActiveId = newId;
         this.activeId = newId;
 
@@ -1425,6 +1579,8 @@ const UIManager = {
             // 更新标题输入框 - 恢复全标题模式
             const titleInput = document.getElementById('note-title-input');
             if (titleInput) titleInput.value = n.title || '';
+
+            this._lastSavedSignature = this._buildNoteSignature(n, n.content || '');
 
             this.initEditor(n.content || '');
             
@@ -1470,7 +1626,7 @@ const UIManager = {
 
         // 防抖保存
         clearTimeout(this._saveTimer);
-        this._saveTimer = setTimeout(() => this.save(), 1000);
+        this._saveTimer = setTimeout(() => this.save(), this._getSaveDebounceDelay());
     },
 
     // 更新列表中笔记的激活状态
@@ -2642,7 +2798,7 @@ const UIManager = {
         };
 
         try {
-            const res = await fetch('/api/user-info');
+            const res = await fetch('/api/user-info', { cache: 'no-store' });
             if (!res.ok) throw new Error('Failed to load user info');
             const data = await res.json();
 

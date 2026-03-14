@@ -315,6 +315,7 @@ const APIManager = {
         const name = f.name || f.filename || f;
         const rawUrl = `/api/attachments/raw/${encodeURIComponent(name)}`;
         const sizeText = f.size || '';
+        const timeText = this.formatAttachmentTime(f.time);
         const encodedName = encodeURIComponent(name);
         const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
         
@@ -330,6 +331,7 @@ const APIManager = {
                 </div>
                 <div class="file-name" title="${name}" onclick="window.open('${rawUrl}', '_blank')">${name} ${invalidBadge}</div>
                 <div style="font-size:11px; color:var(--gray);">${sizeText}</div>
+                <div style="font-size:11px; color:var(--gray);">${timeText}</div>
                 <div class="file-actions">
                     <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="color:var(--green);">分享</button>
                     <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="color:var(--accent);">插入</button>
@@ -345,6 +347,7 @@ const APIManager = {
         const name = f.name || f.filename || f;
         const rawUrl = `/api/attachments/raw/${encodeURIComponent(name)}`;
         const sizeText = f.size || '';
+        const timeText = this.formatAttachmentTime(f.time);
         const encodedName = encodeURIComponent(name);
         const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(name);
 
@@ -360,6 +363,7 @@ const APIManager = {
                 </div>
                 <div class="file-name" onclick="window.open('${rawUrl}', '_blank')" title="${name}">${name} ${invalidBadge}</div>
                 <div style="font-size:11px; color:var(--gray); flex-shrink:0;">${sizeText}</div>
+                <div style="font-size:11px; color:var(--gray); flex-shrink:0; min-width:132px; text-align:right;" title="${timeText}">${timeText}</div>
                 <div class="file-actions">
                     <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="color:var(--green);">分享</button>
                     <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="color:var(--accent);">插入</button>
@@ -368,6 +372,19 @@ const APIManager = {
                 </div>
             </div>
         `;
+    },
+
+    formatAttachmentTime(value) {
+        if (!value) return '时间未知';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '时间未知';
+        return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     },
 
     // 切换附件视图
@@ -410,8 +427,12 @@ const APIManager = {
             const res = await fetchWithTimeout(`/api/attachments/${encodeURIComponent(decoded)}`, { method: 'DELETE' });
             if (res.ok) {
                 ui.showToast("已删除");
-                this.loadAttachments(true); // 强制刷新
-                ui.refreshUserInfo();
+                await this.loadAttachments(true); // 强制刷新
+                if (ui.loadUserInfo) {
+                    await ui.loadUserInfo();
+                } else {
+                    ui.refreshUserInfo();
+                }
             }
         } catch (e) {
             ui.showToast("删除失败", false);
@@ -890,13 +911,39 @@ const APIManager = {
         }
     },
 
+    async parseErrorResponse(response, fallbackMessage) {
+        const contentType = response.headers.get('content-type') || '';
+        const responseText = await response.text();
+
+        if (contentType.includes('application/json')) {
+            try {
+                const data = JSON.parse(responseText);
+                return data.error || fallbackMessage;
+            } catch (e) {
+                return fallbackMessage;
+            }
+        }
+
+        if (response.status === 502) {
+            return '服务器返回 502 Bad Gateway，请检查应用服务是否正常运行';
+        }
+
+        if (responseText) {
+            const compactText = responseText.replace(/\s+/g, ' ').trim().slice(0, 120);
+            return `${fallbackMessage} (${response.status}): ${compactText}`;
+        }
+
+        return `${fallbackMessage} (${response.status})`;
+    },
+
     // 分片上传文件
     async uploadFileInChunks(file, onProgress) {
         const totalSize = file.size;
-        const chunkSize = 5 * 1024 * 1024; // 5MB 每个分片
+        const chunkSize = 1 * 1024 * 1024;
+        const chunkUploadThreshold = 5 * 1024 * 1024; // 5MB 以上启用分片，兼顾大文件稳定性与普通附件体验
 
-        // 如果文件小于5MB，使用传统上传
-        if (totalSize <= chunkSize) {
+        // 小文件直接走传统上传，较大文件启用分片以支持更稳的长传输与断点续传场景
+        if (totalSize <= chunkUploadThreshold) {
             return await this.uploadFileTraditional(file, onProgress);
         }
 
@@ -908,13 +955,14 @@ const APIManager = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename: file.name,
-                    totalSize: totalSize
+                    totalSize: totalSize,
+                    mimeType: file.type
                 })
             }, 30000);
 
             if (!sessionRes.ok) {
-                const errorData = await sessionRes.json();
-                throw new Error(errorData.error || '创建上传会话失败');
+                const errorMessage = await this.parseErrorResponse(sessionRes, '创建上传会话失败');
+                throw new Error(errorMessage);
             }
 
             const session = await sessionRes.json();
@@ -947,9 +995,8 @@ const APIManager = {
                 }, 60000);
 
                 if (!chunkRes.ok) {
-                    const errorData = await chunkRes.json();
-                    console.error(`[Frontend] 上传分片失败:`, errorData);
-                    throw new Error(`上传分片 ${i + 1}/${chunks} 失败: ${errorData.error}`);
+                    const errorMessage = await this.parseErrorResponse(chunkRes, `上传分片 ${i + 1}/${chunks} 失败`);
+                    throw new Error(errorMessage);
                 }
 
                 uploadedChunks++;
@@ -977,16 +1024,35 @@ const APIManager = {
             }, 60000);
 
             if (!mergeRes.ok) {
-                const errorData = await mergeRes.json();
-                throw new Error(errorData.error || '合并文件失败');
+                const errorMessage = await this.parseErrorResponse(mergeRes, '合并文件失败');
+                throw new Error(errorMessage);
             }
 
             onProgress && onProgress(100, '上传完成', '文件已成功上传');
             return await mergeRes.json();
 
         } catch (error) {
+            if (this.shouldFallbackToTraditionalUpload(error, file)) {
+                onProgress && onProgress(5, '分片线路异常，切换普通上传...', '正在自动重试');
+                const fallbackResult = await this.uploadFileTraditional(file, onProgress);
+                return {
+                    ...fallbackResult,
+                    _usedTraditionalFallback: true
+                };
+            }
             throw error;
         }
+    },
+
+    shouldFallbackToTraditionalUpload(error, file) {
+        const message = String(error?.message || '').toLowerCase();
+        if (!file || file.size <= 0) return false;
+
+        // 代理层 502 或分片接口异常时，优先回退普通上传以保证可用性
+        return message.includes('502') ||
+            message.includes('bad gateway') ||
+            message.includes('上传分片') ||
+            message.includes('创建上传会话失败');
     },
 
     // 传统方式上传文件（小文件）
@@ -1069,11 +1135,10 @@ const APIManager = {
                 this.showUploadProgress(true, text, percent, details);
             });
 
-            this.showUploadProgress(true, '上传成功', 100, '文件已成功上传');
-
-            // 关闭附件管理模态框
-            const modal = document.getElementById('attachment-modal');
-            if (modal) modal.classList.remove('show');
+            const successDetails = data._usedTraditionalFallback
+                ? '分片线路异常，已自动切换普通上传并完成'
+                : '文件已成功上传';
+            this.showUploadProgress(true, '上传成功', 100, successDetails);
 
             // 插入到编辑器
             if (!ui.editor) {
@@ -1124,11 +1189,15 @@ const APIManager = {
 
             ui.save();
             ui.updatePreview();
-            ui.showToast("已插入");
+            ui.showToast(data._usedTraditionalFallback ? "已自动切换普通上传并插入" : "已插入");
 
-            // 刷新附件列表和用户信息
-            this.loadAttachments();
-            ui.refreshUserInfo();
+            // 强制刷新附件列表，确保模态框里立刻看到新文件
+            await this.loadAttachments(true);
+            if (ui.loadUserInfo) {
+                await ui.loadUserInfo();
+            } else {
+                ui.refreshUserInfo();
+            }
             input.value = '';
 
             // 延迟隐藏进度条

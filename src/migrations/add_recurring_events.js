@@ -8,9 +8,7 @@ module.exports = {
     migrate: async (db) => {
         console.log('开始迁移: 添加重复事件字段...');
 
-        // 检查列是否存在,如果不存在则添加
-        const tableInfo = await db.all("PRAGMA table_info(events)");
-        const hasRecurrence = tableInfo.some(col => col.name === 'recurrence');
+        const hasRecurrence = await db.schema.hasColumn('events', 'recurrence');
 
         if (!hasRecurrence) {
             // 添加重复事件相关字段

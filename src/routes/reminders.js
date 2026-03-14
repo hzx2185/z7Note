@@ -5,6 +5,7 @@
 const express = require('express');
 const { getUserReminderSettings, updateUserReminderSettings, checkAndSendPendingReminders } = require('../services/reminderService');
 const log = require('../utils/logger');
+const db = require('../db/client');
 
 const router = express.Router();
 
@@ -54,9 +55,6 @@ router.get('/history', async (req, res) => {
   try {
     const { limit = 50, offset = 0, status } = req.query;
 
-    const { getConnection } = require('../db/connection');
-    const db = getConnection();
-
     let query = 'SELECT * FROM reminder_history WHERE username = ?';
     const params = [req.user];
 
@@ -68,7 +66,7 @@ router.get('/history', async (req, res) => {
     query += ' ORDER BY reminder_time DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
-    const history = await db.all(query, params);
+    const history = await db.queryAll(query, params);
     res.json(history);
   } catch (e) {
     log('ERROR', '获取提醒历史失败', { username: req.user, error: e.message });
@@ -83,12 +81,9 @@ router.delete('/history', async (req, res) => {
   try {
     const { days = 30 } = req.query;
 
-    const { getConnection } = require('../db/connection');
-    const db = getConnection();
-
     const cutoffTime = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
 
-    const result = await db.run(
+    const result = await db.execute(
       'DELETE FROM reminder_history WHERE username = ? AND reminder_time < ?',
       [req.user, cutoffTime]
     );
@@ -111,17 +106,15 @@ router.post('/import', async (req, res) => {
       return res.status(400).json({ error: '无效的提醒数据格式' });
     }
 
-    const { getConnection } = require('../db/connection');
-    const db = getConnection();
     const username = req.user;
     const reminders = remindersData.reminders;
 
     // 检查是否已存在提醒设置
-    const existing = await db.get('SELECT * FROM reminder_settings WHERE username = ?', [username]);
+    const existing = await db.queryOne('SELECT * FROM reminder_settings WHERE username = ?', [username]);
 
     if (existing) {
       // 更新现有设置
-      await db.run(`
+      await db.execute(`
         UPDATE reminder_settings SET
           event_reminder_enabled = ?,
           todo_reminder_enabled = ?,
@@ -153,7 +146,7 @@ router.post('/import', async (req, res) => {
       log('INFO', '导入提醒设置（更新）', { username });
     } else {
       // 插入新设置
-      await db.run(`
+      await db.execute(`
         INSERT INTO reminder_settings (
           username, event_reminder_enabled, todo_reminder_enabled,
           reminder_advance_days, reminder_advance_hours, reminder_advance_minutes,

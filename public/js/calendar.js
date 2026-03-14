@@ -3118,19 +3118,64 @@ const CalendarApp = (function() {
       document.getElementById('subscription-form-modal').classList.remove('show');
     },
 
+    showSubscriptionStatus(message, isError = false) {
+      const container = document.getElementById('subscription-list');
+      if (!container) return;
+
+      let status = document.getElementById('subscription-status');
+      if (!status) {
+        status = document.createElement('div');
+        status.id = 'subscription-status';
+        status.style.cssText = 'margin-bottom:8px;padding:8px 10px;border-radius:6px;font-size:12px;';
+        container.parentNode.insertBefore(status, container);
+      }
+
+      status.textContent = message;
+      status.style.display = 'block';
+      status.style.background = isError ? 'rgba(220,38,38,0.12)' : 'rgba(37,99,235,0.12)';
+      status.style.color = isError ? '#dc2626' : 'var(--accent)';
+
+      clearTimeout(status._timer);
+      status._timer = setTimeout(() => {
+        status.style.display = 'none';
+      }, 2600);
+    },
+
+    async requestSubscription(url, options = {}, fallbackMessage = '操作失败') {
+      let response;
+      try {
+        response = await fetch(url, {
+          credentials: 'include',
+          ...options
+        });
+      } catch (error) {
+        throw new Error('网络连接失败，请稍后重试');
+      }
+
+      let data = null;
+      const text = await response.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          throw new Error(`${fallbackMessage}，服务器返回了无效响应`);
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || fallbackMessage);
+      }
+
+      return data;
+    },
+
     async loadSubscriptions() {
       try {
-        const response = await fetch('/api/calendar-subscriptions', {
-          credentials: 'include'
-        });
-
-        if (!response.ok) throw new Error('获取订阅失败');
-
-        const subscriptions = await response.json();
+        const subscriptions = await handlers.requestSubscription('/api/calendar-subscriptions', {}, '加载订阅失败');
         handlers.renderSubscriptions(subscriptions);
       } catch (error) {
         console.error('加载订阅失败:', error);
-        alert('加载订阅失败');
+        handlers.showSubscriptionStatus(error.message || '加载订阅失败', true);
       }
     },
 
@@ -3187,83 +3232,62 @@ const CalendarApp = (function() {
           : '/api/calendar-subscriptions';
         const method = subscriptionId ? 'PUT' : 'POST';
 
-        const response = await fetch(url, {
+        await handlers.requestSubscription(url, {
           method,
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify(data)
-        });
+        }, subscriptionId ? '更新订阅失败' : '创建订阅失败');
 
-        if (!response.ok) throw new Error('保存失败');
-
-        alert('保存成功');
         handlers.closeSubscriptionModals();
-        handlers.loadSubscriptions();
+        await handlers.loadSubscriptions();
+        handlers.showSubscriptionStatus(subscriptionId ? '订阅已更新' : '订阅已创建');
       } catch (error) {
         console.error('保存订阅失败:', error);
-        alert('保存失败');
+        handlers.showSubscriptionStatus(error.message || '保存失败', true);
       }
     },
 
     async syncSubscription(id) {
       try {
-        const response = await fetch(`/api/calendar-subscriptions/${id}/sync`, {
+        const result = await handlers.requestSubscription(`/api/calendar-subscriptions/${id}/sync`, {
           method: 'POST',
-          credentials: 'include'
-        });
-
-        if (!response.ok) throw new Error('同步失败');
-
-        const result = await response.json();
-        alert(`同步成功!共导入 ${result.imported} 个事件`);
+        }, '同步订阅失败');
+        handlers.showSubscriptionStatus(`同步成功，导入 ${result.imported} 个事件`);
 
         render.calendar();
         sidebarRenderer.refresh();
       } catch (error) {
         console.error('同步订阅失败:', error);
-        alert('同步失败');
+        handlers.showSubscriptionStatus(error.message || '同步失败', true);
       }
     },
 
     async editSubscription(id) {
       try {
-        const response = await fetch(`/api/calendar-subscriptions`, {
-          credentials: 'include'
-        });
-
-        if (!response.ok) throw new Error('获取订阅失败');
-
-        const subscriptions = await response.json();
-        const subscription = subscriptions.find(s => s.id === id);
-
-        if (subscription) {
-          handlers.openSubscriptionForm(subscription);
-        }
+        const subscription = await handlers.requestSubscription(`/api/calendar-subscriptions/${id}`, {}, '获取订阅失败');
+        handlers.openSubscriptionForm(subscription);
       } catch (error) {
         console.error('获取订阅失败:', error);
-        alert('获取订阅失败');
+        handlers.showSubscriptionStatus(error.message || '获取订阅失败', true);
       }
     },
 
     async deleteSubscription(id) {
-      if (!confirm('确定要删除这个订阅吗？这将同时删除该订阅的所有事件。')) return;
+      if (!(await handlers.showConfirm('确定要删除这个订阅吗？这将同时删除该订阅的所有事件。'))) return;
 
       try {
-        const response = await fetch(`/api/calendar-subscriptions/${id}`, {
+        await handlers.requestSubscription(`/api/calendar-subscriptions/${id}`, {
           method: 'DELETE',
-          credentials: 'include'
-        });
+        }, '删除订阅失败');
 
-        if (!response.ok) throw new Error('删除失败');
-
-        alert('删除成功');
-        handlers.loadSubscriptions();
+        await handlers.loadSubscriptions();
+        handlers.showSubscriptionStatus('订阅已删除');
 
         render.calendar();
         sidebarRenderer.refresh();
       } catch (error) {
         console.error('删除订阅失败:', error);
-        alert('删除失败');
+        handlers.showSubscriptionStatus(error.message || '删除失败', true);
       }
     }
   };

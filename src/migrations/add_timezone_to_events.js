@@ -8,9 +8,7 @@ module.exports = {
     migrate: async (db) => {
         console.log('开始迁移: 为事件表添加时区字段...');
 
-        // 检查 events 表是否存在 timezone 字段
-        const tableInfo = await db.all("PRAGMA table_info(events)");
-        const hasTimezone = tableInfo.some(col => col.name === 'timezone');
+        const hasTimezone = await db.schema.hasColumn('events', 'timezone');
 
         if (!hasTimezone) {
             // 如果不存在，则添加 timezone 字段

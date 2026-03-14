@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 const { isUsernameSafe } = require('../middleware/validateUser');
 const { safePath, isValidFilename } = require('../utils/path');
@@ -11,7 +11,6 @@ const router = express.Router();
 // 获取用户统计信息
 router.get('/api/user/stats', async (req, res) => {
   try {
-    const db = getConnection();
     const username = req.user;
     if (!username) return res.status(401).json({ error: "未登录" });
     
@@ -27,19 +26,19 @@ router.get('/api/user/stats', async (req, res) => {
     };
 
     // 1. 总计
-    stats.total.events = (await db.get('SELECT COUNT(*) as c FROM events WHERE username = ?', [username])).c;
-    stats.total.todos = (await db.get('SELECT COUNT(*) as c FROM todos WHERE username = ?', [username])).c;
-    stats.total.notes = (await db.get('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0', [username])).c;
+    stats.total.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ?', [username])).c;
+    stats.total.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ?', [username])).c;
+    stats.total.notes = (await db.queryOne('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0', [username])).c;
 
     // 2. 本年
-    stats.year.events = (await db.get('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfYear])).c;
-    stats.year.todos = (await db.get('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfYear, startOfYear])).c;
-    stats.year.notes = (await db.get('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfYear])).c;
+    stats.year.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfYear])).c;
+    stats.year.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfYear, startOfYear])).c;
+    stats.year.notes = (await db.queryOne('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfYear])).c;
 
     // 3. 本月
-    stats.month.events = (await db.get('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfMonth])).c;
-    stats.month.todos = (await db.get('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfMonth, startOfMonth])).c;
-    stats.month.notes = (await db.get('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfMonth])).c;
+    stats.month.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfMonth])).c;
+    stats.month.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfMonth, startOfMonth])).c;
+    stats.month.notes = (await db.queryOne('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfMonth])).c;
 
     res.json(stats);
   } catch (e) {
@@ -50,7 +49,7 @@ router.get('/api/user/stats', async (req, res) => {
 // 获取用户博客配置
 router.get('/api/user/blog-config/:username', async (req, res) => {
   try {
-    const user = await getConnection().get(
+    const user = await db.queryOne(
       'SELECT username, blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS FROM users WHERE username = ?', 
       [req.params.username]
     );
@@ -63,7 +62,7 @@ router.get('/api/user/blog-config/:username', async (req, res) => {
 router.post('/api/user/blog-config', async (req, res) => {
   try {
     const { blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS } = req.body;
-    await getConnection().run(
+    await db.execute(
       `UPDATE users SET blogTitle = ?, blogSubtitle = ?, blogTheme = ?, blogShowHeader = ?, blogShowFooter = ?, customCSS = ? WHERE username = ?`,
       [blogTitle || null, blogSubtitle || null, blogTheme || 'light', blogShowHeader ? 1 : 0, 
        blogShowFooter ? 1 : 0, customCSS || null, req.user]
@@ -77,7 +76,7 @@ router.post('/api/user/editor-type', async (req, res) => {
   try {
     const { editorType } = req.body;
     if (!['codemirror', 'textarea'].includes(editorType)) return res.status(400).json({ error: "无效的编辑器类型" });
-    await getConnection().run('UPDATE users SET editorType = ? WHERE username = ?', [editorType, req.user]);
+    await db.execute('UPDATE users SET editorType = ? WHERE username = ?', [editorType, req.user]);
     res.json({ status: "ok" });
   } catch (e) { console.error('Update editor type error:', e); res.status(500).json({ error: "更新失败" }); }
 });
@@ -90,7 +89,7 @@ router.get('/api/export', async (req, res) => {
       return res.status(400).json({ error: 'Invalid username' });
     }
     
-    const notes = await getConnection().all('SELECT * FROM notes WHERE username = ?', [req.user]);
+    const notes = await db.queryAll('SELECT * FROM notes WHERE username = ?', [req.user]);
     const userDir = path.join(process.cwd(), 'data', 'uploads', req.user);
     let attachments = [];
     try {
@@ -148,12 +147,14 @@ router.post('/api/import', async (req, res) => {
             updatedAt = Math.floor(Date.now() / 1000);
           }
 
-          await getConnection().run(
-            `INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, ?) 
-             ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, 
-             updatedAt=excluded.updatedAt, deleted=excluded.deleted`,
-            [note.id, req.user, note.title, note.content, updatedAt, note.deleted || 0]
-          );
+          await db.upsert('notes', {
+            id: note.id,
+            username: req.user,
+            title: note.title,
+            content: note.content,
+            updatedAt,
+            deleted: note.deleted || 0
+          }, ['title', 'content', 'updatedAt', 'deleted'], ['id']);
         }
       }
     }

@@ -7,10 +7,8 @@ module.exports = {
     migrate: async (db) => {
         console.log('开始迁移: 为用户表添加2FA字段...');
 
-        // 检查 users 表是否存在 tfa_secret 字段
-        const tableInfo = await db.all("PRAGMA table_info(users)");
-        const hasTfaSecret = tableInfo.some(col => col.name === 'tfa_secret');
-        const hasTfaEnabled = tableInfo.some(col => col.name === 'tfa_enabled');
+        const hasTfaSecret = await db.schema.hasColumn('users', 'tfa_secret');
+        const hasTfaEnabled = await db.schema.hasColumn('users', 'tfa_enabled');
 
         if (!hasTfaSecret) {
             await db.exec(`ALTER TABLE users ADD COLUMN tfa_secret TEXT`);

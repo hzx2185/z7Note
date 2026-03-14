@@ -245,7 +245,19 @@ const CodeMirrorAdapter = {
             saveTimeout = setTimeout(async () => {
                 try {
                     if (uiManager && uiManager.save) {
-                        await uiManager.save();
+                        const saved = await uiManager.save();
+                        if (saved === false) {
+                            if (uiManager && uiManager.updateStatus) {
+                                uiManager.updateStatus('error', '保存失败');
+                            }
+                            return;
+                        }
+                        if (saved === 'queued') {
+                            if (uiManager && uiManager.updateStatus) {
+                                uiManager.updateStatus('working', '保存中...');
+                            }
+                            return;
+                        }
                     }
                     if (uiManager && uiManager.updateStatus) {
                         uiManager.updateStatus('success', '已保存');
@@ -527,6 +539,17 @@ const EditorAdapterManager = {
     currentType: null,
     currentEditor: null,
 
+    destroyCurrentEditor() {
+        if (this.currentEditor && this.currentEditor.destroy) {
+            try {
+                this.currentEditor.destroy();
+            } catch (e) {
+                console.error('销毁编辑器失败:', e);
+            }
+        }
+        this.currentEditor = null;
+    },
+
     getEditorType() {
         let type = localStorage.getItem('editorType') || 'codemirror';
         if (!this.adapters[type]) {
@@ -546,13 +569,10 @@ const EditorAdapterManager = {
         const type = this.getEditorType();
         this.currentType = type;
 
-        if (this.currentEditor && this.currentEditor.destroy) {
-            try {
-                this.currentEditor.destroy();
-            } catch (e) {
-                console.error('销毁编辑器失败:', e);
-            }
-            this.currentEditor = null;
+        this.destroyCurrentEditor();
+
+        if (container) {
+            container.innerHTML = '';
         }
 
         const adapter = this.adapters[type];

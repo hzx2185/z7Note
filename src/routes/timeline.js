@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { auth } = require('../middleware/auth');
 const { toClientCalendarId } = require('../utils/calendarIds');
 
@@ -58,7 +58,7 @@ router.get('/', async (req, res) => {
         WHERE username = ? ${searchCondition} ${eventDateCondition}
         ORDER BY startTime DESC
       `;
-      events = await getConnection().all(eventQuery, [username, ...searchParams, ...dateParams]);
+      events = await db.queryAll(eventQuery, [username, ...searchParams, ...dateParams]);
     }
     
     // 查询待办
@@ -80,7 +80,7 @@ router.get('/', async (req, res) => {
         WHERE username = ? ${searchCondition} ${todoDateCondition}
         ORDER BY dueDate DESC
       `;
-      todos = await getConnection().all(todoQuery, [username, ...searchParams, ...dateParams]);
+      todos = await db.queryAll(todoQuery, [username, ...searchParams, ...dateParams]);
     }
     
     // 查询笔记
@@ -103,7 +103,7 @@ router.get('/', async (req, res) => {
         WHERE username = ? AND deleted = 0 ${searchCondition} ${noteDateCondition}
         ORDER BY updatedAt DESC
       `;
-      notes = await getConnection().all(noteQuery, [username, ...searchParams, ...noteDateParams]);
+      notes = await db.queryAll(noteQuery, [username, ...searchParams, ...noteDateParams]);
     }
     
     // 合并所有数据并按时间排序

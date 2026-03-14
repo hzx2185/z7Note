@@ -315,8 +315,8 @@ body,html { height: 100%; overflow: hidden; }
 .header > div:last-child { gap: 1px; }
 
 /* 主容器 */
-.container { display: flex; height: 100%; position: relative; overflow: hidden; width: 100vw; padding-top: 40px; }
-#sidebar { width:260px;background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;position:relative;z-index:100;transition: width 0.2s ease; overflow:hidden; will-change: width; }
+.container { display: flex; height: 100%; min-height: 0; position: relative; overflow: hidden; width: 100vw; padding-top: 40px; }
+#sidebar { width:260px;background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;position:relative;z-index:100;transition: width 0.2s ease; overflow:hidden; will-change: width; min-height: 0; }
 #sidebar.collapsed { width:0;border-right:none;overflow:hidden; }
 
 /* sidebar 折叠时，main 占据全部宽度 */
@@ -330,7 +330,7 @@ body,html { height: 100%; overflow: hidden; }
     .sidebar-footer, .sidebar-footer > div { flex-shrink: 0; position: relative; z-index: 2002; }
     .sidebar-footer .tool-btn { min-height: 36px !important; font-size: 12px !important; touch-action: manipulation; }
 }
-#main { flex:1;display:flex;flex-direction:column;overflow:hidden;position: relative; }
+#main { flex:1;display:flex;flex-direction:column;overflow:hidden;position: relative; min-height: 0; }
 .quick-tools { background: var(--side); padding: 3px 6px; border-bottom: 1px solid var(--border); display: flex; gap: 2px; align-items: center; flex-wrap: nowrap; overflow-x: auto; z-index: 2000; flex-shrink: 0; }
 .quick-tools::-webkit-scrollbar { height: 6px; }
 .quick-tools::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -369,9 +369,9 @@ body,html { height: 100%; overflow: hidden; }
         font-size: 13px;
     }
 }
-#main-view { flex:1;display:flex;overflow:hidden;position: relative; }
-#editor-container { flex:1;overflow:hidden;position: relative;min-width: 0; backface-visibility: hidden; transform: translateZ(0); }
-#preview-wrapper { flex:1;overflow:hidden;position: relative;background: var(--bg);min-width: 0; backface-visibility: hidden; transform: translateZ(0); }
+#main-view { flex:1;display:flex;overflow:hidden;position: relative; min-height: 0; }
+#editor-container { flex:1;overflow:hidden;position: relative;min-width: 0; min-height: 0; backface-visibility: hidden; transform: translateZ(0); }
+#preview-wrapper { flex:1;overflow:hidden;position: relative;background: var(--bg);min-width: 0; min-height: 0; backface-visibility: hidden; transform: translateZ(0); }
 #preview-frame { width: 100%;height: 100%;border: none; }
 .edit-only #preview-wrapper { display: none; }
 .preview-only #editor-container { display: none; }
@@ -413,6 +413,8 @@ html.dark-mode .cm-s-default .cm-header { color: var(--accent); }
 /* 移动端样式 */
 @media (max-width: 768px) {
     body, html { font-size: 14px; }
+    .modal-content { max-height: 100dvh; }
+    .modal-body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     #preview-wrapper { overflow-x: hidden; }
     #preview-frame { width: 100% !important; height: 100% !important; border: none !important; }
     .split #editor-container, .split #preview-wrapper { min-width: 100% !important; flex: 1 1 100% !important; }

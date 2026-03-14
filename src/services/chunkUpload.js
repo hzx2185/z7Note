@@ -1,9 +1,11 @@
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { genToken } = require('../utils/helpers');
 const path = require('path');
 const fs = require('fs').promises;
 const config = require('../config');
 const log = require('../utils/logger');
+const { getAllowedFileTypes } = require('./systemConfig');
+const { inferMimeTypeFromFilename, validateStoredFile } = require('../utils/uploadValidation');
 
 const CHUNKS_DIR = path.join(config.paths.data, 'upload_chunks');
 
@@ -19,9 +21,8 @@ async function initChunksDir() {
  */
 async function createUploadSession(username, filename, totalSize, chunkSize) {
   const uploadId = genToken(32);
-  const db = getConnection();
 
-  await db.run(
+  await db.execute(
     `INSERT INTO upload_chunks (id, username, filename, totalSize, chunkSize, uploadedChunks, createdAt, expiresAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -52,8 +53,7 @@ async function createUploadSession(username, filename, totalSize, chunkSize) {
  * 上传分片
  */
 async function uploadChunk(uploadId, username, chunkIndex, chunkData) {
-  const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+  const session = await db.queryOne('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
     throw new Error('上传会话不存在、已过期或无权访问');
@@ -75,7 +75,7 @@ async function uploadChunk(uploadId, username, chunkIndex, chunkData) {
     uploadedChunks.push(chunkIndex);
     uploadedChunks.sort((a, b) => a - b);
 
-    await db.run(
+    await db.execute(
       'UPDATE upload_chunks SET uploadedChunks = ? WHERE id = ? AND username = ?',
       [JSON.stringify(uploadedChunks), uploadId, username]
     );
@@ -92,8 +92,7 @@ async function uploadChunk(uploadId, username, chunkIndex, chunkData) {
  * 检查分片上传状态
  */
 async function getUploadStatus(uploadId, username) {
-  const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+  const session = await db.queryOne('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
     throw new Error('上传会话不存在、已过期或无权访问');
@@ -114,12 +113,15 @@ async function getUploadStatus(uploadId, username) {
   };
 }
 
+async function getUploadSession(uploadId, username) {
+  return db.queryOne('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+}
+
 /**
  * 合并所有分片
  */
 async function mergeChunks(uploadId, username) {
-  const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+  const session = await db.queryOne('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
     throw new Error('上传会话不存在');
@@ -150,6 +152,19 @@ async function mergeChunks(uploadId, username) {
 
   await writeStream.close();
 
+  const allowedTypes = await getAllowedFileTypes();
+  const fileTypeValidation = await validateStoredFile(finalPath, {
+    filename: session.filename,
+    mimeType: inferMimeTypeFromFilename(session.filename),
+    allowedTypes
+  });
+
+  if (!fileTypeValidation.ok) {
+    await fs.unlink(finalPath).catch(() => {});
+    await cleanupUploadSession(uploadId, username);
+    throw new Error(fileTypeValidation.error);
+  }
+
   // 清理临时文件
   await cleanupUploadSession(uploadId, username);
 
@@ -165,8 +180,7 @@ async function mergeChunks(uploadId, username) {
  * 取消上传并清理临时文件
  */
 async function cancelUpload(uploadId, username) {
-  const db = getConnection();
-  const session = await db.get('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+  const session = await db.queryOne('SELECT * FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
 
   if (!session) {
     throw new Error('上传会话不存在');
@@ -182,13 +196,11 @@ async function cancelUpload(uploadId, username) {
  * 清理上传会话
  */
 async function cleanupUploadSession(uploadId, username = null) {
-  const db = getConnection();
-
   // 删除数据库记录
   if (username) {
-    await db.run('DELETE FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
+    await db.execute('DELETE FROM upload_chunks WHERE id = ? AND username = ?', [uploadId, username]);
   } else {
-    await db.run('DELETE FROM upload_chunks WHERE id = ?', [uploadId]);
+    await db.execute('DELETE FROM upload_chunks WHERE id = ?', [uploadId]);
   }
 
   // 删除临时文件
@@ -204,10 +216,9 @@ async function cleanupUploadSession(uploadId, username = null) {
  * 清理过期的上传会话
  */
 async function cleanupExpiredSessions() {
-  const db = getConnection();
   const now = Date.now();
 
-  const expiredSessions = await db.all(
+  const expiredSessions = await db.queryAll(
     'SELECT id FROM upload_chunks WHERE expiresAt < ?',
     [now]
   );
@@ -224,8 +235,7 @@ async function cleanupExpiredSessions() {
  * 获取用户的上传会话列表
  */
 async function getUserUploadSessions(username) {
-  const db = getConnection();
-  const sessions = await db.all(
+  const sessions = await db.queryAll(
     'SELECT * FROM upload_chunks WHERE username = ? ORDER BY createdAt DESC',
     [username]
   );
@@ -253,6 +263,7 @@ module.exports = {
   initChunksDir,
   createUploadSession,
   uploadChunk,
+  getUploadSession,
   getUploadStatus,
   mergeChunks,
   cancelUpload,

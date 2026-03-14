@@ -1,18 +1,63 @@
 const express = require('express');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 const { importFromICS } = require('../utils/icsExport');
 const { toClientCalendarId } = require('../utils/calendarIds');
-const { execFileSync } = require('child_process');
-
 const router = express.Router();
+
+function createFetchOptions(timeoutMs = 30000) {
+  return {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/calendar, text/plain, */*'
+    },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(timeoutMs)
+  };
+}
+
+async function fetchIcsContent(fetchUrl) {
+  const attempts = [
+    { timeoutMs: 30000 },
+    { timeoutMs: 45000, headers: { 'Cache-Control': 'no-cache' } }
+  ];
+  const errors = [];
+
+  for (const attempt of attempts) {
+    try {
+      const baseOptions = createFetchOptions(attempt.timeoutMs);
+      const response = await fetch(fetchUrl, {
+        ...baseOptions,
+        headers: {
+          ...baseOptions.headers,
+          ...(attempt.headers || {})
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`获取ICS失败: ${response.status}`);
+      }
+
+      const icsContent = await response.text();
+      if (!icsContent || !icsContent.includes('BEGIN:VCALENDAR')) {
+        throw new Error('返回内容不是有效的日历数据');
+      }
+
+      return icsContent;
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  throw new Error(`获取订阅内容失败: ${errors.join(' | ')}`);
+}
 
 /**
  * 获取用户的所有订阅
  */
 router.get('/', async (req, res) => {
   try {
-    const subscriptions = await getConnection().all(
+    const subscriptions = await db.queryAll(
       'SELECT * FROM calendar_subscriptions WHERE username = ? ORDER BY createdAt DESC',
       [req.user]
     );
@@ -20,6 +65,24 @@ router.get('/', async (req, res) => {
   } catch (e) {
     log('ERROR', '获取订阅失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '获取失败' });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const subscription = await db.queryOne(
+      'SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?',
+      [req.params.id, req.user]
+    );
+
+    if (!subscription) {
+      return res.status(404).json({ error: '订阅不存在' });
+    }
+
+    res.json(subscription);
+  } catch (e) {
+    log('ERROR', '获取订阅详情失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
+    res.status(500).json({ error: '获取订阅失败' });
   }
 });
 
@@ -46,7 +109,7 @@ router.post('/', async (req, res) => {
     }
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-    await getConnection().run(
+    await db.execute(
       `INSERT INTO calendar_subscriptions (id, username, name, url, color, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -62,7 +125,7 @@ router.post('/', async (req, res) => {
 
     log('INFO', '添加订阅', { username: req.user, subscriptionId: id, name: name.trim() });
     
-    const subscription = await getConnection().get('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [id, req.user]);
+    const subscription = await db.queryOne('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [id, req.user]);
     res.json(subscription);
   } catch (e) {
     log('ERROR', '添加订阅失败', { username: req.user, error: e.message });
@@ -77,7 +140,7 @@ router.put('/:id', async (req, res) => {
   try {
     const { name, url, color, enabled } = req.body;
 
-    const existing = await getConnection().get(
+    const existing = await db.queryOne(
       'SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );
@@ -86,7 +149,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: '订阅不存在' });
     }
 
-    await getConnection().run(
+    await db.execute(
       `UPDATE calendar_subscriptions SET
        name = COALESCE(?, name),
        url = COALESCE(?, url),
@@ -107,7 +170,7 @@ router.put('/:id', async (req, res) => {
 
     log('INFO', '更新订阅', { username: req.user, subscriptionId: req.params.id });
     
-    const subscription = await getConnection().get('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [req.params.id, req.user]);
+    const subscription = await db.queryOne('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [req.params.id, req.user]);
     res.json(subscription);
   } catch (e) {
     log('ERROR', '更新订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
@@ -120,54 +183,44 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
-
-    // 1. 获取该订阅的所有事件ID，以便记录删除供同步使用
-    const events = await db.all(
+    const events = await db.queryAll(
       'SELECT id FROM events WHERE subscriptionId = ? AND username = ?',
       [req.params.id, req.user]
     );
-
-    await db.run('BEGIN TRANSACTION');
-    try {
-      // 2. 删除订阅
-      const result = await db.run(
+    const result = await db.withTransaction(async (tx) => {
+      const deleteResult = await tx.execute(
         'DELETE FROM calendar_subscriptions WHERE id = ? AND username = ?',
         [req.params.id, req.user]
       );
 
-      if (result.changes === 0) {
-        await db.run('ROLLBACK');
-        return res.status(404).json({ error: '订阅不存在' });
+      if (deleteResult.changes === 0) {
+        return deleteResult;
       }
 
-      // 3. 记录删除历史记录供 CalDAV 同步 (Tombstones)
       for (const event of events) {
-        await db.run(
+        await tx.execute(
           'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
           [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, event.id), 'event', now]
         );
       }
 
-      // 4. 删除该订阅的所有事件
-      await db.run(
+      await tx.execute(
         'DELETE FROM events WHERE subscriptionId = ? AND username = ?',
         [req.params.id, req.user]
       );
+      return deleteResult;
+    });
 
-      await db.run('COMMIT');
-
-      // 5. 广播通知客户端
-      const { broadcast } = require('./ws');
-      broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
-
-      log('INFO', '删除订阅及其事件', { username: req.user, subscriptionId: req.params.id, eventCount: events.length });
-      res.json({ status: 'ok' });
-    } catch (err) {
-      await db.run('ROLLBACK');
-      throw err;
+    if (result.changes === 0) {
+      return res.status(404).json({ error: '订阅不存在' });
     }
+
+    const { broadcast } = require('./ws');
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+
+    log('INFO', '删除订阅及其事件', { username: req.user, subscriptionId: req.params.id, eventCount: events.length });
+    res.json({ status: 'ok' });
   } catch (e) {
     log('ERROR', '删除订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
     res.status(500).json({ error: '删除失败' });
@@ -178,7 +231,7 @@ router.delete('/:id', async (req, res) => {
  * 核心同步逻辑 (导出供定时任务使用)
  */
 async function syncSubscription(subscriptionId, username) {
-  const subscription = await getConnection().get(
+  const subscription = await db.queryOne(
     'SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?',
     [subscriptionId, username]
   );
@@ -209,50 +262,15 @@ async function syncSubscription(subscriptionId, username) {
   log('INFO', '开始同步订阅内容', { url: fetchUrl, subscriptionId });
 
   // 获取ICS内容
-  let icsContent;
-  try {
-    const response = await fetch(fetchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/calendar, text/plain, */*',
-        'Connection': 'keep-alive'
-      },
-      redirect: 'follow',
-      timeout: 30000
-    });
-
-    if (!response.ok) {
-      throw new Error(`获取ICS失败: ${response.status}`);
-    }
-    icsContent = await response.text();
-  } catch (fetchErr) {
-    log('WARN', 'Fetch同步失败，尝试备用方案(curl)', { error: fetchErr.message });
-    try {
-      icsContent = execFileSync(
-        'curl',
-        ['-L', '-sS', '-A', 'Mozilla/5.0', fetchUrl],
-        { encoding: 'utf8', timeout: 30000, maxBuffer: 10 * 1024 * 1024 }
-      );
-      if (!icsContent || !icsContent.includes('BEGIN:VCALENDAR')) {
-        throw new Error('curl 返回内容无效');
-      }
-    } catch (curlErr) {
-      throw new Error(`所有同步方案均失败: ${fetchErr.message} | ${curlErr.message}`);
-    }
-  }
+  const icsContent = await fetchIcsContent(fetchUrl);
 
   const events = importFromICS(icsContent);
-  const db = getConnection();
-  await db.run('BEGIN TRANSACTION');
-
-  try {
-    // 1. 删除该订阅的所有旧事件
-    await db.run(
+  return db.withTransaction(async (tx) => {
+    await tx.execute(
       'DELETE FROM events WHERE subscriptionId = ? AND username = ?',
       [subscriptionId, username]
     );
 
-    // 2. 批量插入新事件
     let importedCount = 0;
     const now = Math.floor(Date.now() / 1000);
     
@@ -260,7 +278,7 @@ async function syncSubscription(subscriptionId, username) {
       const eventUid = event.uid || `idx_${importedCount}`;
       const id = `sub_${subscriptionId}_${eventUid}`;
       
-      await db.run(
+      await tx.execute(
         `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, subscriptionId, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -280,18 +298,12 @@ async function syncSubscription(subscriptionId, username) {
       importedCount++;
     }
 
-    // 3. 更新最后同步时间
-    await db.run(
+    await tx.execute(
       'UPDATE calendar_subscriptions SET lastSync = ?, updatedAt = ? WHERE id = ? AND username = ?',
       [now, now, subscriptionId, username]
     );
-
-    await db.run('COMMIT');
     return importedCount;
-  } catch (err) {
-    await db.run('ROLLBACK');
-    throw err;
-  }
+  });
 }
 
 /**

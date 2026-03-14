@@ -181,6 +181,46 @@ function createFileBasedUploadLimitMiddleware() {
 }
 
 /**
+ * 分片上传限流中间件工厂
+ * 按 uploadId 单独计数，避免单个大文件的连续分片请求被普通上传频率误伤。
+ */
+function createChunkUploadLimitMiddleware(loadSession) {
+  return async function (req, res, next) {
+    const ip = req.ip || req.connection.remoteAddress;
+    const uploadId = req.headers['uploadid'] || req.headers['uploadId'];
+
+    if (!uploadId) {
+      return next();
+    }
+
+    let maxRequests = 120;
+
+    try {
+      const session = await loadSession(uploadId, req.user);
+      if (session?.totalSize && session?.chunkSize) {
+        const totalChunks = Math.max(1, Math.ceil(session.totalSize / session.chunkSize));
+        maxRequests = Math.max(120, totalChunks + 10);
+      }
+    } catch (error) {
+      // 会话不存在等情况交给后续路由处理，这里回退到保守但可用的默认值
+    }
+
+    const limiterKey = `${ip}:chunk:${uploadId}`;
+    const limiter = getLimiter(limiterKey, maxRequests);
+    limiter.updateLimit(maxRequests);
+
+    if (!limiter.isAllowed(limiterKey)) {
+      return res.status(429).json({
+        error: `分片上传过于频繁，请稍后再试（当前上传最多 ${maxRequests} 次/分钟）`
+      });
+    }
+
+    res.setHeader('X-RateLimit-Limit', maxRequests);
+    next();
+  };
+}
+
+/**
  * 清理所有限流器
  */
 function cleanupAllLimiters() {
@@ -194,5 +234,6 @@ module.exports = {
   getUploadLimit,
   dynamicUploadRateLimit,
   createFileBasedUploadLimitMiddleware,
+  createChunkUploadLimitMiddleware,
   cleanupAllLimiters
 };

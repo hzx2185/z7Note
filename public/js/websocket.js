@@ -24,16 +24,9 @@ class WebSocketManager {
 
     this.connectPromise = new Promise((resolve, reject) => {
       try {
-        // 获取用户名（从localStorage中，因为cookie是httpOnly的）
-        const username = this.getUsername();
-        if (!username) {
-          reject(new Error('未找到用户信息'));
-          return;
-        }
-
         // 构建WebSocket URL
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${location.host}/ws?token=${username}`;
+        const wsUrl = `${protocol}//${location.host}/ws`;
 
         this.ws = new WebSocket(wsUrl);
 
@@ -79,22 +72,6 @@ class WebSocketManager {
     });
 
     return this.connectPromise;
-  }
-
-  // 从localStorage获取用户名
-  getUsername() {
-    const username = localStorage.getItem('z7note_username');
-    return username;
-  }
-
-  // 设置用户名（登录时调用）
-  setUsername(username) {
-    localStorage.setItem('z7note_username', username);
-  }
-
-  // 清除用户名（登出时调用）
-  clearUsername() {
-    localStorage.removeItem('z7note_username');
   }
 
   // 处理消息

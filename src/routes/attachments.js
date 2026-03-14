@@ -2,16 +2,21 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { getUserFileSize, formatSize } = require('../utils/helpers');
 const config = require('../config');
 const { uploadRateLimit } = require('../middleware/rateLimit');
-const { dynamicUploadRateLimit, createFileBasedUploadLimitMiddleware } = require('../utils/dynamicRateLimiter');
+const { dynamicUploadRateLimit, createFileBasedUploadLimitMiddleware, createChunkUploadLimitMiddleware } = require('../utils/dynamicRateLimiter');
 const { getSystemConfig, getAllowedFileTypes, getMaxFileSize } = require('../services/systemConfig');
 const { compressImage } = require('../services/imageCompression');
 const chunkUploadService = require('../services/chunkUpload');
 const log = require('../utils/logger');
 const { isUsernameSafe } = require('../middleware/validateUser');
+const {
+  inferMimeTypeFromFilename,
+  validateRequestedFileType,
+  validateStoredFile
+} = require('../utils/uploadValidation');
 
 const router = express.Router();
 
@@ -19,15 +24,22 @@ const router = express.Router();
 async function fileFilter(req, file, cb) {
   try {
     const allowedTypes = await getAllowedFileTypes();
-    if (allowedTypes.includes(file.mimetype)) {
+    const validation = validateRequestedFileType({
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      allowedTypes
+    });
+
+    if (validation.ok) {
+      req.validatedUploadMimeType = validation.mimeType;
       cb(null, true);
     } else {
-      console.log('[上传] 文件类型不被支持:', file.mimetype, file.originalname);
-      cb(new Error(`不支持的文件类型: ${file.mimetype}，请检查文件格式或联系管理员添加支持`), false);
+      console.log('[上传] 文件类型不被支持:', file.mimetype, file.originalname, validation.error);
+      cb(new Error(`${validation.error}，请检查文件格式或联系管理员添加支持`), false);
     }
   } catch (error) {
     console.error('文件类型验证失败:', error);
-    cb(null, true); // 验证失败时允许上传（兼容性）
+    cb(new Error('文件类型验证失败，请稍后重试'), false);
   }
 }
 
@@ -108,7 +120,7 @@ router.post('/api/upload', createFileBasedUploadLimitMiddleware(), upload.single
   }
 
   try {
-    const user = await getConnection().get('SELECT fileLimit FROM users WHERE username = ?', [req.user]);
+    const user = await db.queryOne('SELECT fileLimit FROM users WHERE username = ?', [req.user]);
     const limitMB = parseFloat(user?.fileLimit || 0);
     if (limitMB <= 0) {
       await fs.unlink(req.file.path).catch(()=>{});
@@ -128,12 +140,25 @@ router.post('/api/upload', createFileBasedUploadLimitMiddleware(), upload.single
       return res.status(400).json({ error: `单个文件大小不能超过${maxFileSize / 1024 / 1024}MB` });
     }
 
+    const allowedTypes = await getAllowedFileTypes();
+    const fileTypeValidation = await validateStoredFile(req.file.path, {
+      filename: req.file.originalname,
+      mimeType: req.validatedUploadMimeType || req.file.mimetype,
+      allowedTypes
+    });
+
+    if (!fileTypeValidation.ok) {
+      await fs.unlink(req.file.path).catch(()=>{});
+      return res.status(400).json({ error: fileTypeValidation.error });
+    }
+
     // 图片压缩
     let compressionResult = null;
-    const isImage = req.file.mimetype.startsWith('image/');
+    const mimeType = fileTypeValidation.mimeType;
+    const isImage = mimeType.startsWith('image/');
     if (isImage && !req.file.originalname.endsWith('.svg')) {
       const imageBuffer = await fs.readFile(req.file.path);
-      compressionResult = await compressImage(imageBuffer, req.file.mimetype);
+      compressionResult = await compressImage(imageBuffer, mimeType);
 
       if (compressionResult.compressed) {
         await fs.writeFile(req.file.path, compressionResult.buffer);
@@ -230,7 +255,7 @@ router.put('/api/attachments/:filename(*)', async (req, res) => {
 // 检测无效附件
 router.get('/api/attachments/check-invalid', async (req, res) => {
   try {
-    const notes = await getConnection().all('SELECT id, content FROM notes WHERE username = ?', [req.user]);
+    const notes = await db.queryAll('SELECT id, content FROM notes WHERE username = ?', [req.user]);
     let count = 0;
     for (const note of notes) {
       if (note.content && note.content.includes('/api/uploads/')) {
@@ -248,13 +273,13 @@ router.post('/api/attachments/fix-paths', async (req, res) => {
     if (!findText) return res.status(400).json({ error: "请输入要查找的文本" });
     if (!replaceText) return res.status(400).json({ error: "请输入要替换的文本" });
 
-    const notes = await getConnection().all('SELECT id, content FROM notes WHERE username = ?', [req.user]);
+    const notes = await db.queryAll('SELECT id, content FROM notes WHERE username = ?', [req.user]);
     let count = 0;
     for (const note of notes) {
       if (note.content && note.content.includes(findText)) {
         const newContent = note.content.split(findText).join(replaceText);
         if (newContent !== note.content) {
-          await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          await db.execute('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?',
             [newContent, Math.floor(Date.now() / 1000), note.id, req.user]);
           count++;
         }
@@ -275,7 +300,7 @@ router.post('/api/purge-attachments', async (req, res) => {
     try { await fs.access(userDirPath); } catch (e) { return res.json({ status: "ok", deletedCount: 0 }); }
 
     const files = await fs.readdir(userDirPath);
-    const notes = await getConnection().all('SELECT content FROM notes WHERE username = ?', [req.user]);
+    const notes = await db.queryAll('SELECT content FROM notes WHERE username = ?', [req.user]);
     const allContent = notes.map(n => n.content || "").join(' ');
 
     for (const file of files) {
@@ -298,7 +323,7 @@ router.post('/api/purge-attachments', async (req, res) => {
 // 创建分片上传会话
 router.post('/api/upload/create-session', async (req, res) => {
   try {
-    const { filename, totalSize } = req.body;
+    const { filename, totalSize, mimeType } = req.body;
 
     if (!filename || !totalSize) {
       return res.status(400).json({ error: '缺少必要参数' });
@@ -310,6 +335,17 @@ router.post('/api/upload/create-session', async (req, res) => {
       return res.status(400).json({
         error: `文件大小超出限制 (最大: ${maxFileSize / 1024 / 1024}MB)`
       });
+    }
+
+    const allowedTypes = await getAllowedFileTypes();
+    const fileTypeValidation = validateRequestedFileType({
+      filename,
+      mimeType: mimeType || inferMimeTypeFromFilename(filename),
+      allowedTypes
+    });
+
+    if (!fileTypeValidation.ok) {
+      return res.status(400).json({ error: fileTypeValidation.error });
     }
 
     // 获取分片大小配置
@@ -331,7 +367,7 @@ router.post('/api/upload/create-session', async (req, res) => {
 });
 
 // 上传分片 - 使用原始请求体
-router.post('/api/upload/chunk', createFileBasedUploadLimitMiddleware(), async (req, res) => {
+router.post('/api/upload/chunk', createChunkUploadLimitMiddleware((uploadId, username) => chunkUploadService.getUploadSession(uploadId, username)), async (req, res) => {
   try {
     // Express 会将请求头转换为小写
     const uploadId = req.headers['uploadid'] || req.headers['uploadId'];

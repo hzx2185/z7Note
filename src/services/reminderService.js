@@ -3,7 +3,7 @@
  * 处理邮件提醒、浏览器通知和日历应用同步提醒
  */
 
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { sendMail } = require('./mailer');
 const { broadcast } = require('../routes/ws');
 const log = require('../utils/logger');
@@ -15,8 +15,7 @@ let isChecking = false;
  */
 async function getUserReminderSettings(username) {
   try {
-    const db = getConnection();
-    let settings = await db.get(
+    let settings = await db.queryOne(
       'SELECT * FROM reminder_settings WHERE username = ?',
       [username]
     );
@@ -24,11 +23,11 @@ async function getUserReminderSettings(username) {
     // 如果没有设置，创建默认设置
     if (!settings) {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-      await db.run(
+      await db.execute(
         `INSERT INTO reminder_settings (id, username) VALUES (?, ?)`,
         [id, username]
       );
-      settings = await db.get(
+      settings = await db.queryOne(
         'SELECT * FROM reminder_settings WHERE username = ?',
         [username]
       );
@@ -46,13 +45,12 @@ async function getUserReminderSettings(username) {
  */
 async function updateUserReminderSettings(username, settings) {
   try {
-    const db = getConnection();
     const existing = await getUserReminderSettings(username);
 
     if (!existing) {
       // 创建新设置
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-      await db.run(
+      await db.execute(
         `INSERT INTO reminder_settings (
           id, username, event_reminder_enabled, todo_reminder_enabled,
           reminder_advance_days, reminder_advance_hours, reminder_advance_minutes,
@@ -80,7 +78,7 @@ async function updateUserReminderSettings(username, settings) {
       );
     } else {
       // 更新现有设置
-      await db.run(
+      await db.execute(
         `UPDATE reminder_settings SET
          event_reminder_enabled = COALESCE(?, event_reminder_enabled),
          todo_reminder_enabled = COALESCE(?, todo_reminder_enabled),
@@ -167,8 +165,7 @@ function isQuietTime(settings) {
  */
 async function sendEmailReminder(username, type, item, settings) {
   try {
-    const db = getConnection();
-    const user = await db.get(
+    const user = await db.queryOne(
       'SELECT email FROM users WHERE username = ?',
       [username]
     );
@@ -296,9 +293,8 @@ async function sendCaldavReminder(username, type, item, settings) {
  */
 async function recordReminderHistory(username, type, targetId, method, status, errorMessage = null) {
   try {
-    const db = getConnection();
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-    await db.run(
+    await db.execute(
       `INSERT INTO reminder_history (id, username, type, target_id, reminder_time, method, status, error_message, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -361,13 +357,10 @@ async function checkAndSendPendingReminders() {
   isChecking = true;
 
   try {
-    const db = getConnection();
-    if (!db) return;
-    
     const now = Math.floor(Date.now() / 1000);
 
     // 获取所有启用了提醒的用户设置
-    const usersSettings = await db.all(
+    const usersSettings = await db.queryAll(
       'SELECT * FROM reminder_settings WHERE event_reminder_enabled = 1 OR todo_reminder_enabled = 1'
     );
 
@@ -379,7 +372,7 @@ async function checkAndSendPendingReminders() {
 
       // 检查事件提醒
       if (settings.event_reminder_enabled) {
-        const events = await db.all(
+        const events = await db.queryAll(
           `SELECT * FROM events
            WHERE username = ?
            AND startTime > ?
@@ -402,7 +395,7 @@ async function checkAndSendPendingReminders() {
 
       // 检查待办提醒
       if (settings.todo_reminder_enabled) {
-        const todos = await db.all(
+        const todos = await db.queryAll(
           `SELECT * FROM todos
            WHERE username = ?
            AND dueDate > ?

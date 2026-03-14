@@ -3,7 +3,7 @@
  * 用于 CalDAV 的基本认证
  */
 
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 
 /**
@@ -34,7 +34,7 @@ async function verifyBasicAuth(authHeader) {
       return null;
     }
 
-    const user = await getConnection().get(
+    const user = await db.queryOne(
       `SELECT * FROM users WHERE username = ?`,
       [username]
     );

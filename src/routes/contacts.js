@@ -3,7 +3,7 @@
  */
 
 const express = require('express');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 const VCardGenerator = require('../utils/vCardGenerator');
 const VCardParser = require('../utils/vCardParser');
@@ -38,10 +38,9 @@ const fieldNames = {
 // 记录联系人历史
 async function recordContactHistory(username, contactId, action, field, oldValue, newValue) {
   try {
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
 
-    await db.run(
+    await db.execute(
       `INSERT INTO contact_history (contact_id, username, action, field, old_value, new_value, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [contactId, username, action, field, oldValue, newValue, now]
@@ -109,7 +108,7 @@ router.get('/', async (req, res) => {
 
     // 获取总数
     const countQuery = query.replace(/^SELECT id, fn, n_family, n_given, org, tel, email, createdAt FROM/, 'SELECT COUNT(*) as total FROM');
-    const countResult = await getConnection().get(countQuery, params);
+    const countResult = await db.queryOne(countQuery, params);
     const total = countResult.total;
 
     // 添加排序和分页
@@ -117,7 +116,7 @@ router.get('/', async (req, res) => {
     query += ' LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
-    const contacts = await getConnection().all(query, params);
+    const contacts = await db.queryAll(query, params);
     res.json({ contacts, total, limit: parseInt(limit), offset: parseInt(offset) });
   } catch (e) {
     log('ERROR', '获取联系人失败', { username: req.user, error: e.message });
@@ -129,7 +128,7 @@ router.get('/', async (req, res) => {
 router.get('/duplicates', async (req, res) => {
   try {
     // 优化查询:直接获取重复联系人的详细信息
-    const duplicates = await getConnection().all(`
+    const duplicates = await db.queryAll(`
       SELECT 
         fn,
         COUNT(*) as count,
@@ -150,7 +149,7 @@ router.get('/duplicates', async (req, res) => {
       
       for (const dup of batch) {
         const ids = dup.ids.split(',');
-        const contacts = await getConnection().all(
+        const contacts = await db.queryAll(
           `SELECT id, fn, tel, email, org, note FROM contacts WHERE id IN (${ids.map(() => '?').join(',')}) AND username = ?`,
           [...ids, req.user]
         );
@@ -180,7 +179,6 @@ router.get('/duplicates', async (req, res) => {
 // 智能查重 - 检测电话、邮箱、姓名重复
 router.get('/smart-duplicates', async (req, res) => {
   try {
-    const db = getConnection();
     const duplicates = {
       byName: [],      // 姓名重复
       byPhone: [],     // 电话重复
@@ -188,7 +186,7 @@ router.get('/smart-duplicates', async (req, res) => {
     };
 
     // 1. 检测姓名重复
-    const nameDuplicates = await db.all(`
+    const nameDuplicates = await db.queryAll(`
       SELECT fn, COUNT(*) as count, GROUP_CONCAT(id) as ids
       FROM contacts
       WHERE username = ? AND fn IS NOT NULL AND fn != ''
@@ -200,7 +198,7 @@ router.get('/smart-duplicates', async (req, res) => {
 
     for (const dup of nameDuplicates) {
       const ids = dup.ids.split(',');
-      const contacts = await db.all(
+      const contacts = await db.queryAll(
         `SELECT id, fn, tel, email, org FROM contacts WHERE id IN (${ids.map(() => '?').join(',')}) AND username = ?`,
         [...ids, req.user]
       );
@@ -220,7 +218,7 @@ router.get('/smart-duplicates', async (req, res) => {
     }
 
     // 2. 检测电话重复
-    const allContacts = await db.all(
+    const allContacts = await db.queryAll(
       'SELECT id, fn, tel, email, org FROM contacts WHERE username = ? AND tel IS NOT NULL',
       [req.user]
     );
@@ -261,7 +259,7 @@ router.get('/smart-duplicates', async (req, res) => {
     }
 
     // 3. 检测邮箱重复
-    const emailContacts = await db.all(
+    const emailContacts = await db.queryAll(
       'SELECT id, fn, tel, email, org FROM contacts WHERE username = ? AND email IS NOT NULL',
       [req.user]
     );
@@ -343,7 +341,7 @@ router.post('/', async (req, res) => {
     const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel: normalizedTel, email, adr, org, title, url, photo, note, bday, nickname, uid };
     const vcard = VCardGenerator.contactToVCard(contactData);
 
-    await getConnection().run(
+    await db.execute(
       `INSERT INTO contacts (
         id, username, uid, fn, n_family, n_given, n_middle, n_prefix, n_suffix,
         tel, email, adr, org, title, url, photo, note, bday, nickname, vcard,
@@ -389,7 +387,7 @@ router.put('/:id', async (req, res) => {
       }));
     }
 
-    const existing = await getConnection().get(
+    const existing = await db.queryOne(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );
@@ -403,7 +401,7 @@ router.put('/:id', async (req, res) => {
     const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel: normalizedTel, email, adr, org, title, url, photo, note, bday, nickname };
     const vcard = VCardGenerator.contactToVCard(contactData);
 
-    await getConnection().run(
+    await db.execute(
       `UPDATE contacts SET
         fn = ?, n_family = ?, n_given = ?, n_middle = ?, n_prefix = ?, n_suffix = ?,
         tel = ?, email = ?, adr = ?, org = ?, title = ?, url = ?, photo = ?, note = ?,
@@ -441,7 +439,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     // 先获取联系人信息用于记录历史
-    const contact = await getConnection().get(
+    const contact = await db.queryOne(
       'SELECT fn FROM contacts WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );
@@ -450,7 +448,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: '联系人不存在' });
     }
 
-    const result = await getConnection().run(
+    const result = await db.execute(
       'DELETE FROM contacts WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );
@@ -480,7 +478,7 @@ router.delete('/batch', async (req, res) => {
     }
 
     const placeholders = ids.map(() => '?').join(',');
-    const result = await getConnection().run(
+    const result = await db.execute(
       `DELETE FROM contacts WHERE id IN (${placeholders}) AND username = ?`,
       [...ids, req.user]
     );
@@ -502,11 +500,10 @@ router.post('/merge', async (req, res) => {
       return res.status(400).json({ error: '参数错误' });
     }
 
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
 
     // 获取要保留的联系人
-    const keepContact = await db.get(
+    const keepContact = await db.queryOne(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
       [keepId, req.user]
     );
@@ -516,7 +513,7 @@ router.post('/merge', async (req, res) => {
     }
 
     // 获取要合并的联系人
-    const mergeContacts = await db.all(
+    const mergeContacts = await db.queryAll(
       `SELECT * FROM contacts WHERE id IN (${mergeIds.map(() => '?').join(',')}) AND username = ?`,
       [...mergeIds, req.user]
     );
@@ -568,7 +565,7 @@ router.post('/merge', async (req, res) => {
     }
 
     // 更新保留的联系人
-    await db.run(
+    await db.execute(
       `UPDATE contacts SET
         tel = ?, email = ?, note = ?, updatedAt = ?
       WHERE id = ? AND username = ?`,
@@ -584,7 +581,7 @@ router.post('/merge', async (req, res) => {
 
     // 删除要合并的联系人
     const placeholders = mergeIds.map(() => '?').join(',');
-    const deleteResult = await db.run(
+    const deleteResult = await db.execute(
       `DELETE FROM contacts WHERE id IN (${placeholders}) AND username = ?`,
       [...mergeIds, req.user]
     );
@@ -618,105 +615,93 @@ router.post('/merge-batch', async (req, res) => {
       return res.status(400).json({ error: '参数错误' });
     }
 
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
     let totalMerged = 0;
     let totalTels = 0;
     let totalEmails = 0;
 
-    await db.run('BEGIN TRANSACTION');
+    await db.withTransaction(async (tx) => {
+      for (const item of mergeList) {
+        const { keepId, mergeIds } = item;
 
-    for (const item of mergeList) {
-      const { keepId, mergeIds } = item;
+        if (!keepId || !mergeIds || mergeIds.length === 0) continue;
 
-      if (!keepId || !mergeIds || mergeIds.length === 0) continue;
+        const keepContact = await tx.queryOne(
+          'SELECT * FROM contacts WHERE id = ? AND username = ?',
+          [keepId, req.user]
+        );
 
-      // 获取要保留的联系人
-      const keepContact = await db.get(
-        'SELECT * FROM contacts WHERE id = ? AND username = ?',
-        [keepId, req.user]
-      );
+        if (!keepContact) continue;
 
-      if (!keepContact) continue;
+        const mergeContacts = await tx.queryAll(
+          `SELECT * FROM contacts WHERE id IN (${mergeIds.map(() => '?').join(',')}) AND username = ?`,
+          [...mergeIds, req.user]
+        );
 
-      // 获取要合并的联系人
-      const mergeContacts = await db.all(
-        `SELECT * FROM contacts WHERE id IN (${mergeIds.map(() => '?').join(',')}) AND username = ?`,
-        [...mergeIds, req.user]
-      );
+        let tels = [];
+        try { tels = JSON.parse(keepContact.tel || '[]'); } catch(e) {}
 
-      // 合并电话号码
-      let tels = [];
-      try { tels = JSON.parse(keepContact.tel || '[]'); } catch(e) {}
-
-      for (const contact of mergeContacts) {
-        try {
-          const contactTels = JSON.parse(contact.tel || '[]');
-          contactTels.forEach(t => {
-            // 规范化要合并的电话号码
-            const normalizedVal = typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value;
-            if (!tels.find(existing => (typeof existing.value === 'string' ? existing.value.replace(/[^\d+]/g, '') : existing.value) === normalizedVal)) {
-              tels.push({ ...t, value: normalizedVal });
-            }
-          });
-        } catch(e) {}
-      }
-
-      // 再次规范化所有的电话
-      tels = tels.map(t => ({
-        ...t,
-        value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
-      }));
-
-      // 合并邮箱
-      let emails = [];
-      try { emails = JSON.parse(keepContact.email || '[]'); } catch(e) {}
-
-      for (const contact of mergeContacts) {
-        try {
-          const contactEmails = JSON.parse(contact.email || '[]');
-          contactEmails.forEach(e => {
-            if (!emails.find(existing => existing.value === e.value)) {
-              emails.push(e);
-            }
-          });
-        } catch(e) {}
-      }
-
-      // 合并备注
-      let notes = keepContact.note || '';
-      for (const contact of mergeContacts) {
-        if (contact.note && contact.note !== notes) {
-          notes += (notes ? '\n\n---\n\n' : '') + contact.note;
+        for (const contact of mergeContacts) {
+          try {
+            const contactTels = JSON.parse(contact.tel || '[]');
+            contactTels.forEach(t => {
+              const normalizedVal = typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value;
+              if (!tels.find(existing => (typeof existing.value === 'string' ? existing.value.replace(/[^\d+]/g, '') : existing.value) === normalizedVal)) {
+                tels.push({ ...t, value: normalizedVal });
+              }
+            });
+          } catch(e) {}
         }
+
+        tels = tels.map(t => ({
+          ...t,
+          value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
+        }));
+
+        let emails = [];
+        try { emails = JSON.parse(keepContact.email || '[]'); } catch(e) {}
+
+        for (const contact of mergeContacts) {
+          try {
+            const contactEmails = JSON.parse(contact.email || '[]');
+            contactEmails.forEach(e => {
+              if (!emails.find(existing => existing.value === e.value)) {
+                emails.push(e);
+              }
+            });
+          } catch(e) {}
+        }
+
+        let notes = keepContact.note || '';
+        for (const contact of mergeContacts) {
+          if (contact.note && contact.note !== notes) {
+            notes += (notes ? '\n\n---\n\n' : '') + contact.note;
+          }
+        }
+
+        await tx.execute(
+          `UPDATE contacts SET tel = ?, email = ?, note = ?, updatedAt = ? WHERE id = ? AND username = ?`,
+          [
+            tels.length > 0 ? JSON.stringify(tels) : null,
+            emails.length > 0 ? JSON.stringify(emails) : null,
+            notes,
+            now,
+            keepId,
+            req.user
+          ]
+        );
+
+        const placeholders = mergeIds.map(() => '?').join(',');
+        const deleteResult = await tx.execute(
+          `DELETE FROM contacts WHERE id IN (${placeholders}) AND username = ?`,
+          [...mergeIds, req.user]
+        );
+
+        totalMerged += deleteResult.changes;
+        totalTels += tels.length;
+        totalEmails += emails.length;
       }
-
-      // 更新保留的联系人
-      await db.run(
-        `UPDATE contacts SET tel = ?, email = ?, note = ?, updatedAt = ? WHERE id = ? AND username = ?`,
-        [
-          tels.length > 0 ? JSON.stringify(tels) : null,
-          emails.length > 0 ? JSON.stringify(emails) : null,
-          notes,
-          now,
-          keepId,
-          req.user
-        ]
-      );
-
-      // 删除要合并的联系人
-      const placeholders = mergeIds.map(() => '?').join(',');
-      const deleteResult = await db.run(
-        `DELETE FROM contacts WHERE id IN (${placeholders}) AND username = ?`,
-        [...mergeIds, req.user]
-      );
-
-      totalMerged += deleteResult.changes;
-      totalTels += tels.length;
-      totalEmails += emails.length;
-    }
-
-    await db.run('COMMIT');
+    });
 
     log('INFO', '批量合并联系人成功', {
       username: req.user,
@@ -732,7 +717,6 @@ router.post('/merge-batch', async (req, res) => {
       emailsCount: totalEmails
     });
   } catch (e) {
-    await getConnection().run('ROLLBACK');
     log('ERROR', '批量合并联系人失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '合并失败' });
   }
@@ -741,7 +725,7 @@ router.post('/merge-batch', async (req, res) => {
 // 导出 vCard
 router.get('/export/:id', async (req, res) => {
   try {
-    const contact = await getConnection().get(
+    const contact = await db.queryOne(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );
@@ -762,7 +746,7 @@ router.get('/export/:id', async (req, res) => {
 // 导出所有联系人
 router.get('/export', async (req, res) => {
   try {
-    const contacts = await getConnection().all(
+    const contacts = await db.queryAll(
       'SELECT * FROM contacts WHERE username = ?',
       [req.user]
     );
@@ -782,8 +766,6 @@ router.get('/export', async (req, res) => {
 // 导入 vCard（支持批量导入，优化性能，防重复）
 router.post('/import', async (req, res) => {
   const startTime = Date.now();
-  let transaction = null;
-
   try {
     const { vcard: vcardContent } = req.body;
 
@@ -798,51 +780,44 @@ router.post('/import', async (req, res) => {
       return res.status(400).json({ error: '未找到有效的联系人数据' });
     }
 
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
     const importedContacts = [];
     const skippedContacts = [];
 
-    // 开始事务
-    await db.run('BEGIN TRANSACTION');
+    await db.withTransaction(async (tx) => {
+      for (const contactData of contactsData) {
+        const existing = await tx.queryOne(
+          'SELECT id FROM contacts WHERE username = ? AND fn = ?',
+          [req.user, contactData.fn || '']
+        );
 
-    // 批量插入联系人（使用事务，性能提升10倍以上）
-    for (const contactData of contactsData) {
-      // 检查重复（基于姓名）
-      const existing = await db.get(
-        'SELECT id FROM contacts WHERE username = ? AND fn = ?',
-        [req.user, contactData.fn || '']
-      );
+        if (existing) {
+          skippedContacts.push({ fn: contactData.fn, reason: '重复' });
+          continue;
+        }
 
-      if (existing) {
-        skippedContacts.push({ fn: contactData.fn, reason: '重复' });
-        continue;
+        const id = generateId();
+
+        await tx.execute(
+          `INSERT INTO contacts (
+            id, username, uid, fn, n_family, n_given, n_middle, n_prefix, n_suffix,
+            tel, email, adr, org, title, url, photo, note, bday, nickname, vcard,
+            createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id, req.user, contactData.uid || id,
+            contactData.fn || '', contactData.n_family || '', contactData.n_given || '',
+            contactData.n_middle || '', contactData.n_prefix || '', contactData.n_suffix || '',
+            contactData.tel || null, contactData.email || null, contactData.adr || null,
+            contactData.org || '', contactData.title || '', contactData.url || '',
+            contactData.photo || '', contactData.note || '', contactData.bday || '',
+            contactData.nickname || '', contactData.vcard || vcardContent, now, now
+          ]
+        );
+
+        importedContacts.push({ id, fn: contactData.fn });
       }
-
-      const id = generateId();
-
-      await db.run(
-        `INSERT INTO contacts (
-          id, username, uid, fn, n_family, n_given, n_middle, n_prefix, n_suffix,
-          tel, email, adr, org, title, url, photo, note, bday, nickname, vcard,
-          createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id, req.user, contactData.uid || id,
-          contactData.fn || '', contactData.n_family || '', contactData.n_given || '',
-          contactData.n_middle || '', contactData.n_prefix || '', contactData.n_suffix || '',
-          contactData.tel || null, contactData.email || null, contactData.adr || null,
-          contactData.org || '', contactData.title || '', contactData.url || '',
-          contactData.photo || '', contactData.note || '', contactData.bday || '',
-          contactData.nickname || '', contactData.vcard || vcardContent, now, now
-        ]
-      );
-
-      importedContacts.push({ id, fn: contactData.fn });
-    }
-
-    // 提交事务
-    await db.run('COMMIT');
+    });
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
 
@@ -863,11 +838,6 @@ router.post('/import', async (req, res) => {
       contacts: importedContacts
     });
   } catch (e) {
-    // 回滚事务
-    try {
-      await getConnection().run('ROLLBACK');
-    } catch (rollbackError) {}
-
     log('ERROR', '导入联系人失败', { username: req.user, error: e.message, stack: e.stack });
     res.status(500).json({ error: '导入失败: ' + e.message });
   }
@@ -878,7 +848,7 @@ router.get('/:id/history', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const history = await getConnection().all(
+    const history = await db.queryAll(
       `SELECT * FROM contact_history 
        WHERE contact_id = ? AND username = ? 
        ORDER BY created_at DESC 
@@ -896,7 +866,7 @@ router.get('/:id/history', async (req, res) => {
 // 获取单个联系人（必须放在所有具体路由之后）
 router.get('/:id', async (req, res) => {
   try {
-    const contact = await getConnection().get(
+    const contact = await db.queryOne(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
       [req.params.id, req.user]
     );

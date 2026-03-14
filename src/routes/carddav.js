@@ -4,7 +4,7 @@
  */
 
 const express = require('express');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 const VCardGenerator = require('../utils/vCardGenerator');
 const VCardParser = require('../utils/vCardParser');
@@ -126,7 +126,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let ctag = 1;
     let itemsXml = '';
 
-    const contacts = await getConnection().all('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username]);
+    const contacts = await db.queryAll('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username]);
     
     // 计算最新的 updatedAt 作为 ctag
     if (contacts.length > 0) {
@@ -241,14 +241,14 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
 
       if (ids.length > 0) {
         const placeholders = ids.map(() => '?').join(',');
-        contacts = await getConnection().all(
+        contacts = await db.queryAll(
           `SELECT * FROM contacts WHERE username = ? AND id IN (${placeholders})`,
           [username, ...ids]
         );
       }
     } else {
       // addressbook-query 或其他，默认返回所有
-      contacts = await getConnection().all(
+      contacts = await db.queryAll(
         'SELECT * FROM contacts WHERE username = ?',
         [username]
       );
@@ -295,7 +295,7 @@ router.get('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
       id = decodeURIComponent(id);
     } catch (e) {}
 
-    const contact = await getConnection().get(
+    const contact = await db.queryOne(
       'SELECT * FROM contacts WHERE id = ? AND username = ?',
       [id, username]
     );
@@ -333,14 +333,14 @@ router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
     const now = Math.floor(Date.now() / 1000);
 
     // 检查是否存在
-    const existing = await getConnection().get(
+    const existing = await db.queryOne(
       'SELECT id FROM contacts WHERE id = ? AND username = ?',
       [id, username]
     );
 
     if (existing) {
       // 更新
-      await getConnection().run(
+      await db.execute(
         `UPDATE contacts SET 
           fn = ?, n_family = ?, n_given = ?, n_middle = ?, n_prefix = ?, n_suffix = ?,
           tel = ?, email = ?, adr = ?, org = ?, title = ?, url = ?, photo = ?, note = ?,
@@ -373,7 +373,7 @@ router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
     } else {
       // 创建
       const uid = contactData.uid || id;
-      await getConnection().run(
+      await db.execute(
         `INSERT INTO contacts (
           id, username, uid, fn, n_family, n_given, n_middle, n_prefix, n_suffix,
           tel, email, adr, org, title, url, photo, note, bday, nickname, vcard,
@@ -426,7 +426,7 @@ router.delete('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) 
       id = decodeURIComponent(id);
     } catch (e) {}
 
-    const result = await getConnection().run(
+    const result = await db.execute(
       'DELETE FROM contacts WHERE id = ? AND username = ?',
       [id, username]
     );

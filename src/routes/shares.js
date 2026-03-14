@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { genToken } = require('../utils/helpers');
 const config = require('../config');
 const log = require('../utils/logger');
@@ -28,10 +28,8 @@ function resolveOwnedFilePath(username, target) {
 }
 
 async function ensureShareTargetOwned(type, target, owner) {
-  const db = getConnection();
-
   if (type === 'note') {
-    const note = await db.get(
+    const note = await db.queryOne(
       'SELECT id FROM notes WHERE id = ? AND username = ? AND deleted = 0',
       [target, owner]
     );
@@ -52,7 +50,7 @@ async function ensureShareTargetOwned(type, target, owner) {
   }
 
   if (type === 'category') {
-    const categoryNotes = await db.all(
+    const categoryNotes = await db.queryAll(
       'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
       [owner, `${target}/%`]
     );
@@ -102,14 +100,12 @@ async function isAttachmentAllowedForShare(share, requestedFilename) {
     return false;
   }
 
-  const db = getConnection();
-
   if (share.targetType === 'file') {
     return path.basename(share.target) === basename;
   }
 
   if (share.targetType === 'note') {
-    const note = await db.get(
+    const note = await db.queryOne(
       'SELECT content FROM notes WHERE id = ? AND username = ? AND deleted = 0',
       [share.target, share.owner]
     );
@@ -117,7 +113,7 @@ async function isAttachmentAllowedForShare(share, requestedFilename) {
   }
 
   if (share.targetType === 'category') {
-    const notes = await db.all(
+    const notes = await db.queryAll(
       'SELECT content FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
       [share.owner, `${share.target}/%`]
     );
@@ -157,20 +153,20 @@ router.post('/api/share/create', async (req, res) => {
 
     const token = genToken(24);
     const expiresAt = parsedExpiresMs ? (Date.now() + parsedExpiresMs) : 0;
-    await getConnection().run(
+    await db.execute(
       'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [token, req.user, type, normalizedTarget, isPublic?1:0, null, expiresAt]
     );
 
     // 如果是分类分享，自动分享该分类下的所有笔记
     if (type === 'category') {
-      const categoryNotes = await getConnection().all(
+      const categoryNotes = await db.queryAll(
         'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
         [req.user, `${normalizedTarget}/%`]
       );
 
       // 获取该用户已有的分享，避免重复
-      const existingShares = await getConnection().all(
+      const existingShares = await db.queryAll(
         'SELECT target FROM shares WHERE owner = ? AND targetType = ?',
         [req.user, 'note']
       );
@@ -180,7 +176,7 @@ router.post('/api/share/create', async (req, res) => {
       for (const note of categoryNotes) {
         if (!existingNoteIds.has(note.id.toString())) {
           const noteToken = genToken(24);
-          await getConnection().run(
+          await db.execute(
             'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [noteToken, req.user, 'note', note.id.toString(), isPublic?1:0, null, expiresAt]
           );
@@ -203,10 +199,10 @@ router.post('/api/share/revoke', async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: '缺少 token' });
-    const row = await getConnection().get('SELECT * FROM shares WHERE token = ?', [token]);
+    const row = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!row) return res.status(404).json({ error: '未找到' });
     if (row.owner !== req.user && !config.adminUsers.includes(req.user)) return res.status(403).json({ error: '无权限' });
-    await getConnection().run('DELETE FROM shares WHERE token = ?', [token]);
+    await db.execute('DELETE FROM shares WHERE token = ?', [token]);
     res.json({ status: 'ok' });
   } catch (e) { res.status(500).json({ error: '撤销失败' }); }
 });
@@ -231,7 +227,7 @@ router.post('/api/share/batch-revoke', async (req, res) => {
       params = [...tokens, req.user];
     }
 
-    const result = await getConnection().run(query, params);
+    const result = await db.execute(query, params);
     res.json({ status: 'ok', deletedCount: result.changes });
   } catch (e) {
     log('ERROR', '批量撤销分享失败', { username: req.user, error: e.message });
@@ -243,7 +239,7 @@ router.post('/api/share/batch-revoke', async (req, res) => {
 router.get('/api/share/list', async (req, res) => {
   try {
     // 先获取所有分享（包括已过期的，用于清理）
-    const allShares = await getConnection().all(
+    const allShares = await db.queryAll(
       'SELECT token, targetType, target, public, expiresAt, createdAt, owner FROM shares WHERE owner = ?',
       [req.user]
     );
@@ -264,7 +260,7 @@ router.get('/api/share/list', async (req, res) => {
       
       // 检查笔记分享的目标是否存在且未删除
       if (share.targetType === 'note') {
-        const note = await getConnection().get(
+        const note = await db.queryOne(
           'SELECT id FROM notes WHERE id = ? AND username = ? AND deleted = 0',
           [share.target, req.user]
         );
@@ -276,7 +272,7 @@ router.get('/api/share/list', async (req, res) => {
       
       // 检查分类分享是否还有笔记
       if (share.targetType === 'category') {
-        const categoryNotes = await getConnection().all(
+        const categoryNotes = await db.queryAll(
           'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
           [req.user, `${share.target}/%`]
         );
@@ -302,7 +298,7 @@ router.get('/api/share/list', async (req, res) => {
     // 异步清理无效分享（不阻塞响应）
     if (invalidTokens.length > 0) {
       const placeholders = invalidTokens.map(() => '?').join(',');
-      getConnection().run(
+      db.execute(
         `DELETE FROM shares WHERE token IN (${placeholders})`,
         invalidTokens
       ).catch(() => {});
@@ -315,7 +311,7 @@ router.get('/api/share/list', async (req, res) => {
 // 获取公开分享列表
 router.get('/api/share/public-list', async (req, res) => {
   try {
-    const shares = await getConnection().all(
+    const shares = await db.queryAll(
       'SELECT * FROM shares WHERE public = 1 AND (expiresAt = 0 OR expiresAt > ?)', 
       [Date.now()]
     );
@@ -323,7 +319,7 @@ router.get('/api/share/public-list', async (req, res) => {
     for (const s of shares) {
       let title = '', summary = '', category = '', ownerName = s.owner;
       if (s.targetType === 'note') {
-        const note = await getConnection().get(
+        const note = await db.queryOne(
           'SELECT id, title, content FROM notes WHERE id = ? AND username = ? AND deleted = 0', 
           [s.target, s.owner]
         );
@@ -334,11 +330,11 @@ router.get('/api/share/public-list', async (req, res) => {
           if (note.title?.includes('/')) category = note.title.split('/')[0].trim();
         } else {
           // 笔记已删除，自动清理分享记录
-          await getConnection().run('DELETE FROM shares WHERE token = ?', [s.token]);
+          await db.execute('DELETE FROM shares WHERE token = ?', [s.token]);
         }
       } else if (s.targetType === 'category') {
         // 分类分享
-        const categoryNotes = await getConnection().all(
+        const categoryNotes = await db.queryAll(
           'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
           [s.owner, `${s.target}/%`]
         );
@@ -348,7 +344,7 @@ router.get('/api/share/public-list', async (req, res) => {
           category = s.target;
         } else {
           // 分类下无笔记，自动清理分享记录
-          await getConnection().run('DELETE FROM shares WHERE token = ?', [s.token]);
+          await db.execute('DELETE FROM shares WHERE token = ?', [s.token]);
           title = null;
         }
       } else {
@@ -360,7 +356,7 @@ router.get('/api/share/public-list', async (req, res) => {
           category = '文件';
         } catch (err) {
           // 文件不存在，自动清理分享记录
-          await getConnection().run('DELETE FROM shares WHERE token = ?', [s.token]);
+          await db.execute('DELETE FROM shares WHERE token = ?', [s.token]);
           title = null;
         }
       }
@@ -393,7 +389,7 @@ router.get('/api/share/public/:token', async (req, res) => {
       noteId = parts[1];
       
       // 查找分类分享
-      categoryShare = await getConnection().get('SELECT * FROM shares WHERE token = ?', [categoryToken]);
+      categoryShare = await db.queryOne('SELECT * FROM shares WHERE token = ?', [categoryToken]);
       
       if (!categoryShare || categoryShare.targetType !== 'category') {
         return res.status(404).json({ error: 'not found' });
@@ -402,14 +398,14 @@ router.get('/api/share/public/:token', async (req, res) => {
       // 检查分类分享是否有效
       const exp = parseInt(categoryShare.expiresAt) || 0;
       if (exp && Date.now() > exp) {
-        await getConnection().run('DELETE FROM shares WHERE token = ?', [categoryToken]);
+        await db.execute('DELETE FROM shares WHERE token = ?', [categoryToken]);
         return res.status(410).json({ error: 'expired' });
       }
       
       if (!categoryShare.public) return res.status(403).json({ error: 'private' });
       
       // 查找笔记
-      const note = await getConnection().get(
+      const note = await db.queryOne(
         'SELECT id, title, content, updatedAt FROM notes WHERE id = ? AND username = ? AND deleted = 0',
         [noteId, categoryShare.owner]
       );
@@ -424,21 +420,21 @@ router.get('/api/share/public/:token', async (req, res) => {
       }
       
       // 自动为该笔记创建分享记录（如果还没有）
-      const existingShare = await getConnection().get(
+      const existingShare = await db.queryOne(
         'SELECT * FROM shares WHERE owner = ? AND targetType = ? AND target = ?',
         [categoryShare.owner, 'note', noteId]
       );
       
       if (!existingShare) {
         const noteToken = genToken(24);
-        await getConnection().run(
+        await db.execute(
           'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [noteToken, categoryShare.owner, 'note', noteId, categoryShare.public, null, categoryShare.expiresAt]
         );
       }
       
       // 返回笔记详情
-      const userConfig = await getConnection().get(
+      const userConfig = await db.queryOne(
         'SELECT blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS FROM users WHERE username = ?', 
         [categoryShare.owner]
       );
@@ -463,17 +459,17 @@ router.get('/api/share/public/:token', async (req, res) => {
     }
     
     // 原有的逻辑处理普通分享
-    const row = await getConnection().get('SELECT * FROM shares WHERE token = ?', [token]);
+    const row = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!row) return res.status(404).json({ error: 'not found' });
     const exp = parseInt(row.expiresAt) || 0;
     if (exp && Date.now() > exp) {
       // 分享已过期，自动清理
-      await getConnection().run('DELETE FROM shares WHERE token = ?', [token]);
+      await db.execute('DELETE FROM shares WHERE token = ?', [token]);
       return res.status(410).json({ error: 'expired' });
     }
     if (!row.public) return res.status(403).json({ error: 'private' });
 
-    const userConfig = await getConnection().get(
+    const userConfig = await db.queryOne(
       'SELECT blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS FROM users WHERE username = ?', 
       [row.owner]
     );
@@ -486,7 +482,7 @@ router.get('/api/share/public/:token', async (req, res) => {
       customCSS: userConfig?.customCSS || ''
     };
 
-    const allShares = await getConnection().all(
+    const allShares = await db.queryAll(
       'SELECT * FROM shares WHERE public = 1 AND owner = ? AND (expiresAt = 0 OR expiresAt > ?) ORDER BY createdAt DESC',
       [row.owner, Date.now()]
     );
@@ -497,7 +493,7 @@ router.get('/api/share/public/:token', async (req, res) => {
     for (const s of allShares) {
       let category = '', title = '';
       if (s.targetType === 'note') {
-        const note = await getConnection().get(
+        const note = await db.queryOne(
           'SELECT id, title FROM notes WHERE id = ? AND username = ? AND deleted = 0',
           [s.target, s.owner]
         );
@@ -522,13 +518,13 @@ router.get('/api/share/public/:token', async (req, res) => {
     }
 
     if (row.targetType === 'note') {
-      const note = await getConnection().get(
+      const note = await db.queryOne(
         'SELECT id, title, content, updatedAt FROM notes WHERE id = ? AND username = ? AND deleted = 0', 
         [row.target, row.owner]
       );
       if (!note) {
         // 笔记已删除，自动清理分享记录
-        await getConnection().run('DELETE FROM shares WHERE token = ?', [token]);
+        await db.execute('DELETE FROM shares WHERE token = ?', [token]);
         return res.status(404).json({ error: 'note not found' });
       }
       let category = note.title?.includes('/') ? note.title.split('/')[0].trim() : '未分类';
@@ -543,18 +539,18 @@ router.get('/api/share/public/:token', async (req, res) => {
     } else if (row.targetType === 'category') {
       // 分类分享：获取该分类下所有笔记
       const categoryName = row.target;
-      const notes = await getConnection().all(
+      const notes = await db.queryAll(
         'SELECT id, title, content, updatedAt FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ? ORDER BY updatedAt DESC',
         [row.owner, `${categoryName}/%`]
       );
       if (notes.length === 0) {
         // 分类下无笔记，自动清理分享记录
-        await getConnection().run('DELETE FROM shares WHERE token = ?', [token]);
+        await db.execute('DELETE FROM shares WHERE token = ?', [token]);
         return res.status(404).json({ error: 'category empty' });
       }
 
       // 获取该用户已有的笔记分享
-      const existingShares = await getConnection().all(
+      const existingShares = await db.queryAll(
         'SELECT target FROM shares WHERE owner = ? AND targetType = ?',
         [row.owner, 'note']
       );
@@ -564,7 +560,7 @@ router.get('/api/share/public/:token', async (req, res) => {
       for (const note of notes) {
         if (!existingNoteIds.has(note.id.toString())) {
           const noteToken = genToken(24);
-          await getConnection().run(
+          await db.execute(
             'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [noteToken, row.owner, 'note', note.id.toString(), row.public, null, row.expiresAt]
           );
@@ -610,12 +606,12 @@ router.get('/api/share/public/:token', async (req, res) => {
 router.get('/s/:token', async (req, res) => {
   try {
     const token = req.params.token;
-    const row = await getConnection().get('SELECT * FROM shares WHERE token = ?', [token]);
+    const row = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!row) return res.status(404).send('分享链接不存在');
     const exp2 = parseInt(row.expiresAt) || 0;
     if (exp2 && Date.now() > exp2) {
       // 分享已过期，自动清理
-      await getConnection().run('DELETE FROM shares WHERE token = ?', [token]);
+      await db.execute('DELETE FROM shares WHERE token = ?', [token]);
       return res.status(410).send('分享链接已过期');
     }
     if (!row.public) return res.status(403).send('分享链接是私有的');
@@ -646,13 +642,13 @@ router.get('/api/share/attachment/:token/:filename(*)', async (req, res) => {
   try {
     const { token } = req.params;
     const filename = req.params.filename || '';
-    const share = await getConnection().get('SELECT * FROM shares WHERE token = ?', [token]);
+    const share = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!share) return res.status(404).send('Share not found');
     if (!share.public) return res.status(403).send('Private share');
     const exp3 = parseInt(share.expiresAt) || 0;
     if (exp3 && Date.now() > exp3) {
       // 分享已过期，自动清理
-      await getConnection().run('DELETE FROM shares WHERE token = ?', [token]);
+      await db.execute('DELETE FROM shares WHERE token = ?', [token]);
       return res.status(410).send('Share expired');
     }
 

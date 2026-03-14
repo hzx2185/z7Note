@@ -4,17 +4,6 @@ const cookieParser = require('cookie-parser');
 const compression = require('compression');
 const nodeCron = require('node-cron');
 
-// 全局异常处理 - 防止进程崩溃
-process.on('uncaughtException', (error) => {
-  console.error('[UncaughtException]', error);
-  // 不退出进程,继续运行
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[UnhandledRejection]', reason);
-  // 不退出进程,继续运行
-});
-
 // 为 Express 添加 WebDAV 方法支持
 const webdavMethods = ['PROPFIND', 'REPORT', 'MKCALENDAR', 'MKCOL', 'COPY', 'MOVE', 'LOCK', 'UNLOCK'];
 webdavMethods.forEach(method => {
@@ -24,7 +13,7 @@ webdavMethods.forEach(method => {
 });
 
 const config = require('./config');
-const { connect, getConnection, close } = require('./db/connection');
+const { connect, getConnection, close } = require('./db/sqlite-connection');
 const { auth, adminAuth } = require('./middleware/auth');
 const securityHeaders = require('./middleware/security');
 const { rateLimit } = require('./middleware/rateLimit');
@@ -289,6 +278,7 @@ app.use('/data', (req, res) => res.status(404).send('Not found'));
 
 // 启动服务器
 let server;
+let isShuttingDown = false;
 (async () => {
   try {
     await connect();
@@ -379,13 +369,34 @@ let server;
 })();
 
 // 优雅关闭
-const shutdown = async (signal) => {
+async function shutdown(signal, exitCode = 0) {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   console.log(`收到 ${signal} 信号，准备安全关闭...`);
-  if (server) server.close(() => console.log('HTTP 服务已停止'));
+  if (server) {
+    server.close(() => console.log('HTTP 服务已停止'));
+  }
   cleanupAllLimiters();
-  await close();
-  setTimeout(() => process.exit(0), 500);
-};
+  try {
+    await close();
+  } catch (error) {
+    console.error('[Shutdown] 关闭数据库失败:', error);
+  }
+  setTimeout(() => process.exit(exitCode), 500);
+}
+
+// 全局异常处理 - 记录错误并交给进程管理器重启
+process.on('uncaughtException', (error) => {
+  console.error('[UncaughtException]', error);
+  shutdown('uncaughtException', 1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[UnhandledRejection]', reason);
+  shutdown('unhandledRejection', 1);
+});
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

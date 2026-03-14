@@ -1,5 +1,7 @@
 const WebSocket = require('ws');
 const log = require('../utils/logger');
+const config = require('../config');
+const { getSession } = require('../services/session');
 
 // WebSocket服务器实例
 let wss = null;
@@ -14,29 +16,43 @@ function initWebSocketServer(server) {
   wss = new WebSocket.Server({ noServer: true });
 
   // 处理HTTP升级请求
-  server.on('upgrade', (request, socket, head) => {
-    // 从URL中获取token
+  server.on('upgrade', async (request, socket, head) => {
     const url = new URL(request.url, `http://${request.headers.host}`);
-    const token = url.searchParams.get('token');
+    if (url.pathname !== '/ws') {
+      socket.destroy();
+      return;
+    }
 
-    if (!token) {
+    const cookies = parseCookies(request.headers.cookie || '');
+    const sessionId = cookies[config.cookieName];
+
+    if (!sessionId) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    // 验证token（这里简化处理，实际应该从数据库验证）
-    // 由于token验证逻辑在中间件中，这里直接接受
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      // 将token附加到ws对象上
-      ws.token = token;
-      wss.emit('connection', ws, request);
-    });
+    try {
+      const session = await getSession(sessionId);
+      if (!session?.username) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        ws.username = session.username;
+        wss.emit('connection', ws, request);
+      });
+    } catch (error) {
+      log('ERROR', 'WebSocket 会话校验失败', { error: error.message });
+      socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+      socket.destroy();
+    }
   });
 
   wss.on('connection', (ws, request) => {
-    // 从ws对象上获取token（实际是用户名）
-    const username = ws.token;
+    const username = ws.username;
 
     if (!username) {
       log('WARN', 'WebSocket连接失败：缺少用户名');
@@ -159,18 +175,18 @@ function broadcast(type, data, options = {}) {
 }
 
 // 广播笔记更新
-function broadcastNoteUpdate(note) {
-  broadcast('note_update', { note });
+function broadcastNoteUpdate(username, note) {
+  broadcast('note_update', { note }, { username });
 }
 
 // 广播笔记删除
-function broadcastNoteDelete(noteId) {
-  broadcast('note_delete', { noteId });
+function broadcastNoteDelete(username, noteId) {
+  broadcast('note_delete', { noteId }, { username });
 }
 
 // 广播批量笔记更新
-function broadcastBatchNotesUpdate(notes, excludeUserId = null) {
-  broadcast('batch_notes_update', { notes }, excludeUserId);
+function broadcastBatchNotesUpdate(username, notes) {
+  broadcast('batch_notes_update', { notes }, { username });
 }
 
 // 获取在线用户列表
@@ -207,3 +223,16 @@ module.exports = {
   getOnlineUsers,
   getOnlineCount
 };
+
+function parseCookies(cookieHeader) {
+  return cookieHeader.split(';').reduce((cookies, part) => {
+    const [key, ...valueParts] = part.split('=');
+    const cookieKey = key && key.trim();
+    if (!cookieKey) {
+      return cookies;
+    }
+
+    cookies[cookieKey] = decodeURIComponent(valueParts.join('=').trim());
+    return cookies;
+  }, {});
+}

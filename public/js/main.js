@@ -277,4 +277,16 @@ import wsManager from './websocket.js';
         if (ui.updateStatus) ui.updateStatus('error', '离线中');
     });
 
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && ui.flushPendingSave) {
+            void ui.flushPendingSave({ keepalive: true });
+        }
+    });
+
+    window.addEventListener('pagehide', () => {
+        if (ui.flushPendingSave) {
+            void ui.flushPendingSave({ keepalive: true });
+        }
+    });
+
 })();

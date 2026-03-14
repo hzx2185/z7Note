@@ -2,14 +2,16 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const path = require('path');
 const fs = require('fs').promises;
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { getUserFileSize } = require('../utils/helpers');
 const { createBackupArchive } = require('../services/backup');
 const { updateAllResources, getCDNBaseUrl, setCDNBaseUrl, getCDNStatus, clearCache } = require('../services/cdnProxy');
 const { getAllSystemConfig, setMultipleSystemConfig, deleteSystemConfig, initDefaultConfig, getSmtpConfig, setSmtpConfig } = require('../services/systemConfig');
 const { cleanupExpiredSessions } = require('../services/chunkUpload');
+const { destroyUserSessions } = require('../services/session');
 const config = require('../config');
 const log = require('../utils/logger');
+const { sanitizeInput, validateUsername, validateEmail, validatePassword } = require('../utils/validators');
 
 const router = express.Router();
 
@@ -27,7 +29,7 @@ router.post('/api/admin/backup/config', async (req, res) => {
 
 // 获取备份配置
 router.get('/api/admin/backup/config', async (req, res) => { 
-  res.json(await getConnection().get('SELECT * FROM backup_config WHERE id = 1') || {}); 
+  res.json(await db.queryOne('SELECT * FROM backup_config WHERE id = 1') || {}); 
 });
 
 // 下载全量备份
@@ -52,7 +54,7 @@ router.get('/api/admin/backup/list', async (req, res) => {
 router.post('/api/admin/backup/now', async (req, res) => {
   try {
     const { performBackup } = require('../services/backup');
-    const backupConfig = await getConnection().get('SELECT * FROM backup_config WHERE id = 1') || {};
+    const backupConfig = await db.queryOne('SELECT * FROM backup_config WHERE id = 1') || {};
     if (!backupConfig.schedule) {
       return res.status(400).json({ error: '请先配置备份选项' });
     }
@@ -68,18 +70,16 @@ router.post('/api/admin/backup/now', async (req, res) => {
 router.get('/api/admin/users/stats', async (req, res) => {
   try {
     const { search, sort, order } = req.query;
-    let users = await getConnection().all('SELECT username, email, noteLimit, fileLimit FROM users');
+    let users = await db.queryAll('SELECT username, email, noteLimit, fileLimit FROM users');
     
     let stats = await Promise.all(users.map(async (u) => {
       const username = (u.username || '').trim();
-      const db = getConnection();
-
       // 并行执行所有统计，包括数量和空间
       const [n, c, e, t] = await Promise.all([
-        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(content)), 0) as sz FROM notes WHERE LOWER(username) = LOWER(?) AND deleted = 0', [username]),
-        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(fn) + LENGTH(vcard)), 0) as sz FROM contacts WHERE LOWER(username) = LOWER(?)', [username]),
-        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM events WHERE LOWER(username) = LOWER(?)', [username]),
-        db.get('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM todos WHERE LOWER(username) = LOWER(?)', [username])
+        db.queryOne('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(content)), 0) as sz FROM notes WHERE LOWER(username) = LOWER(?) AND deleted = 0', [username]),
+        db.queryOne('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(fn) + LENGTH(vcard)), 0) as sz FROM contacts WHERE LOWER(username) = LOWER(?)', [username]),
+        db.queryOne('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM events WHERE LOWER(username) = LOWER(?)', [username]),
+        db.queryOne('SELECT COUNT(*) as cnt, IFNULL(SUM(LENGTH(title) + LENGTH(description)), 0) as sz FROM todos WHERE LOWER(username) = LOWER(?)', [username])
       ]);
 
       const attachmentSize = await getUserFileSize(username);
@@ -121,11 +121,31 @@ router.get('/api/admin/users/stats', async (req, res) => {
 router.delete('/api/admin/users/:username', async (req, res) => {
   const { username } = req.params;
   try {
+    const user = await db.queryOne('SELECT username, email FROM users WHERE username = ?', [username]);
+    if (!user) {
+      return res.status(404).json({ error: "用户不存在" });
+    }
+
     const userUploadDir = path.join(config.paths.uploads, username);
-    await getConnection().run('BEGIN TRANSACTION');
-    await getConnection().run('DELETE FROM notes WHERE username = ?', [username]);
-    await getConnection().run('DELETE FROM users WHERE username = ?', [username]);
-    await getConnection().run('COMMIT');
+    await db.withTransaction(async (tx) => {
+      await tx.execute('DELETE FROM contact_history WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM contacts WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM calendar_subscriptions WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM reminder_history WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM reminder_settings WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM deleted_items WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM events WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM todos WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM notes WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM shares WHERE owner = ?', [username]);
+      await tx.execute('DELETE FROM upload_chunks WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM user_backup_config WHERE username = ?', [username]);
+      await tx.execute('DELETE FROM user_sessions WHERE username = ?', [username]);
+      if (user.email) {
+        await tx.execute('DELETE FROM reset_tokens WHERE email = ?', [user.email]);
+      }
+      await tx.execute('DELETE FROM users WHERE username = ?', [username]);
+    });
     try {
       await fs.rm(userUploadDir, { recursive: true, force: true });
     } catch (e) {
@@ -133,8 +153,7 @@ router.delete('/api/admin/users/:username', async (req, res) => {
     }
     log('INFO', '管理员删除用户', { username, deletedBy: req.user });
     res.json({ status: "ok" });
-  } catch (e) { 
-    await getConnection().run('ROLLBACK'); 
+  } catch (e) {
     res.status(500).json({ error: "删除失败" }); 
   }
 });
@@ -142,8 +161,12 @@ router.delete('/api/admin/users/:username', async (req, res) => {
 // 重置用户密码
 router.post('/api/admin/users/reset-password', async (req, res) => {
   const { username, newPassword } = req.body;
-  await getConnection().run('UPDATE users SET password = ? WHERE username = ?', 
+  const result = await db.execute('UPDATE users SET password = ? WHERE username = ?', 
     [await bcrypt.hash(newPassword, 10), username]);
+  if (!result.changes) {
+    return res.status(404).json({ error: "用户不存在" });
+  }
+  await destroyUserSessions(username);
   log('INFO', '管理员重置用户密码', { username, resetBy: req.user });
   res.json({ status: "ok" });
 });
@@ -152,7 +175,7 @@ router.post('/api/admin/users/reset-password', async (req, res) => {
 router.post('/api/admin/users/update-quota', async (req, res) => {
   const { username, noteLimit, fileLimit } = req.body;
   try { 
-    await getConnection().run('UPDATE users SET noteLimit = ?, fileLimit = ? WHERE username = ?', 
+    await db.execute('UPDATE users SET noteLimit = ?, fileLimit = ? WHERE username = ?', 
       [noteLimit, fileLimit, username]); 
     log('INFO', '管理员更新用户配额', { username, noteLimit, fileLimit, updatedBy: req.user });
     res.json({ status: "ok" }); 
@@ -163,23 +186,50 @@ router.post('/api/admin/users/update-quota', async (req, res) => {
 router.post('/api/admin/users/add', async (req, res) => {
   const { username, password, email } = req.body;
   try { 
-    await getConnection().run('INSERT INTO users (username, password, email) VALUES (?, ?, ?)', 
-      [username, await bcrypt.hash(password, 10), email]); 
-    log('INFO', '管理员添加用户', { username, email, addedBy: req.user });
+    const sanitizedUsername = sanitizeInput(username, 20);
+    const normalizedEmail = sanitizeInput(email, 255).toLowerCase();
+    const sanitizedPassword = sanitizeInput(password, 100);
+
+    if (!validateUsername(sanitizedUsername)) {
+      return res.status(400).json({ error: "用户名必须是3-20个字符，只允许字母、数字、下划线" });
+    }
+    if (!validateEmail(normalizedEmail)) {
+      return res.status(400).json({ error: "邮箱格式不正确" });
+    }
+    if (!validatePassword(sanitizedPassword)) {
+      return res.status(400).json({ error: "密码至少需要6个字符" });
+    }
+
+    const existingEmailUser = await db.queryOne(
+      'SELECT username FROM users WHERE LOWER(email) = LOWER(?)',
+      [normalizedEmail]
+    );
+    if (existingEmailUser) {
+      return res.status(400).json({ error: "邮箱已被其他账户绑定" });
+    }
+
+    await db.execute('INSERT INTO users (username, password, email) VALUES (?, ?, ?)', 
+      [sanitizedUsername, await bcrypt.hash(sanitizedPassword, 10), normalizedEmail]); 
+    log('INFO', '管理员添加用户', { username: sanitizedUsername, email: normalizedEmail, addedBy: req.user });
     res.json({ status: "ok" }); 
-  } catch (e) { res.status(400).json({ error: "用户已存在" }); }
+  } catch (e) {
+    if (e.message && e.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: "用户名已存在" });
+    }
+    res.status(400).json({ error: "新增用户失败" });
+  }
 });
 
 // 清理已删除笔记
 router.post('/api/admin/notes/purge', async (req, res) => {
   try {
     const now = Math.floor(Date.now() / 1000);
-    const deletedNotes = await getConnection().all('SELECT DISTINCT username FROM notes WHERE deleted = 1');
+    const deletedNotes = await db.queryAll('SELECT DISTINCT username FROM notes WHERE deleted = 1');
     for (const user of deletedNotes) {
-      await getConnection().run('UPDATE users SET dataCutoffTime = ? WHERE username = ?', [now, user.username]);
+      await db.execute('UPDATE users SET dataCutoffTime = ? WHERE username = ?', [now, user.username]);
     }
-    await getConnection().run('DELETE FROM notes WHERE deleted = 1');
-    await getConnection().run('VACUUM');
+    await db.execute('DELETE FROM notes WHERE deleted = 1');
+    await db.maintenance.compact();
     log('INFO', '管理员清理已删除笔记', { purgedBy: req.user, cutoff: now });
     res.json({ status: "ok", message: `已清理并设置拦截点：${new Date(now).toLocaleString()}` });
   } catch (e) { res.status(500).json({ error: "物理清理失败" }); }
@@ -193,8 +243,8 @@ router.get('/api/admin/notes/all', async (req, res) => {
   const offset = (page - 1) * limit;
   let whereClause = '', params = [];
   if (search) { whereClause = ' WHERE username LIKE ? OR title LIKE ?'; params = [`%${search}%`, `%${search}%`]; }
-  const countRes = await getConnection().get(`SELECT COUNT(*) as total FROM notes ${whereClause}`, params);
-  const notes = await getConnection().all(
+  const countRes = await db.queryOne(`SELECT COUNT(*) as total FROM notes ${whereClause}`, params);
+  const notes = await db.queryAll(
     `SELECT * FROM notes ${whereClause} ORDER BY updatedAt DESC LIMIT ? OFFSET ?`, 
     [...params, limit, offset]
   );
@@ -203,7 +253,7 @@ router.get('/api/admin/notes/all', async (req, res) => {
 
 // 删除笔记
 router.delete('/api/admin/notes/:id', async (req, res) => {
-  await getConnection().run('DELETE FROM notes WHERE id = ?', [req.params.id]);
+  await db.execute('DELETE FROM notes WHERE id = ?', [req.params.id]);
   log('INFO', '管理员删除笔记', { noteId: req.params.id, deletedBy: req.user });
   res.json({ status: "ok" });
 });
@@ -383,7 +433,7 @@ router.post('/api/admin/system/init-defaults', async (req, res) => {
 // 清空所有用户的回收站
 router.delete('/api/admin/trash/empty-all', async (req, res) => {
   try {
-    const result = await getConnection().run(
+    const result = await db.execute(
       'DELETE FROM notes WHERE deleted = 1'
     );
     log('INFO', '清空所有回收站', { count: result.changes });
@@ -402,14 +452,10 @@ router.delete('/api/admin/trash/empty-all', async (req, res) => {
       const dbSizeBytes = dbStats.size;
       const dbSizeMB = (dbSizeBytes / (1024 * 1024)).toFixed(2);
 
-      // 获取数据库页面信息
-      const pageResult = await getConnection().get('PRAGMA page_count');
-      const pageSizeResult = await getConnection().get('PRAGMA page_size');
-      const freelistResult = await getConnection().get('PRAGMA freelist_count');
-
-      const totalPages = pageResult.page_count || 0;
-      const pageSize = pageSizeResult.page_size || 4096;
-      const freePages = freelistResult.freelist_count || 0;
+      const storageStats = await db.maintenance.getStorageStats();
+      const totalPages = storageStats.pageCount || 0;
+      const pageSize = storageStats.pageSize || 4096;
+      const freePages = storageStats.freelistCount || 0;
       const freeBytes = freePages * pageSize;
       const freeMB = (freeBytes / (1024 * 1024)).toFixed(2);
       const usedMB = (dbSizeMB - freeMB).toFixed(2);
@@ -434,7 +480,7 @@ router.delete('/api/admin/trash/empty-all', async (req, res) => {
       log('INFO', '开始执行数据库VACUUM');
 
       // 执行VACUUM操作
-      await getConnection().run('VACUUM');
+      await db.maintenance.compact();
 
       log('INFO', '数据库VACUUM完成');
       res.json({ status: 'ok', message: '数据库清理完成' });

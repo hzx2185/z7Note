@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const config = require('../config');
 const { sendMail } = require('./mailer');
 const log = require('../utils/logger');
@@ -20,12 +20,11 @@ const lastRunTime = new Map();
  * 导出用户文本数据（JSON/ICS/VCF）
  */
 async function exportUserData(username, backupConfig) {
-  const db = getConnection();
   const textFiles = [];
 
   try {
     // 1. 导出笔记数据
-    const notes = await db.all(
+    const notes = await db.queryAll(
       'SELECT id, title, content, updatedAt FROM notes WHERE username = ? AND deleted = 0',
       [username]
     );
@@ -43,7 +42,7 @@ async function exportUserData(username, backupConfig) {
 
     // 2. 导出日历事件
     if (backupConfig.includeCalendar) {
-      const events = await db.all('SELECT * FROM events WHERE username = ?', [username]);
+      const events = await db.queryAll('SELECT * FROM events WHERE username = ?', [username]);
       if (events.length > 0) {
         const exportedEvents = events.map(event => ({ ...event, id: toClientCalendarId(username, event.id) }));
         const icsContent = exportToICS(exportedEvents, { targetApp: 'standard', includeReminders: true });
@@ -53,7 +52,7 @@ async function exportUserData(username, backupConfig) {
 
     // 3. 导出待办事项
     if (backupConfig.includeTodos) {
-      const todos = await db.all('SELECT id, title, description, completed, priority, dueDate, noteId, updatedAt FROM todos WHERE username = ?', [username]);
+      const todos = await db.queryAll('SELECT id, title, description, completed, priority, dueDate, noteId, updatedAt FROM todos WHERE username = ?', [username]);
       const todosData = { username, exportTime: new Date().toISOString(), todos: todos.map(todo => ({
         id: toClientCalendarId(username, todo.id), title: todo.title, description: todo.description, completed: todo.completed === 1,
         priority: todo.priority, dueDate: todo.dueDate ? new Date(todo.dueDate * 1000).toISOString() : null,
@@ -64,7 +63,7 @@ async function exportUserData(username, backupConfig) {
 
     // 4. 导出联系人
     if (backupConfig.includeContacts) {
-      const contacts = await db.all('SELECT * FROM contacts WHERE username = ?', [username]);
+      const contacts = await db.queryAll('SELECT * FROM contacts WHERE username = ?', [username]);
       if (contacts.length > 0) {
         const vcards = contacts.map(c => VCardGenerator.contactToVCard(c)).join('\r\n');
         textFiles.push({ filename: `${username}-contacts.vcf`, buffer: Buffer.from(vcards, 'utf-8') });
@@ -73,7 +72,7 @@ async function exportUserData(username, backupConfig) {
 
     // 5. 导出提醒设置
     if (backupConfig.includeReminders) {
-      const rs = await db.get('SELECT * FROM reminder_settings WHERE username = ?', [username]);
+      const rs = await db.queryOne('SELECT * FROM reminder_settings WHERE username = ?', [username]);
       if (rs) {
         const remindersData = { username, exportTime: new Date().toISOString(), reminders: {
           eventReminderEnabled: rs.event_reminder_enabled === 1, todoReminderEnabled: rs.todo_reminder_enabled === 1,
@@ -209,8 +208,7 @@ ${fileList}
  * 获取用户备份配置
  */
 async function getUserBackupConfig(username) {
-  const db = getConnection();
-  const config = await db.get('SELECT * FROM user_backup_config WHERE username = ?', [username]);
+  const config = await db.queryOne('SELECT * FROM user_backup_config WHERE username = ?', [username]);
 
   if (!config) {
     return {
@@ -253,41 +251,36 @@ async function getUserBackupConfig(username) {
  * 更新用户备份配置
  */
 async function updateUserBackupConfig(username, configData) {
-  const db = getConnection();
-
-  await db.run(`
-    INSERT INTO user_backup_config (username, enabled, schedule, sendEmail, emailAddress, webdavUrl, webdavUsername, webdavPassword, includeAttachments, includeCalendar, includeTodos, includeContacts, includeReminders, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(username) DO UPDATE SET
-      enabled=excluded.enabled,
-      schedule=excluded.schedule,
-      sendEmail=excluded.sendEmail,
-      emailAddress=excluded.emailAddress,
-      webdavUrl=excluded.webdavUrl,
-      webdavUsername=excluded.webdavUsername,
-      webdavPassword=excluded.webdavPassword,
-      includeAttachments=excluded.includeAttachments,
-      includeCalendar=excluded.includeCalendar,
-      includeTodos=excluded.includeTodos,
-      includeContacts=excluded.includeContacts,
-      includeReminders=excluded.includeReminders,
-      updatedAt=excluded.updatedAt
-  `, [
+  await db.upsert('user_backup_config', {
     username,
-    configData.enabled ? 1 : 0,
-    configData.schedule,
-    configData.sendEmail ? 1 : 0,
-    configData.emailAddress,
-    configData.webdavUrl,
-    configData.webdavUsername,
-    configData.webdavPassword,
-    configData.includeAttachments ? 1 : 0,
-    configData.includeCalendar !== undefined ? (configData.includeCalendar ? 1 : 0) : 1,
-    configData.includeTodos !== undefined ? (configData.includeTodos ? 1 : 0) : 1,
-    configData.includeContacts !== undefined ? (configData.includeContacts ? 1 : 0) : 1,
-    configData.includeReminders !== undefined ? (configData.includeReminders ? 1 : 0) : 1,
-    Math.floor(Date.now() / 1000)
-  ]);
+    enabled: configData.enabled ? 1 : 0,
+    schedule: configData.schedule,
+    sendEmail: configData.sendEmail ? 1 : 0,
+    emailAddress: configData.emailAddress,
+    webdavUrl: configData.webdavUrl,
+    webdavUsername: configData.webdavUsername,
+    webdavPassword: configData.webdavPassword,
+    includeAttachments: configData.includeAttachments ? 1 : 0,
+    includeCalendar: configData.includeCalendar !== undefined ? (configData.includeCalendar ? 1 : 0) : 1,
+    includeTodos: configData.includeTodos !== undefined ? (configData.includeTodos ? 1 : 0) : 1,
+    includeContacts: configData.includeContacts !== undefined ? (configData.includeContacts ? 1 : 0) : 1,
+    includeReminders: configData.includeReminders !== undefined ? (configData.includeReminders ? 1 : 0) : 1,
+    updatedAt: Math.floor(Date.now() / 1000)
+  }, [
+    'enabled',
+    'schedule',
+    'sendEmail',
+    'emailAddress',
+    'webdavUrl',
+    'webdavUsername',
+    'webdavPassword',
+    'includeAttachments',
+    'includeCalendar',
+    'includeTodos',
+    'includeContacts',
+    'includeReminders',
+    'updatedAt'
+  ], ['username']);
 
   log('INFO', '用户备份配置已更新', { username, enabled: configData.enabled });
 }
@@ -337,8 +330,7 @@ function setupUserBackupCron(username, backupConfig) {
  * 更新用户最后备份时间
  */
 async function updateUserBackupTime(username) {
-  const db = getConnection();
-  await db.run(
+  await db.execute(
     'UPDATE user_backup_config SET lastBackupTime = ?, updatedAt = ? WHERE username = ?',
     [Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), username]
   );

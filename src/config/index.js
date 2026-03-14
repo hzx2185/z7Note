@@ -21,6 +21,11 @@ const config = {
   port: parseInt(process.env.PORT) || 80,
   host: process.env.HOST || '0.0.0.0',
 
+  // 数据库配置
+  database: {
+    dialect: (process.env.DB_DIALECT || 'sqlite').trim().toLowerCase()
+  },
+
   // Cookie配置
   cookieName: 'z7note_user_session',
   cookieMaxAge: 2592000000, // 30天
@@ -44,7 +49,7 @@ const config = {
   // 分片上传配置
   chunkUpload: {
     enabled: process.env.CHUNK_UPLOAD_ENABLED !== 'false',
-    chunkSize: parseInt(process.env.CHUNK_SIZE) || 5,
+    chunkSize: parseInt(process.env.CHUNK_SIZE) || 1,
     maxRetries: parseInt(process.env.CHUNK_MAX_RETRIES) || 3,
   },
 
@@ -91,15 +96,6 @@ const config = {
     uploadMax: parseInt(process.env.UPLOAD_RATE_LIMIT) || 20
   },
   
-  // SMTP配置
-  smtp: {
-    host: process.env.SMTP_HOST || 'localhost',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || ''
-  },
-
   // CalDAV配置
   caldav: {
     enabled: process.env.CALDAV_ENABLED !== 'false',
@@ -131,8 +127,8 @@ const config = {
   
   // 验证必需的环境变量
   validateEnv() {
-    if (!process.env.SMTP_HOST) {
-      console.warn('⚠️  警告: 缺少 SMTP 邮箱配置，邮件功能将无法正常工作');
+    if (!['sqlite'].includes(this.database.dialect)) {
+      throw new Error(`不支持的 DB_DIALECT: ${this.database.dialect}`);
     }
   }
 };

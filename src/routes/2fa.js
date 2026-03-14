@@ -3,7 +3,7 @@ const express = require('express');
 const { authenticator } = require('otplib');
 const qrcode = require('qrcode');
 const crypto = require('crypto');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -28,8 +28,7 @@ function generateBackupCodes(count = 8) {
  */
 router.get('/status', async (req, res) => {
     try {
-        const db = getConnection();
-        const user = await db.get('SELECT tfa_enabled, tfa_secret, tfa_backup_codes FROM users WHERE username = ?', [req.user]);
+        const user = await db.queryOne('SELECT tfa_enabled, tfa_secret, tfa_backup_codes FROM users WHERE username = ?', [req.user]);
 
         if (!user) {
             return res.status(404).json({ message: '用户不存在' });
@@ -57,10 +56,7 @@ router.get('/status', async (req, res) => {
  */
 router.post('/setup', async (req, res) => {
     try {
-        const db = getConnection();
-        
-        // 先检查用户是否已有 tfa_secret
-        const existingUser = await db.get('SELECT tfa_secret FROM users WHERE username = ?', [req.user]);
+        const existingUser = await db.queryOne('SELECT tfa_secret FROM users WHERE username = ?', [req.user]);
         if (!existingUser) {
             return res.status(404).json({ message: '用户不存在' });
         }
@@ -70,7 +66,7 @@ router.post('/setup', async (req, res) => {
         // 只有在用户没有 tfa_secret 时才生成新的
         if (!secret) {
             secret = authenticator.generateSecret();
-            await db.run('UPDATE users SET tfa_secret = ? WHERE username = ?', [secret, req.user]);
+            await db.execute('UPDATE users SET tfa_secret = ? WHERE username = ?', [secret, req.user]);
         }
 
         const otpAuthUrl = authenticator.keyuri(req.user, 'z7note', secret);
@@ -99,8 +95,7 @@ router.post('/enable', async (req, res) => {
     }
 
     try {
-        const db = getConnection();
-        const user = await db.get('SELECT tfa_secret, tfa_enabled FROM users WHERE username = ?', [req.user]);
+        const user = await db.queryOne('SELECT tfa_secret, tfa_enabled FROM users WHERE username = ?', [req.user]);
 
         if (!user || !user.tfa_secret) {
             return res.status(400).json({ message: '2FA未设置或密钥丢失' });
@@ -127,7 +122,7 @@ router.post('/enable', async (req, res) => {
             const backupCodesJson = JSON.stringify(backupCodes);
             
             // 更新用户记录
-            await db.run(
+            await db.execute(
                 'UPDATE users SET tfa_enabled = 1, tfa_backup_codes = ? WHERE username = ?', 
                 [backupCodesJson, req.user]
             );
@@ -148,9 +143,7 @@ router.post('/enable', async (req, res) => {
  */
 router.post('/disable', async (req, res) => {
     try {
-        const db = getConnection();
-        // 同时禁用并清空密钥和备用代码
-        await db.run(
+        await db.execute(
             'UPDATE users SET tfa_enabled = 0, tfa_secret = NULL, tfa_backup_codes = NULL WHERE username = ?', 
             [req.user]
         );
@@ -167,8 +160,7 @@ router.post('/disable', async (req, res) => {
  */
 router.post('/refresh-backup-codes', async (req, res) => {
     try {
-        const db = getConnection();
-        const user = await db.get('SELECT tfa_enabled FROM users WHERE username = ?', [req.user]);
+        const user = await db.queryOne('SELECT tfa_enabled FROM users WHERE username = ?', [req.user]);
         
         if (!user || !user.tfa_enabled) {
             return res.status(400).json({ message: '2FA未启用' });
@@ -177,7 +169,7 @@ router.post('/refresh-backup-codes', async (req, res) => {
         const backupCodes = generateBackupCodes();
         const backupCodesJson = JSON.stringify(backupCodes);
         
-        await db.run(
+        await db.execute(
             'UPDATE users SET tfa_backup_codes = ? WHERE username = ?', 
             [backupCodesJson, req.user]
         );

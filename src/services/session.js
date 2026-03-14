@@ -1,5 +1,5 @@
 const config = require('../config');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { genToken } = require('../utils/helpers');
 
 function resolveCookieDomain(req) {
@@ -19,7 +19,7 @@ function resolveCookieDomain(req) {
   }
 
   if (requestHost.endsWith(`.${cookieDomain}`)) {
-    return undefined;
+    return config.cookieDomain;
   }
 
   return undefined;
@@ -47,12 +47,11 @@ function clearSessionCookie(req, res) {
 }
 
 async function createSession(username) {
-  const db = getConnection();
   const sessionId = genToken(48);
   const now = Date.now();
   const expiresAt = now + config.cookieMaxAge;
 
-  await db.run(
+  await db.execute(
     `INSERT INTO user_sessions (id, username, createdAt, expiresAt, lastSeenAt)
      VALUES (?, ?, ?, ?, ?)`,
     [sessionId, username, now, expiresAt, now]
@@ -66,8 +65,7 @@ async function getSession(sessionId) {
     return null;
   }
 
-  const db = getConnection();
-  const session = await db.get(
+  const session = await db.queryOne(
     'SELECT id, username, expiresAt FROM user_sessions WHERE id = ?',
     [sessionId]
   );
@@ -89,7 +87,7 @@ async function destroySession(sessionId) {
     return;
   }
 
-  await getConnection().run('DELETE FROM user_sessions WHERE id = ?', [sessionId]);
+  await db.execute('DELETE FROM user_sessions WHERE id = ?', [sessionId]);
 }
 
 async function destroyUserSessions(username) {
@@ -97,7 +95,7 @@ async function destroyUserSessions(username) {
     return;
   }
 
-  await getConnection().run('DELETE FROM user_sessions WHERE username = ?', [username]);
+  await db.execute('DELETE FROM user_sessions WHERE username = ?', [username]);
 }
 
 module.exports = {

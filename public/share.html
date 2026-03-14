@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/cdn/github-markdown.min.css">
     <link rel="stylesheet" href="/cdn/highlight-light.min.css">
     <script src="/cdn/marked.min.js" defer></script>
+    <script src="/cdn/dompurify.min.js" defer></script>
     <script src="/cdn/highlight.min.js" defer></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -461,7 +462,15 @@
             content = content.replace(/\[([^\]]+)\]\(\/api\/uploads\/([^)]+)\)/g,
                 (_, alt, path) => `[${alt}](/api/share/attachment/${encodeURIComponent(token)}/${encodeURIComponent(path)})`);
 
-            document.getElementById('content').innerHTML = marked.parse(content);
+            let html = marked.parse(content);
+            if (typeof DOMPurify !== 'undefined') {
+                html = DOMPurify.sanitize(html, {
+                    ALLOWED_TAGS: ['a', 'b', 'i', 'em', 'strong', 'code', 'pre', 'p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'br', 'hr', 'input', 'del', 's', 'u', 'sup', 'sub'],
+                    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'name', 'type', 'checked', 'disabled', 'width', 'height', 'target', 'rel'],
+                    ALLOW_DATA_ATTR: false
+                });
+            }
+            document.getElementById('content').innerHTML = html;
             document.getElementById('content').classList.add('markdown-body');
 
             // 代码高亮

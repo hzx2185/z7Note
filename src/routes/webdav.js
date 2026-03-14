@@ -4,7 +4,7 @@
  */
 
 const express = require('express');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const { basicAuthMiddleware } = require('../middleware/basicAuth');
 const log = require('../utils/logger');
 const crypto = require('crypto');
@@ -108,13 +108,12 @@ ${propXml}</D:prop>
 
 // 辅助：查找笔记
 async function findNote(username, filename) {
-  const db = getConnection();
   const titleWithoutMd = filename.replace(/\.md$/i, '');
   // 1. 全名匹配
-  let note = await db.get('SELECT * FROM notes WHERE username = ? AND title = ? AND deleted = 0', [username, filename]);
+  let note = await db.queryOne('SELECT * FROM notes WHERE username = ? AND title = ? AND deleted = 0', [username, filename]);
   if (note) return note;
   // 2. 无后缀匹配
-  return await db.get('SELECT * FROM notes WHERE username = ? AND title = ? AND deleted = 0', [username, titleWithoutMd]);
+  return await db.queryOne('SELECT * FROM notes WHERE username = ? AND title = ? AND deleted = 0', [username, titleWithoutMd]);
 }
 
 // 全局中间件
@@ -175,7 +174,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
         let responses = [createResponseXml(`${req.baseUrl}/${username}/`, { resourcetype: 'collection', displayname: username })];
 
         if (depth === '1' || depth === 'infinity') {
-          const notes = await getConnection().all('SELECT title, updatedAt, content FROM notes WHERE username = ? AND deleted = 0', [username]);
+          const notes = await db.queryAll('SELECT title, updatedAt, content FROM notes WHERE username = ? AND deleted = 0', [username]);
           log('INFO', 'WebDAV PROPFIND depth=' + depth, { username, notesCount: notes.length });
           notes.forEach(note => {
             const displayTitle = note.title || 'Untitled';
@@ -393,23 +392,23 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       const cleanTitle = filename.replace(/\.md$/i, '');
 
       if (note) {
-        await getConnection().run('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?', [contentStr, now, note.id, username]);
+        await db.execute('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?', [contentStr, now, note.id, username]);
         // 通知 WebSocket 客户端
-        const updatedNote = await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ?', [note.id, username]);
+        const updatedNote = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [note.id, username]);
         if (updatedNote) {
           log('INFO', 'WebDAV 准备广播笔记更新', { noteId: updatedNote.id, title: updatedNote.title });
-          broadcastNoteUpdate(updatedNote);
+          broadcastNoteUpdate(username, updatedNote);
         }
         res.setHeader('ETag', `"${now}"`);
         return res.status(204).end(); // 204 No Content (Standard for update)
       } else {
         const id = 'note_' + crypto.randomBytes(8).toString('hex');
-        await getConnection().run('INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)', [id, username, cleanTitle, contentStr, now]);
+        await db.execute('INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)', [id, username, cleanTitle, contentStr, now]);
         // 通知 WebSocket 客户端
-        const newNote = await getConnection().get('SELECT * FROM notes WHERE id = ? AND username = ?', [id, username]);
+        const newNote = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [id, username]);
         if (newNote) {
           log('INFO', 'WebDAV 准备广播新笔记', { noteId: newNote.id, title: newNote.title });
-          broadcastNoteUpdate(newNote);
+          broadcastNoteUpdate(username, newNote);
         }
         res.setHeader('ETag', `"${now}"`);
         return res.status(201).end(); // 201 Created
@@ -418,9 +417,9 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
 
     if (method === 'DELETE') {
       if (note) {
-        await getConnection().run('UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?', [Math.floor(Date.now() / 1000), note.id, username]);
+        await db.execute('UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?', [Math.floor(Date.now() / 1000), note.id, username]);
         // 通知 WebSocket 客户端
-        broadcastNoteDelete(note.id);
+        broadcastNoteDelete(username, note.id);
       }
       return res.status(204).end();
     }

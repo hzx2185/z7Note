@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const nodeFs = require('fs');
 const { sendMail } = require('./mailer');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const config = require('../config');
 const log = require('../utils/logger');
 const WebDAVHelper = require('../utils/webdavHelper');
@@ -188,23 +188,35 @@ function setupCron(configObj) {
 }
 
 async function getBackupConfig() {
-  const db = getConnection();
-  const config = await db.get('SELECT * FROM backup_config WHERE id = 1');
-  return config || {};
+  const backupConfig = await db.queryOne('SELECT * FROM backup_config WHERE id = 1');
+  return backupConfig || {};
 }
 
 async function updateBackupConfig(configData) {
-  const db = getConnection();
-  await db.run(`INSERT INTO backup_config (id, schedule, includeAttachments, backupMode, sendEmail, emailAddress, useWebDAV, webdavUrl, webdavUser, webdavPassword, keepCount)
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET 
-    schedule=excluded.schedule, includeAttachments=excluded.includeAttachments, backupMode=excluded.backupMode,
-    sendEmail=excluded.sendEmail, emailAddress=excluded.emailAddress, useWebDAV=excluded.useWebDAV, 
-    webdavUrl=excluded.webdavUrl, webdavUser=excluded.webdavUser, webdavPassword=excluded.webdavPassword,
-    keepCount=excluded.keepCount`, 
-    [configData.schedule || 'none', configData.includeAttachments?1:0, configData.backupMode || 'incremental', 
-     configData.sendEmail?1:0, configData.emailAddress || '', configData.useWebDAV?1:0, 
-     configData.webdavUrl || '', configData.webdavUser || '', configData.webdavPassword || '',
-     parseInt(configData.keepCount) || 0]);
+  await db.upsert('backup_config', {
+    id: 1,
+    schedule: configData.schedule || 'none',
+    includeAttachments: configData.includeAttachments ? 1 : 0,
+    backupMode: configData.backupMode || 'incremental',
+    sendEmail: configData.sendEmail ? 1 : 0,
+    emailAddress: configData.emailAddress || '',
+    useWebDAV: configData.useWebDAV ? 1 : 0,
+    webdavUrl: configData.webdavUrl || '',
+    webdavUser: configData.webdavUser || '',
+    webdavPassword: configData.webdavPassword || '',
+    keepCount: parseInt(configData.keepCount) || 0
+  }, [
+    'schedule',
+    'includeAttachments',
+    'backupMode',
+    'sendEmail',
+    'emailAddress',
+    'useWebDAV',
+    'webdavUrl',
+    'webdavUser',
+    'webdavPassword',
+    'keepCount'
+  ], ['id']);
   
   const newConfig = await getBackupConfig();
   setupCron(newConfig);

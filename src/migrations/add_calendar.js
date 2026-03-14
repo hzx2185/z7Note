@@ -1,6 +1,7 @@
 /**
  * 数据库迁移 - 添加日历和待办功能表
  */
+const { SQLITE_DEFAULTS } = require('../db/schema/sqlite-defaults');
 
 module.exports = {
     version: 2,
@@ -18,8 +19,8 @@ module.exports = {
             priority INTEGER DEFAULT 1,
             dueDate INTEGER,
             noteId TEXT,
-            createdAt INTEGER DEFAULT (strftime('%s', 'now')),
-            updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
+            createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+            updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
         )`);
 
         // 创建日历事件表
@@ -33,8 +34,8 @@ module.exports = {
             allDay INTEGER DEFAULT 0,
             color TEXT DEFAULT '#2563eb',
             noteId TEXT,
-            createdAt INTEGER DEFAULT (strftime('%s', 'now')),
-            updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
+            createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+            updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
         )`);
 
         // 创建索引优化查询性能

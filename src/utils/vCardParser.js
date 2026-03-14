@@ -4,6 +4,65 @@
    */
 
   class VCardParser {
+    static normalizeWhitespace(text) {
+      return (text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    static compactName(text) {
+      return this.normalizeWhitespace(text).replace(/\s+/g, '');
+    }
+
+    static containsCJK(text) {
+      return /[\u3400-\u9fff\uf900-\ufaff]/.test(text || '');
+    }
+
+    static isLikelyCJKStructuredName(contact) {
+      return this.containsCJK(contact.n_family) && this.containsCJK(contact.n_given);
+    }
+
+    static buildStructuredDisplayName(contact) {
+      const family = contact.n_family || '';
+      const given = contact.n_given || '';
+      const middle = contact.n_middle || '';
+      const prefix = contact.n_prefix || '';
+      const suffix = contact.n_suffix || '';
+
+      if (!family && !given && !middle && !prefix && !suffix) {
+        return '';
+      }
+
+      if (this.isLikelyCJKStructuredName(contact)) {
+        return `${prefix}${family}${given}${middle}${suffix}`.trim();
+      }
+
+      return this.normalizeWhitespace([prefix, given, middle, family, suffix].filter(Boolean).join(' '));
+    }
+
+    static normalizeFormattedName(contact) {
+      const structuredDisplay = this.buildStructuredDisplayName(contact);
+      const formattedName = this.normalizeWhitespace(contact.fn);
+
+      if (!formattedName) {
+        return structuredDisplay;
+      }
+
+      if (!structuredDisplay) {
+        return formattedName;
+      }
+
+      if (this.isLikelyCJKStructuredName(contact)) {
+        const compactFormatted = this.compactName(formattedName);
+        const compactStructured = this.compactName(structuredDisplay);
+        const compactReverse = this.compactName(`${contact.n_given || ''}${contact.n_family || ''}${contact.n_middle || ''}`);
+
+        if (compactFormatted === compactReverse || compactFormatted === compactStructured) {
+          return structuredDisplay;
+        }
+      }
+
+      return formattedName;
+    }
+
     /**
      * 解析 vCard 内容为联系人对象
      */
@@ -121,6 +180,8 @@
             break;
         }
       }
+
+      contact.fn = this.normalizeFormattedName(contact);
 
       // 将数组转换为 JSON 字符串存储
       if (contact.tel.length === 0) delete contact.tel;

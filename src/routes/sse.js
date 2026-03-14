@@ -1,5 +1,4 @@
 // SSE 路由 - 实现实时笔记同步通知
-const { getConnection } = require('../db/connection');
 const log = require('../utils/logger');
 
 // 存储每个用户的 SSE 连接

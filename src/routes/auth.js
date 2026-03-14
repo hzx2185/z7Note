@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticator } = require('otplib');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const config = require('../config');
 const { sanitizeInput, validateUsername, validateEmail, validatePassword } = require('../utils/validators');
 const { sendMail } = require('../services/mailer');
@@ -12,6 +12,22 @@ const { emailVerifyRateLimit } = require('../middleware/rateLimit');
 const { createSession, destroySession, destroyUserSessions, getSessionCookieOptions, clearSessionCookie } = require('../services/session');
 
 const router = express.Router();
+
+function normalizeEmail(email) {
+  return sanitizeInput(email, 255).toLowerCase();
+}
+
+async function getUsersByEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return [];
+  }
+
+  return db.queryAll(
+    'SELECT * FROM users WHERE LOWER(email) = LOWER(?)',
+    [normalizedEmail]
+  );
+}
 
 // 注册
 router.post('/api/register', async (req, res) => {
@@ -30,7 +46,7 @@ router.post('/api/register', async (req, res) => {
     const sanitizedUser = sanitizeInput(user, 20);
     const hashedPassword = await bcrypt.hash(sanitizeInput(pass, 100), 10);
     const isTargetAdmin = config.adminUsers.includes(sanitizedUser);
-    await getConnection().run('INSERT INTO users (username, password, noteLimit, fileLimit) VALUES (?, ?, ?, ?)',
+    await db.execute('INSERT INTO users (username, password, noteLimit, fileLimit) VALUES (?, ?, ?, ?)',
       [sanitizedUser, hashedPassword, isTargetAdmin ? 1000 : config.defaultNoteLimit, 
        isTargetAdmin ? 5000 : config.defaultFileLimit]);
     const session = await createSession(sanitizedUser);
@@ -55,8 +71,15 @@ router.post('/api/login', async (req, res) => {
     }
 
     const sanitizedUser = sanitizeInput(user, 50);
-    const row = await getConnection().get('SELECT * FROM users WHERE username = ? OR email = ?', 
-      [sanitizedUser, sanitizedUser]);
+    let row = await db.queryOne('SELECT * FROM users WHERE username = ?', [sanitizedUser]);
+
+    if (!row) {
+      const matchedUsers = await getUsersByEmail(sanitizedUser);
+      if (matchedUsers.length > 1) {
+        return res.status(409).json({ error: "该邮箱绑定了多个账户，请改用用户名登录并尽快清理重复邮箱" });
+      }
+      row = matchedUsers[0];
+    }
 
     if (row && await bcrypt.compare(sanitizeInput(pass, 100), row.password)) {
       // 密码正确，检查是否需要2FA
@@ -88,8 +111,7 @@ router.post('/api/verify-tfa', async (req, res) => {
     const username = decoded.username;
 
     // 获取用户2FA密钥和备用代码
-    const db = getConnection();
-    const user = await db.get('SELECT tfa_secret, tfa_backup_codes FROM users WHERE username = ? AND tfa_enabled = 1', [username]);
+    const user = await db.queryOne('SELECT tfa_secret, tfa_backup_codes FROM users WHERE username = ? AND tfa_enabled = 1', [username]);
 
     if (!user || !user.tfa_secret) {
       return res.status(401).json({ error: '无法验证2FA，请重新登录' });
@@ -106,7 +128,7 @@ router.post('/api/verify-tfa', async (req, res) => {
         if (codeIndex !== -1) {
           // 找到备用代码，从列表中移除已使用的代码
           backupCodes.splice(codeIndex, 1);
-          await db.run(
+          await db.execute(
             'UPDATE users SET tfa_backup_codes = ? WHERE username = ?',
             [JSON.stringify(backupCodes), username]
           );
@@ -169,15 +191,25 @@ router.post('/api/logout', async (req, res) => {
 // 发送绑定邮箱验证码
 router.post('/api/send-bind-code', async (req, res) => {
   const { email } = req.body;
-  if (!email || !email.includes('@')) return res.status(400).json({ error: "无效邮箱" });
+  const normalizedEmail = normalizeEmail(email);
+  if (!req.user) return res.status(401).json({ error: "会话已过期，请重新登录" });
+  if (!validateEmail(normalizedEmail)) return res.status(400).json({ error: "无效邮箱" });
   const token = Math.floor(100000 + Math.random() * 900000).toString();
   const expires = Date.now() + 600000;
   try {
-    await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
-    await getConnection().run('INSERT INTO reset_tokens (email, token, expires) VALUES (?, ?, ?)', 
-      [email, token, expires]);
+    const existingUser = await db.queryOne(
+      'SELECT username FROM users WHERE LOWER(email) = LOWER(?) AND username != ?',
+      [normalizedEmail, req.user]
+    );
+    if (existingUser) {
+      return res.status(409).json({ error: "该邮箱已被其他账户绑定" });
+    }
+
+    await db.execute('DELETE FROM reset_tokens WHERE email = ?', [normalizedEmail]);
+    await db.execute('INSERT INTO reset_tokens (email, token, expires) VALUES (?, ?, ?)', 
+      [normalizedEmail, token, expires]);
     await sendMail({
-      to: email,
+      to: normalizedEmail,
       subject: "绑定邮箱验证码",
       text: `您的验证码是 ${token}，10分钟内有效。`
     });
@@ -209,18 +241,22 @@ router.post('/api/verify-bind-email', emailVerifyRateLimit, async (req, res) => 
   const startTime = Date.now();
   try {
     const { email, token } = req.body;
+    const normalizedEmail = normalizeEmail(email);
     if (!req.user) {
       return res.status(401).json({ error: "会话已过期，请重新登录" });
     }
 
-    if (!email || !token) {
+    if (!normalizedEmail || !token) {
       return res.status(400).json({ error: "邮箱和验证码不能为空" });
+    }
+    if (!validateEmail(normalizedEmail)) {
+      return res.status(400).json({ error: "邮箱格式不正确" });
     }
 
     // 使用重试机制查询验证码
     const record = await retryDbOperation(async () => {
-      return await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?',
-        [email, token]);
+      return db.queryOne('SELECT * FROM reset_tokens WHERE email = ? AND token = ?',
+        [normalizedEmail, token]);
     });
     
     if (!record) {
@@ -234,35 +270,32 @@ router.post('/api/verify-bind-email', emailVerifyRateLimit, async (req, res) => 
 
     // 使用事务和重试机制更新用户邮箱
     await retryDbOperation(async () => {
-      const db = getConnection();
-      await db.run('BEGIN TRANSACTION');
-      try {
-        // 更新用户邮箱
-        await db.run('UPDATE users SET email = ? WHERE username = ?', [email, req.user]);
-
-        // 成功后删除验证码
-        await db.run('DELETE FROM reset_tokens WHERE email = ? AND token = ?', [email, token]);
-
-        await db.run('COMMIT');
-      } catch (e) {
-        try {
-          await db.run('ROLLBACK');
-        } catch (rollbackError) {
-          log('ERROR', '事务回滚失败', { error: rollbackError.message });
+      await db.withTransaction(async (tx) => {
+        const existingUser = await tx.queryOne(
+          'SELECT username FROM users WHERE LOWER(email) = LOWER(?) AND username != ?',
+          [normalizedEmail, req.user]
+        );
+        if (existingUser) {
+          throw new Error('EMAIL_ALREADY_BOUND');
         }
-        throw e;
-      }
+
+        await tx.execute('UPDATE users SET email = ? WHERE username = ?', [normalizedEmail, req.user]);
+
+        await tx.execute('DELETE FROM reset_tokens WHERE email = ? AND token = ?', [normalizedEmail, token]);
+      });
     });
     
     const duration = Date.now() - startTime;
-    log('INFO', '用户绑定邮箱成功', { username: req.user, email, duration: `${duration}ms` });
+    log('INFO', '用户绑定邮箱成功', { username: req.user, email: normalizedEmail, duration: `${duration}ms` });
     res.status(200).json({ status: "ok" });
   } catch (e) {
     const duration = Date.now() - startTime;
     log('ERROR', '验证并绑定邮箱异常', { username: req.user, error: e.message, stack: e.stack, duration: `${duration}ms` });
     if (!res.headersSent) {
       // 根据错误类型返回不同的错误信息
-      if (e.code === 'SQLITE_BUSY' || e.message?.includes('database is locked')) {
+      if (e.message === 'EMAIL_ALREADY_BOUND') {
+        res.status(409).json({ error: "该邮箱已被其他账户绑定" });
+      } else if (e.code === 'SQLITE_BUSY' || e.message?.includes('database is locked')) {
         res.status(503).json({ error: "系统繁忙，请稍后再试" });
       } else {
         res.status(500).json({ error: "系统繁忙，请稍后再试" });
@@ -273,17 +306,23 @@ router.post('/api/verify-bind-email', emailVerifyRateLimit, async (req, res) => 
 
 // 忘记密码
 router.post('/api/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  const user = await getConnection().get('SELECT username FROM users WHERE email = ?', [email]);
-  if (!user) return res.status(404).json({ error: "该邮箱未绑定账户" });
+  const normalizedEmail = normalizeEmail(req.body.email);
+  if (!validateEmail(normalizedEmail)) {
+    return res.status(400).json({ error: "无效邮箱" });
+  }
+
+  const users = await getUsersByEmail(normalizedEmail);
+  if (users.length === 0) return res.status(404).json({ error: "该邮箱未绑定账户" });
+  if (users.length > 1) return res.status(409).json({ error: "该邮箱绑定了多个账户，请联系管理员处理" });
+
   const token = Math.floor(100000 + Math.random() * 900000).toString();
   const expires = Date.now() + 600000;
   try {
-    await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
-    await getConnection().run('INSERT INTO reset_tokens (email, token, expires) VALUES (?, ?, ?)', 
-      [email, token, expires]);
+    await db.execute('DELETE FROM reset_tokens WHERE email = ?', [normalizedEmail]);
+    await db.execute('INSERT INTO reset_tokens (email, token, expires) VALUES (?, ?, ?)', 
+      [normalizedEmail, token, expires]);
     await sendMail({
-      to: email,
+      to: normalizedEmail,
       subject: "密码重置验证码",
       text: `验证码：${token}`
     });
@@ -294,8 +333,9 @@ router.post('/api/forgot-password', async (req, res) => {
 // 重置密码
 router.post('/api/reset-password', async (req, res) => {
   const { email, token, newPass } = req.body;
-  const record = await getConnection().get('SELECT * FROM reset_tokens WHERE email = ? AND token = ?', 
-    [email, token]);
+  const normalizedEmail = normalizeEmail(email);
+  const record = await db.queryOne('SELECT * FROM reset_tokens WHERE email = ? AND token = ?', 
+    [normalizedEmail, token]);
   if (!record || record.expires < Date.now()) {
     return res.status(400).json({ error: "验证码无效或已过期" });
   }
@@ -305,8 +345,18 @@ router.post('/api/reset-password', async (req, res) => {
   }
   
   const hashedPassword = await bcrypt.hash(newPass, 10);
-  await getConnection().run('UPDATE users SET password = ? WHERE email = ?', [hashedPassword, email]);
-  await getConnection().run('DELETE FROM reset_tokens WHERE email = ?', [email]);
+  const users = await getUsersByEmail(normalizedEmail);
+  if (users.length === 0) {
+    await db.execute('DELETE FROM reset_tokens WHERE email = ?', [normalizedEmail]);
+    return res.status(404).json({ error: "该邮箱未绑定账户" });
+  }
+  if (users.length > 1) {
+    return res.status(409).json({ error: "该邮箱绑定了多个账户，请联系管理员处理" });
+  }
+
+  await db.execute('UPDATE users SET password = ? WHERE username = ?', [hashedPassword, users[0].username]);
+  await destroyUserSessions(users[0].username);
+  await db.execute('DELETE FROM reset_tokens WHERE email = ?', [normalizedEmail]);
   res.json({ status: "ok" });
 });
 
@@ -324,7 +374,7 @@ router.post('/api/change-password', async (req, res) => {
     }
     
     // 获取当前用户
-    const user = await getConnection().get('SELECT * FROM users WHERE username = ?', [req.user]);
+    const user = await db.queryOne('SELECT * FROM users WHERE username = ?', [req.user]);
     
     if (!user) {
       return res.status(404).json({ error: "用户不存在" });
@@ -338,7 +388,7 @@ router.post('/api/change-password', async (req, res) => {
     
     // 更新新密码
     const hashedNewPassword = await bcrypt.hash(newPass, 10);
-    await getConnection().run('UPDATE users SET password = ? WHERE username = ?', [hashedNewPassword, req.user]);
+    await db.execute('UPDATE users SET password = ? WHERE username = ?', [hashedNewPassword, req.user]);
     await destroyUserSessions(req.user);
 
     const session = await createSession(req.user);

@@ -2,21 +2,21 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>联系人 - z7Note</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>?v=20250312-FINAL-FIX">
   <link rel="stylesheet" href="/css/app.css">
   <style>
     :root { --row-h: 32px; }
-    body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; font-size: 13px; }
-    .main { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 12px; gap: 12px; margin-top: 40px; }
+    body { background: var(--bg); color: var(--text); min-height: 100dvh; height: auto; display: flex; flex-direction: column; font-size: 13px; margin: 0; }
+    .main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 12px; gap: 12px; margin-top: 40px; }
     .toolbar { display: flex; gap: 8px; align-items: center; background: var(--side); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); }
     .search-input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; transition: border-color 0.2s; }
     .search-input:focus { border-color: var(--accent); }
     #pagination { display: none; gap: 6px; align-items: center; }
     #pagination.show { display: flex; }
 
-    .table-container { flex: 1; background: var(--side); border: 1px solid var(--border); border-radius: 6px; overflow: auto; }
+    .table-container { flex: 1; min-height: 0; background: var(--side); border: 1px solid var(--border); border-radius: 6px; overflow: auto; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th { position: sticky; top: 0; background: var(--side); z-index: 10; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--gray); font-size: 12px; font-weight: 600; }
     td { padding: 4px 10px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: var(--row-h); }
@@ -30,7 +30,16 @@
     .col-email { width: 150px; }
     .col-org { width: 120px; }
 
-    @media (max-width: 600px) { .col-org, .col-email { display: none; } .col-tel { width: auto; } .header b span { display: none; } .main { padding: 4px; } }
+    @media (max-width: 600px) {
+      body { min-height: 100dvh; overflow-y: auto; }
+      .col-org, .col-email { display: none; }
+      .col-tel { width: auto; }
+      .header b span { display: none; }
+      .main { overflow: auto; padding: 4px 4px calc(12px + env(safe-area-inset-bottom)); }
+      .table-container { flex: 1 1 auto; min-height: 240px; }
+      .modal-content { width: min(100vw - 16px, 440px) !important; max-height: calc(100dvh - 16px); }
+      .modal-body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    }
 
     /* 表单与通用模态框样式 */
     .form-group { margin-bottom: 12px; }
@@ -47,6 +56,17 @@
     .dup-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
     .hl { color: var(--accent); font-weight: bold; }
     .col-sel { width: 28px; flex-shrink: 0; text-align: center; }
+    #import-modal .modal-content { max-width: 340px; }
+    #import-modal .modal-body { display: flex; flex-direction: column; gap: 10px; }
+    #import-modal .form-hint { font-size: 12px; color: var(--gray); margin: 0; }
+    #vcard-text { width: 100%; min-height: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-family: monospace; font-size: 12px; line-height: 1.5; resize: vertical; outline: none; box-sizing: border-box; }
+    #vcard-text:focus { border-color: var(--accent); }
+    #import-file { width: 100%; font-size: 12px; color: var(--gray); }
+    #confirm-modal .modal-actions { display: flex; justify-content: center; align-items: center; width: 100%; }
+    #confirm-modal .modal-actions .btn { flex: 1; min-width: 0; }
+    #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(15,23,42,0.92); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 12px; z-index: 1200; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; max-width: min(90vw, 420px); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+    #toast.show { opacity: 1; }
+    #toast.error { background: rgba(185,28,28,0.96); }
   </style>
 </head>
 <body>
@@ -119,9 +139,10 @@
     <div class="modal-content">
       <div class="modal-header"><h3>导入</h3><button onclick="$('import-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <textarea id="vcard-text" placeholder="粘贴 vCard 内容..." rows="5" style="font-family:monospace;font-size:11px"></textarea>
-        <input type="file" accept=".vcf" onchange="readVcf(this)" style="margin-top:6px;font-size:11px">
-        <div class="modal-actions" style="padding:10px 0 0;border:none"><button class="btn btn-primary" style="width:100%" onclick="doImport()">开始导入</button></div>
+        <p class="form-hint">粘贴 vCard 文本，或直接选择 `.vcf` 文件。</p>
+        <textarea id="vcard-text" placeholder="粘贴 vCard 内容..."></textarea>
+        <input id="import-file" type="file" accept=".vcf" onchange="readVcf(this)">
+        <button class="btn btn-primary" style="width:100%" onclick="doImport()">开始导入</button>
       </div>
     </div>
   </div>
@@ -151,17 +172,74 @@
     </div>
   </div>
 
+  <div class="modal" id="confirm-modal">
+    <div class="modal-content" style="max-width:320px">
+      <div class="modal-body" style="padding:20px 16px">
+        <p id="confirm-message" style="margin:0 0 18px;text-align:center;font-weight:500;line-height:1.5"></p>
+        <div class="modal-actions" style="padding:0;border:none;background:transparent;gap:8px;margin-top:0">
+          <button type="button" class="btn btn-secondary" id="confirm-cancel">取消</button>
+          <button type="button" class="btn btn-primary" id="confirm-ok" style="background:var(--red)">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
   <script>
     const $ = id => document.getElementById(id);
     const esc = t => (t||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = 100, total = 0, query = '';
+    let toastTimer = null;
 
     if (localStorage.getItem('p-theme') === 'dark') document.documentElement.classList.add('dark-mode');
 
+    function toast(message, ok = true) {
+      const el = $('toast');
+      if (!el) return;
+      el.textContent = message;
+      el.className = ok ? 'show' : 'show error';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.className = ''; }, 2600);
+    }
+
+    async function requestJSON(url, options = {}, fallbackMessage = '请求失败') {
+      let res;
+      try {
+        res = await fetch(url, { credentials: 'include', ...options });
+      } catch (error) {
+        throw new Error('网络连接失败，请稍后重试');
+      }
+
+      let data = null;
+      const text = await res.text();
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (error) {
+          throw new Error(`${fallbackMessage}，服务器返回了无效响应`);
+        }
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || fallbackMessage);
+      }
+
+      return data;
+    }
+
     async function load() {
-      const res = await fetch(`/api/contacts?limit=${pageSize}&offset=${(page-1)*pageSize}${query?`&search=${encodeURIComponent(query)}`:''}`);
-      const data = await res.json();
-      contacts = data.contacts || []; total = data.total || 0; render();
+      try {
+        const data = await requestJSON(`/api/contacts?limit=${pageSize}&offset=${(page-1)*pageSize}${query?`&search=${encodeURIComponent(query)}`:''}`, {}, '加载联系人失败');
+        contacts = data.contacts || [];
+        total = data.total || 0;
+        render();
+      } catch (error) {
+        contacts = [];
+        total = 0;
+        render();
+        toast(error.message, false);
+      }
     }
 
     function render() {
@@ -181,6 +259,32 @@
       $('page-info').textContent = `${page}/${Math.ceil(total/pageSize) || 1}`;
     }
 
+    function showConfirm(message) {
+      return new Promise(resolve => {
+        const modal = $('confirm-modal');
+        const messageEl = $('confirm-message');
+        const okBtn = $('confirm-ok');
+        const cancelBtn = $('confirm-cancel');
+
+        messageEl.textContent = message;
+        modal.classList.add('show');
+
+        const cleanup = result => {
+          modal.classList.remove('show');
+          okBtn.onclick = null;
+          cancelBtn.onclick = null;
+          modal.onclick = null;
+          resolve(result);
+        };
+
+        okBtn.onclick = () => cleanup(true);
+        cancelBtn.onclick = () => cleanup(false);
+        modal.onclick = event => {
+          if (event.target === modal) cleanup(false);
+        };
+      });
+    }
+
     function onSearch() { clearTimeout(this.t); this.t = setTimeout(() => { query = $('search-input').value; page = 1; load(); }, 300); }
     function changePage(d) { if (page+d > 0 && page+d <= Math.ceil(total/pageSize)) { page += d; load(); } }
     function toggleSel(id, checked) { checked ? selected.add(id) : selected.delete(id); render(); }
@@ -193,14 +297,18 @@
       $('del-contact-btn').style.display = id ? 'block' : 'none';
       $('history-btn').style.display = id ? 'block' : 'none';
       if (id) {
-        const res = await fetch(`/api/contacts/${id}`);
-        const c = await res.json();
-        if (c) {
-          ['n_family','n_given','fn','org','title','note'].forEach(k => {
-            if (f[k]) f[k].value = c[k]||'';
-          });
-          try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
-          try { JSON.parse(c.email||'[]').forEach(m => addItem('email', m.type, m.value)); } catch(e){}
+        try {
+          const c = await requestJSON(`/api/contacts/${id}`, {}, '获取联系人失败');
+          if (c) {
+            ['n_family','n_given','fn','org','title','note'].forEach(k => {
+              if (f[k]) f[k].value = c[k]||'';
+            });
+            try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
+            try { JSON.parse(c.email||'[]').forEach(m => addItem('email', m.type, m.value)); } catch(e){}
+          }
+        } catch (error) {
+          toast(error.message, false);
+          return;
         }
       } else addItem('tel', 'CELL');
       $('edit-modal').classList.add('show');
@@ -226,25 +334,98 @@
         data.tel = data.tel.map(t => ({...t, value: t.value.replace(/[^\d+]/g, '')}));
       }
 
-      const res = await fetch(curId?`/api/contacts/${curId}`:`/api/contacts`,{method:curId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-      if (res.ok) { closeModal(); load(); }
+      try {
+        await requestJSON(curId?`/api/contacts/${curId}`:`/api/contacts`, {
+          method: curId ? 'PUT' : 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(data)
+        }, curId ? '保存联系人失败' : '创建联系人失败');
+        closeModal();
+        await load();
+        toast(curId ? '联系人已保存' : '联系人已创建');
+      } catch (error) {
+        toast(error.message, false);
+      }
     }
 
-    async function deleteSingle() { if (confirm('确定删除此联系人?')) { await fetch(`/api/contacts/${curId}`,{method:'DELETE'}); closeModal(); load(); } }
+    async function deleteSingle() {
+      if (!(await showConfirm('确定删除此联系人?'))) return;
+      try {
+        await requestJSON(`/api/contacts/${curId}`, { method:'DELETE' }, '删除联系人失败');
+        closeModal();
+        selected.delete(curId);
+        await load();
+        toast('联系人已删除');
+      } catch (error) {
+        toast(error.message, false);
+      }
+    }
     async function batchDelete() { 
-      if (!selected.size) return alert('请先选择要删除的联系人');
-      if (confirm(`确定删除选中的 ${selected.size} 个联系人?`)) { await fetch('/api/contacts/batch',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})}); selected.clear(); load(); } 
+      if (!selected.size) return toast('请先选择要删除的联系人', false);
+      if (await showConfirm(`确定删除选中的 ${selected.size} 个联系人?`)) {
+        try {
+          const result = await requestJSON('/api/contacts/batch', {
+            method:'DELETE',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ids:[...selected]})
+          }, '批量删除失败');
+          selected.clear();
+          await load();
+          toast(result?.message || '联系人已删除');
+        } catch (error) {
+          toast(error.message, false);
+        }
+      } 
     }
     async function batchMerge() { 
-      if (selected.size < 2) return alert('请至少选择两个联系人进行合并');
-      if (confirm(`确定合并选中的 ${selected.size} 个联系人?`)) { const ids=[...selected]; await fetch('/api/contacts/merge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keepId:ids[0],mergeIds:ids.slice(1)})}); selected.clear(); load(); }
+      if (selected.size < 2) return toast('请至少选择两个联系人进行合并', false);
+      if (await showConfirm(`确定合并选中的 ${selected.size} 个联系人?`)) {
+        const ids=[...selected];
+        try {
+          const result = await requestJSON('/api/contacts/merge', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({keepId:ids[0],mergeIds:ids.slice(1)})
+          }, '合并联系人失败');
+          selected.clear();
+          await load();
+          toast(result?.message || '联系人已合并');
+        } catch (error) {
+          toast(error.message, false);
+        }
+      }
     }
 
     function readVcf(i) { const f = i.files[0]; if (f) { const r = new FileReader(); r.onload = e => $('vcard-text').value = e.target.result; r.readAsText(f); } }
-    async function doImport() { const v = $('vcard-text').value; if (v.trim()) { const res = await fetch('/api/contacts/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vcard:v})}); if (res.ok) { $('import-modal').classList.remove('show'); $('vcard-text').value=''; load(); } } }
+    async function doImport() {
+      const v = $('vcard-text').value;
+      if (!v.trim()) {
+        toast('请先粘贴 vCard 内容', false);
+        return;
+      }
+      try {
+        const result = await requestJSON('/api/contacts/import', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({vcard:v})
+        }, '导入联系人失败');
+        $('import-modal').classList.remove('show');
+        $('vcard-text').value='';
+        await load();
+        toast(result?.message || '联系人导入成功');
+      } catch (error) {
+        toast(error.message, false);
+      }
+    }
 
     async function smartFindDuplicates() {
-      const data = await (await fetch('/api/contacts/smart-duplicates')).json();
+      let data;
+      try {
+        data = await requestJSON('/api/contacts/smart-duplicates', {}, '查重失败');
+      } catch (error) {
+        toast(error.message, false);
+        return;
+      }
       const allDups = [
         ...data.duplicates.byName.map(g => ({...g, field: '姓名'})),
         ...data.duplicates.byPhone.map(g => ({...g, field: '电话'})),
@@ -281,23 +462,33 @@
           }
         }
       });
-      if (!mergeList.length) return alert('未选中任何组或无需合并');
-      if (confirm(`确定合并 ${mergeList.length} 组联系人?`)) {
-        const res = await fetch('/api/contacts/merge-batch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mergeList }) });
-        if (res.ok) { $('dup-modal').classList.remove('show'); load(); }
+      if (!mergeList.length) return toast('未选中任何组或无需合并', false);
+      if (await showConfirm(`确定合并 ${mergeList.length} 组联系人?`)) {
+        try {
+          const result = await requestJSON('/api/contacts/merge-batch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mergeList }) }, '批量合并失败');
+          $('dup-modal').classList.remove('show');
+          selected.clear();
+          await load();
+          toast(result?.message || '重复联系人已合并');
+        } catch (error) {
+          toast(error.message, false);
+        }
       }
     }
 
     async function showHistory() {
-      const res = await fetch(`/api/contacts/${curId}/history`);
-      const { history } = await res.json();
-      $('history-list').innerHTML = history.map(h => `
+      try {
+        const { history = [] } = await requestJSON(`/api/contacts/${curId}/history`, {}, '获取历史记录失败');
+        $('history-list').innerHTML = history.map(h => `
         <div class="item-card">
           <div style="color:var(--gray);font-size:11px">${new Date(h.created_at).toLocaleString()}</div>
           <div style="margin-top:2px">${esc(h.action === 'update' ? '更新' : '创建')} - ${esc(h.details)}</div>
         </div>
-      `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">无历史记录</div>';
-      $('history-modal').classList.add('show');
+        `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">无历史记录</div>';
+        $('history-modal').classList.add('show');
+      } catch (error) {
+        toast(error.message, false);
+      }
     }
 
     load();

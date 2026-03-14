@@ -1,9 +1,18 @@
 // 添加用户备份配置表
-const { connect, getConnection } = require('../db/connection');
+const { connect, getConnection } = require('../db/sqlite-connection');
+const { SQLITE_DEFAULTS } = require('../db/schema/sqlite-defaults');
 
-async function up() {
+async function resolveDb(executor) {
+  if (executor) {
+    return executor;
+  }
+
   await connect();
-  const db = getConnection();
+  return getConnection();
+}
+
+async function up(executor) {
+  const db = await resolveDb(executor);
   
   await db.exec(`
     CREATE TABLE IF NOT EXISTS user_backup_config (
@@ -17,18 +26,24 @@ async function up() {
       webdavPassword TEXT,
       includeAttachments INTEGER DEFAULT 1,
       lastBackupTime INTEGER DEFAULT 0,
-      createdAt INTEGER DEFAULT (strftime('%s', 'now')),
-      updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
+      createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+      updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
     )
   `);
   
   console.log('[迁移] 用户备份配置表已创建');
 }
 
-async function down() {
-  const db = getConnection();
+async function down(executor) {
+  const db = executor || getConnection();
   await db.exec('DROP TABLE IF EXISTS user_backup_config');
   console.log('[迁移] 用户备份配置表已删除');
 }
 
-module.exports = { up, down };
+module.exports = {
+  version: 11,
+  description: '确保用户备份配置表存在',
+  migrate: up,
+  up,
+  down
+};

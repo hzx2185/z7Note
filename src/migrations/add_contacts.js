@@ -1,6 +1,7 @@
 /**
  * 数据库迁移 - 添加联系人功能表
  */
+const { SQLITE_DEFAULTS } = require('../db/schema/sqlite-defaults');
 
 module.exports = {
     version: 9,
@@ -30,8 +31,8 @@ module.exports = {
             bday TEXT,
             nickname TEXT,
             vcard TEXT,
-            createdAt INTEGER DEFAULT (strftime('%s', 'now')),
-            updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
+            createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+            updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
         )`);
 
         // 创建索引优化查询性能

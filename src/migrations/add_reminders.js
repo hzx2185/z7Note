@@ -1,6 +1,7 @@
 /**
  * 数据库迁移 - 添加提醒功能
  */
+const { SQLITE_DEFAULTS } = require('../db/schema/sqlite-defaults');
 
 module.exports = {
     version: 5,
@@ -23,8 +24,8 @@ module.exports = {
             caldav_reminder_enabled INTEGER DEFAULT 0,
             quiet_start_time TEXT DEFAULT '22:00',
             quiet_end_time TEXT DEFAULT '08:00',
-            createdAt INTEGER DEFAULT (strftime('%s', 'now')),
-            updatedAt INTEGER DEFAULT (strftime('%s', 'now'))
+            createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+            updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
         )`);
 
         // 创建提醒历史表
@@ -38,14 +39,13 @@ module.exports = {
             status TEXT DEFAULT 'pending',  -- 'pending', 'sent', 'failed'
             error_message TEXT,
             sent_at INTEGER,
-            createdAt INTEGER DEFAULT (strftime('%s', 'now'))
+            createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
         )`);
 
         // 为events表添加提醒相关字段
-        const tableInfo = await db.all("PRAGMA table_info(events)");
-        const hasReminderEmail = tableInfo.some(col => col.name === 'reminderEmail');
-        const hasReminderBrowser = tableInfo.some(col => col.name === 'reminderBrowser');
-        const hasReminderCaldav = tableInfo.some(col => col.name === 'reminderCaldav');
+        const hasReminderEmail = await db.schema.hasColumn('events', 'reminderEmail');
+        const hasReminderBrowser = await db.schema.hasColumn('events', 'reminderBrowser');
+        const hasReminderCaldav = await db.schema.hasColumn('events', 'reminderCaldav');
 
         if (!hasReminderEmail) {
             await db.exec(`ALTER TABLE events ADD COLUMN reminderEmail INTEGER DEFAULT 0`);
@@ -58,9 +58,8 @@ module.exports = {
         }
 
         // 为todos表添加提醒相关字段
-        const todoTableInfo = await db.all("PRAGMA table_info(todos)");
-        const hasTodoReminderEmail = todoTableInfo.some(col => col.name === 'reminderEmail');
-        const hasTodoReminderBrowser = todoTableInfo.some(col => col.name === 'reminderBrowser');
+        const hasTodoReminderEmail = await db.schema.hasColumn('todos', 'reminderEmail');
+        const hasTodoReminderBrowser = await db.schema.hasColumn('todos', 'reminderBrowser');
 
         if (!hasTodoReminderEmail) {
             await db.exec(`ALTER TABLE todos ADD COLUMN reminderEmail INTEGER DEFAULT 0`);

@@ -3,7 +3,7 @@
  */
 
 const express = require('express');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 const ICalGenerator = require('../utils/icalGenerator');
 const ICalParser = require('../utils/icalParser');
@@ -77,7 +77,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     if (username !== req.user) return res.status(403).send();
     const depth = req.header('Depth') || '0';
 
-    const lastUpdate = await getConnection().get(`
+    const lastUpdate = await db.queryOne(`
       SELECT MAX(ts) as maxTs FROM (
         SELECT updatedAt as ts FROM events WHERE username = ?
         UNION ALL
@@ -91,7 +91,7 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let itemsXml = '';
 
     if (depth === '1') {
-      const items = await getConnection().all(`SELECT DISTINCT id, updatedAt FROM (SELECT id, updatedAt FROM events WHERE username = ? UNION ALL SELECT id, updatedAt FROM todos WHERE username = ?) ORDER BY updatedAt DESC`, [username, username]);
+      const items = await db.queryAll(`SELECT DISTINCT id, updatedAt FROM (SELECT id, updatedAt FROM events WHERE username = ? UNION ALL SELECT id, updatedAt FROM todos WHERE username = ?) ORDER BY updatedAt DESC`, [username, username]);
       items.forEach(item => {
         const clientId = toClientCalendarId(username, item.id);
         itemsXml += `<D:response><D:href>/caldav/${urlEsc(username)}/${urlEsc(clientId)}.ics</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
@@ -141,8 +141,8 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
               const chunk = ids.slice(i, i + CHUNK);
               const p = chunk.map(() => '?').join(',');
               const [ev, td] = await Promise.all([
-                  getConnection().all(`SELECT *, 'event' as type FROM events WHERE username = ? AND id IN (${p})`, [username, ...chunk]),
-                  getConnection().all(`SELECT *, 'todo' as type FROM todos WHERE username = ? AND id IN (${p})`, [username, ...chunk])
+                  db.queryAll(`SELECT *, 'event' as type FROM events WHERE username = ? AND id IN (${p})`, [username, ...chunk]),
+                  db.queryAll(`SELECT *, 'todo' as type FROM todos WHERE username = ? AND id IN (${p})`, [username, ...chunk])
               ]);
               items = items.concat(ev, td);
           }
@@ -150,8 +150,8 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
     } else if (body.includes('calendar-query')) {
       let start = 0, end = 2147483647;
       const [ev, td] = await Promise.all([
-          getConnection().all(`SELECT *, 'event' as type FROM events WHERE username = ? LIMIT 10000`, [username]),
-          getConnection().all(`SELECT *, 'todo' as type FROM todos WHERE username = ? LIMIT 10000`, [username])
+          db.queryAll(`SELECT *, 'event' as type FROM events WHERE username = ? LIMIT 10000`, [username]),
+          db.queryAll(`SELECT *, 'todo' as type FROM todos WHERE username = ? LIMIT 10000`, [username])
       ]);
       items = [...ev, ...td];
     } else {
@@ -160,9 +160,9 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
       if (tokenMatch) startTs = parseInt(tokenMatch[1]);
       const limit = 20000;
       const [ev, td, del] = await Promise.all([
-          getConnection().all(`SELECT *, 'event' as type FROM events WHERE username = ? AND updatedAt > ? ORDER BY updatedAt ASC LIMIT ?`, [username, startTs, limit]),
-          getConnection().all(`SELECT *, 'todo' as type FROM todos WHERE username = ? AND updatedAt > ? ORDER BY updatedAt ASC LIMIT ?`, [username, startTs, limit]),
-          getConnection().all(`SELECT * FROM deleted_items WHERE username = ? AND deletedAt > ? ORDER BY deletedAt ASC LIMIT ?`, [username, startTs, limit])
+          db.queryAll(`SELECT *, 'event' as type FROM events WHERE username = ? AND updatedAt > ? ORDER BY updatedAt ASC LIMIT ?`, [username, startTs, limit]),
+          db.queryAll(`SELECT *, 'todo' as type FROM todos WHERE username = ? AND updatedAt > ? ORDER BY updatedAt ASC LIMIT ?`, [username, startTs, limit]),
+          db.queryAll(`SELECT * FROM deleted_items WHERE username = ? AND deletedAt > ? ORDER BY deletedAt ASC LIMIT ?`, [username, startTs, limit])
       ]);
       items = [...ev, ...td].sort((a, b) => a.updatedAt - b.updatedAt).slice(0, limit);
       del.forEach(d => {
@@ -179,7 +179,7 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
     }
 
     if (!newToken) {
-        const lastUpdate = await getConnection().get(`SELECT MAX(ts) as maxTs FROM (SELECT updatedAt as ts FROM events WHERE username = ? UNION ALL SELECT updatedAt as ts FROM todos WHERE username = ? UNION ALL SELECT deletedAt as ts FROM deleted_items WHERE username = ?)`, [username, username, username]);
+        const lastUpdate = await db.queryOne(`SELECT MAX(ts) as maxTs FROM (SELECT updatedAt as ts FROM events WHERE username = ? UNION ALL SELECT updatedAt as ts FROM todos WHERE username = ? UNION ALL SELECT deletedAt as ts FROM deleted_items WHERE username = ?)`, [username, username, username]);
         newToken = lastUpdate && lastUpdate.maxTs ? Math.floor(lastUpdate.maxTs) : Math.floor(Date.now()/1000);
     }
 
@@ -204,8 +204,8 @@ router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
     let id = filename.replace(/\.ics$/i, '');
     try { id = decodeURIComponent(id); } catch(e) {}
     const scopedId = scopeExternalCalendarId(username, id);
-    const item = await getConnection().get('SELECT *, "event" as type FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]) ||
-                 await getConnection().get('SELECT *, "todo" as type FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
+    const item = await db.queryOne('SELECT *, "event" as type FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]) ||
+                 await db.queryOne('SELECT *, "todo" as type FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
     if (!item) return res.status(404).end();
     const exportItem = { ...item, id: toClientCalendarId(username, item.id) };
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
@@ -224,15 +224,15 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
         for (const e of parsed.events) {
             const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
             const eventId = scopeExternalCalendarId(username, e.id || id);
-            const ex = await getConnection().get('SELECT id FROM events WHERE id IN (?, ?) AND username = ?', [e.id || id, eventId, username]);
-            if (ex) await getConnection().run('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
-            else await getConnection().run('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, now]);
+            const ex = await db.queryOne('SELECT id FROM events WHERE id IN (?, ?) AND username = ?', [e.id || id, eventId, username]);
+            if (ex) await db.execute('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
+            else await db.execute('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', recurrenceStr, e.recurrenceEnd||null, now, now]);
         }
         for (const t of parsed.todos) {
             const todoId = scopeExternalCalendarId(username, t.id || id);
-            const ex = await getConnection().get('SELECT id FROM todos WHERE id IN (?, ?) AND username = ?', [t.id || id, todoId, username]);
-            if (ex) await getConnection().run('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?', [t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, ex.id, username]);
-            else await getConnection().run('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [todoId, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
+            const ex = await db.queryOne('SELECT id FROM todos WHERE id IN (?, ?) AND username = ?', [t.id || id, todoId, username]);
+            if (ex) await db.execute('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?', [t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, ex.id, username]);
+            else await db.execute('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [todoId, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
         }
         res.setHeader('ETag', `"${now}"`);
         res.status(201).end();
@@ -247,9 +247,9 @@ router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) 
     try { id = decodeURIComponent(id); } catch(e) {}
     const scopedId = scopeExternalCalendarId(username, id);
     const tombstoneId = toClientCalendarId(username, scopedId);
-    await getConnection().run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now().toString(36) + Math.random().toString(36).slice(2), username, tombstoneId, 'event', Math.floor(Date.now() / 1000)]);
-    await getConnection().run('DELETE FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
-    await getConnection().run('DELETE FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
+    await db.execute('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', [Date.now().toString(36) + Math.random().toString(36).slice(2), username, tombstoneId, 'event', Math.floor(Date.now() / 1000)]);
+    await db.execute('DELETE FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
+    await db.execute('DELETE FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
     res.status(204).end();
     debouncedBroadcast(username);
 });

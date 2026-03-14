@@ -1,4 +1,4 @@
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const config = require('../config');
 
 // 默认配置
@@ -13,7 +13,7 @@ const DEFAULT_CONFIG = {
     description: '允许的文件类型(MIME类型，逗号分隔)'
   },
   chunkUploadEnabled: { value: 'true', description: '是否启用分片上传' },
-  chunkSize: { value: '5', description: '分片大小(MB)' },
+  chunkSize: { value: '1', description: '分片大小(MB)' },
   imageCompressionEnabled: { value: 'true', description: '是否启用图片压缩' },
   imageCompressionQuality: { value: '85', description: '图片压缩质量(0-100)' },
   imageCompressionMaxWidth: { value: '1920', description: '图片最大宽度(像素，0表示不限制)' },
@@ -37,8 +37,7 @@ const DEFAULT_CONFIG = {
  * 获取系统配置
  */
 async function getSystemConfig(key) {
-  const db = getConnection();
-  const row = await db.get('SELECT value FROM system_config WHERE key = ?', [key]);
+  const row = await db.queryOne('SELECT value FROM system_config WHERE key = ?', [key]);
 
   if (row) {
     return row.value;
@@ -57,8 +56,7 @@ async function getSystemConfig(key) {
  * 获取所有系统配置
  */
 async function getAllSystemConfig() {
-  const db = getConnection();
-  const rows = await db.all('SELECT key, value, description FROM system_config');
+  const rows = await db.queryAll('SELECT key, value, description FROM system_config');
   const result = {};
 
   rows.forEach(row => {
@@ -85,50 +83,44 @@ async function getAllSystemConfig() {
 /**
  * 设置系统配置
  */
-async function setSystemConfig(key, value, description = null) {
-  const db = getConnection();
+async function setSystemConfigWithExecutor(executor, key, value, description = null) {
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const insertData = {
+    key,
+    value,
+    updatedAt
+  };
+  const updateFields = ['value', 'updatedAt'];
 
-  if (description) {
-    await db.run(
-      `INSERT INTO system_config (key, value, description, updatedAt) VALUES (?, ?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value=excluded.value, description=excluded.description, updatedAt=excluded.updatedAt`,
-      [key, value, description, Math.floor(Date.now() / 1000)]
-    );
-  } else {
-    await db.run(
-      `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updatedAt=excluded.updatedAt`,
-      [key, value, Math.floor(Date.now() / 1000)]
-    );
+  if (description !== null) {
+    insertData.description = description;
+    updateFields.push('description');
   }
+
+  await executor.upsert('system_config', insertData, updateFields, ['key']);
+}
+
+async function setSystemConfig(key, value, description = null) {
+  await setSystemConfigWithExecutor(db, key, value, description);
 }
 
 /**
  * 批量设置系统配置
  */
 async function setMultipleSystemConfig(configs) {
-  const db = getConnection();
-
-  await db.run('BEGIN TRANSACTION');
-
-  try {
+  await db.withTransaction(async (tx) => {
     for (const [key, value] of Object.entries(configs)) {
       const defaultConfig = DEFAULT_CONFIG[key];
-      await setSystemConfig(key, value, defaultConfig?.description);
+      await setSystemConfigWithExecutor(tx, key, value, defaultConfig?.description);
     }
-    await db.run('COMMIT');
-  } catch (error) {
-    await db.run('ROLLBACK');
-    throw error;
-  }
+  });
 }
 
 /**
  * 删除系统配置（恢复默认值）
  */
 async function deleteSystemConfig(key) {
-  const db = getConnection();
-  await db.run('DELETE FROM system_config WHERE key = ?', [key]);
+  await db.execute('DELETE FROM system_config WHERE key = ?', [key]);
 }
 
 /**
@@ -153,13 +145,12 @@ async function getAllowedFileTypes() {
  * 初始化默认配置
  */
 async function initDefaultConfig() {
-  const db = getConnection();
-  const existingKeys = await db.all('SELECT key FROM system_config');
+  const existingKeys = await db.queryAll('SELECT key FROM system_config');
   const existingKeySet = new Set(existingKeys.map(r => r.key));
 
   for (const [key, config] of Object.entries(DEFAULT_CONFIG)) {
     if (!existingKeySet.has(key)) {
-      await db.run(
+      await db.execute(
         'INSERT INTO system_config (key, value, description, updatedAt) VALUES (?, ?, ?, ?)',
         [key, config.value, config.description, Math.floor(Date.now() / 1000)]
       );

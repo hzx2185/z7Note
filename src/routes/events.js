@@ -1,5 +1,5 @@
 const express = require('express');
-const { getConnection } = require('../db/connection');
+const db = require('../db/client');
 const log = require('../utils/logger');
 const TimeHelper = require('../utils/timeHelper');
 const { broadcast } = require('./ws');
@@ -16,29 +16,30 @@ router.post('/batch', async (req, res) => {
       return res.status(400).json({ error: '无效的事件数据' });
     }
 
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
-    let successCount = 0;
+    const successCount = await db.withTransaction(async (tx) => {
+      let count = 0;
+      for (const e of events) {
+        const { title, description, startTime, endTime, allDay } = e;
+        if (!title) continue;
 
-    for (const e of events) {
-      const { title, description, startTime, endTime, allDay } = e;
-      if (!title) continue;
+        const startTs = TimeHelper.parseToTs(startTime);
+        if (!startTs) continue;
 
-      const startTs = TimeHelper.parseToTs(startTime);
-      if (!startTs) continue;
-
-      const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-      await db.run(
-        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          id, req.user, title.trim(), description || '',
-          startTs, TimeHelper.parseToTs(endTime), allDay ? 1 : 0, '#2563eb',
-          now, now
-        ]
-      );
-      successCount++;
-    }
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        await tx.execute(
+          `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id, req.user, title.trim(), description || '',
+            startTs, TimeHelper.parseToTs(endTime), allDay ? 1 : 0, '#2563eb',
+            now, now
+          ]
+        );
+        count++;
+      }
+      return count;
+    });
 
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
     res.json({ success: true, count: successCount });
@@ -64,7 +65,7 @@ router.get('/', async (req, res) => {
       )`;
       params.push(parseInt(endDate), parseInt(startDate));
     }
-    const events = await getConnection().all(query, params);
+    const events = await db.queryAll(query, params);
     res.json(events.map(event => ({ ...event, id: toClientCalendarId(req.user, event.id) })));
   } catch (e) { res.status(500).json({ error: '获取失败' }); }
 });
@@ -73,36 +74,52 @@ router.get('/', async (req, res) => {
 router.delete('/batch', async (req, res) => {
   try {
     const { ids, startTime, endTime, all } = req.body;
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
     
     if (all === true) {
-      // 记录所有即将被删除的 ID
-      const items = await db.all('SELECT id FROM events WHERE username = ?', [req.user]);
-      for (const item of items) {
-          await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]);
-      }
-      await db.run('DELETE FROM events WHERE username = ?', [req.user]);
+      await db.withTransaction(async (tx) => {
+        const items = await tx.queryAll('SELECT id FROM events WHERE username = ?', [req.user]);
+        for (const item of items) {
+          await tx.execute(
+            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+            [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]
+          );
+        }
+        await tx.execute('DELETE FROM events WHERE username = ?', [req.user]);
+      });
     } else if (startTime && endTime) {
-      const items = await db.all('SELECT id FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?', [req.user, startTime, endTime]);
-      for (const item of items) {
-          await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]);
-      }
-      await db.run('DELETE FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?', [req.user, startTime, endTime]);
+      await db.withTransaction(async (tx) => {
+        const items = await tx.queryAll(
+          'SELECT id FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?',
+          [req.user, startTime, endTime]
+        );
+        for (const item of items) {
+          await tx.execute(
+            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+            [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]
+          );
+        }
+        await tx.execute(
+          'DELETE FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?',
+          [req.user, startTime, endTime]
+        );
+      });
     } else if (Array.isArray(ids) && ids.length > 0) {
       const candidateIds = [...new Set(ids.flatMap(id => getCalendarIdCandidates(req.user, id)))];
       const placeholders = candidateIds.map(() => '?').join(',');
-      const items = await db.all(
-        `SELECT id FROM events WHERE username = ? AND id IN (${placeholders})`,
-        [req.user, ...candidateIds]
-      );
-      for (const item of items) {
-          await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]);
-      }
-      await db.run(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [req.user, ...candidateIds]);
+      await db.withTransaction(async (tx) => {
+        const items = await tx.queryAll(
+          `SELECT id FROM events WHERE username = ? AND id IN (${placeholders})`,
+          [req.user, ...candidateIds]
+        );
+        for (const item of items) {
+          await tx.execute(
+            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+            [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]
+          );
+        }
+        await tx.execute(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [req.user, ...candidateIds]);
+      });
     } else {
       return res.status(400).json({ error: '无效的删除请求' });
     }
@@ -122,10 +139,8 @@ router.get('/expand-lunar', async (req, res) => {
 
     const start = parseInt(startDate);
     const end = parseInt(endDate);
-    const db = getConnection();
-    
     // 只查询带有农历重复规则的事件
-    const lunarMasters = await db.all(
+    const lunarMasters = await db.queryAll(
       "SELECT * FROM events WHERE username = ? AND recurrence LIKE '%lunar_%'",
       [req.user]
     );
@@ -146,58 +161,59 @@ router.get('/expand-lunar', async (req, res) => {
 // 数据规范化/修复
 router.post('/format', async (req, res) => {
   try {
-    const db = getConnection();
-    const events = await db.all('SELECT * FROM events WHERE username = ?', [req.user]);
-    let fixedCount = 0;
-    
-    for (const event of events) {
-      let needsUpdate = false;
-      let newStart = event.startTime;
-      let newEnd = event.endTime;
-      
-      if (event.allDay === 1) {
-          // 核心修复：全天事件标准化 (RFC 5545)
-          
-          // 1. 将开始时间对齐到最近的 UTC 00:00:00 (86400的倍数)
-          const utcStart = Math.round(event.startTime / 86400) * 86400;
-          if (utcStart !== event.startTime) {
-              newStart = utcStart;
-              needsUpdate = true;
-          }
-          
-          // 2. 确保结束时间是排他的 (下一天 00:00:00)
-          // 计算跨度，至少为 1 天
-          let days = Math.max(1, Math.round((event.endTime - event.startTime) / 86400));
-          const utcEnd = utcStart + (days * 86400);
-          if (utcEnd !== event.endTime) {
-              newEnd = utcEnd;
-              needsUpdate = true;
-          }
-      } else {
-          // 非全天事件：修复可能存在的时间戳位数问题
-          newStart = TimeHelper.parseToTs(event.startTime);
-          newEnd = TimeHelper.parseToTs(event.endTime);
-          if (newStart !== event.startTime || newEnd !== event.endTime) {
-              needsUpdate = true;
-          }
-      }
-      
-      // 3. 规范化 ID (移除非法 XML 字符)
-      const cleanId = event.id.replace(/[<>&'"]/g, '');
-      let finalId = event.id;
-      if (cleanId !== event.id) {
-          finalId = cleanId;
-          needsUpdate = true;
-      }
+    const events = await db.queryAll('SELECT * FROM events WHERE username = ?', [req.user]);
+    const fixedCount = await db.withTransaction(async (tx) => {
+      let count = 0;
+      for (const event of events) {
+        let needsUpdate = false;
+        let newStart = event.startTime;
+        let newEnd = event.endTime;
+        
+        if (event.allDay === 1) {
+            // 核心修复：全天事件标准化 (RFC 5545)
+            
+            // 1. 将开始时间对齐到最近的 UTC 00:00:00 (86400的倍数)
+            const utcStart = Math.round(event.startTime / 86400) * 86400;
+            if (utcStart !== event.startTime) {
+                newStart = utcStart;
+                needsUpdate = true;
+            }
+            
+            // 2. 确保结束时间是排他的 (下一天 00:00:00)
+            // 计算跨度，至少为 1 天
+            let days = Math.max(1, Math.round((event.endTime - event.startTime) / 86400));
+            const utcEnd = utcStart + (days * 86400);
+            if (utcEnd !== event.endTime) {
+                newEnd = utcEnd;
+                needsUpdate = true;
+            }
+        } else {
+            // 非全天事件：修复可能存在的时间戳位数问题
+            newStart = TimeHelper.parseToTs(event.startTime);
+            newEnd = TimeHelper.parseToTs(event.endTime);
+            if (newStart !== event.startTime || newEnd !== event.endTime) {
+                needsUpdate = true;
+            }
+        }
+        
+        // 3. 规范化 ID (移除非法 XML 字符)
+        const cleanId = event.id.replace(/[<>&'"]/g, '');
+        let finalId = event.id;
+        if (cleanId !== event.id) {
+            finalId = cleanId;
+            needsUpdate = true;
+        }
 
-      if (needsUpdate) {
-        await db.run(
-            `UPDATE events SET id = ?, startTime = ?, endTime = ?, updatedAt = ? WHERE id = ? AND username = ?`, 
+        if (needsUpdate) {
+          await tx.execute(
+            `UPDATE events SET id = ?, startTime = ?, endTime = ?, updatedAt = ? WHERE id = ? AND username = ?`,
             [finalId, newStart, newEnd, Math.floor(Date.now() / 1000), event.id, req.user]
-        );
-        fixedCount++;
+          );
+          count++;
+        }
       }
-    }
+      return count;
+    });
     
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
     res.json({ success: true, fixedCount });
@@ -209,13 +225,12 @@ router.post('/format', async (req, res) => {
 // 导出全量日历 (ICS 格式)
 router.get('/export', async (req, res) => {
   try {
-    const db = getConnection();
     const username = req.user;
     const ICalGenerator = require('../utils/icalGenerator');
 
     const [events, todos] = await Promise.all([
-      db.all('SELECT * FROM events WHERE username = ?', [username]),
-      db.all('SELECT * FROM todos WHERE username = ?', [username])
+      db.queryAll('SELECT * FROM events WHERE username = ?', [username]),
+      db.queryAll('SELECT * FROM todos WHERE username = ?', [username])
     ]);
 
     const exportedEvents = events.map(event => ({ ...event, id: toClientCalendarId(username, event.id) }));
@@ -241,92 +256,89 @@ router.post('/import', async (req, res) => {
     const ICalParser = require('../utils/icalParser');
     const parsed = ICalParser.parse(icsContent);
     const username = req.user;
-    const db = getConnection();
     const now = Math.floor(Date.now() / 1000);
 
     let imported = 0;
     let skipped = 0;
     let updated = 0;
 
-    // 导入事件
-    for (const e of parsed.events) {
-      const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
+    await db.withTransaction(async (tx) => {
+      // 导入事件
+      for (const e of parsed.events) {
+        const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
 
-      // 1. 检查是否存在相同的事件（通过ID）
-      let existing;
-      const scopedEventId = e.id ? scopeExternalCalendarId(username, e.id) : null;
-      if (e.id) {
-        existing = await db.get('SELECT id, subscriptionId FROM events WHERE id IN (?, ?) AND username = ?', [e.id, scopedEventId, username]);
-      }
-
-      // 2. 如果没有ID或ID不存在，检查是否有相同标题和开始时间的事件
-      // 关键：同时检查常规事件和订阅事件
-      if (!existing && e.title && e.startTime) {
-        existing = await db.get(
-          'SELECT id, subscriptionId FROM events WHERE username = ? AND title = ? AND startTime = ?',
-          [username, e.title, e.startTime]
-        );
-      }
-
-      if (existing) {
-        // 如果该事件属于订阅日历，直接跳过，不要导入为本地事件
-        if (existing.subscriptionId) {
-          skipped++;
-          continue;
+        let existing;
+        const scopedEventId = e.id ? scopeExternalCalendarId(username, e.id) : null;
+        if (e.id) {
+          existing = await tx.queryOne(
+            'SELECT id, subscriptionId FROM events WHERE id IN (?, ?) AND username = ?',
+            [e.id, scopedEventId, username]
+          );
         }
 
-        // 更新现有本地事件
-        await db.run(
-          'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
-          [e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, existing.id, username]
-        );
-        updated++;
-      } else {
-        // 插入新事件
-        const eventId = e.id ? scopedEventId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.run(
-          'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-          [eventId, username, e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, now]
-        );
-        imported++;
-      }
-    }
+        if (!existing && e.title && e.startTime) {
+          existing = await tx.queryOne(
+            'SELECT id, subscriptionId FROM events WHERE username = ? AND title = ? AND startTime = ?',
+            [username, e.title, e.startTime]
+          );
+        }
 
-    // 导入待办
-    for (const t of parsed.todos) {
-      // 检查是否存在相同的待办（通过ID或标题+截止日期）
-      let existing;
-      const scopedTodoId = t.id ? scopeExternalCalendarId(username, t.id) : null;
-      if (t.id) {
-        existing = await db.get('SELECT id FROM todos WHERE id IN (?, ?) AND username = ?', [t.id, scopedTodoId, username]);
-      }
+        if (existing) {
+          if (existing.subscriptionId) {
+            skipped++;
+            continue;
+          }
 
-      // 如果没有ID或ID不存在，检查是否有相同标题和截止日期的待办
-      if (!existing && t.title && t.dueDate) {
-        existing = await db.get(
-          'SELECT id FROM todos WHERE username = ? AND title = ? AND dueDate = ?',
-          [username, t.title, t.dueDate]
-        );
+          await tx.execute(
+            'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
+            [e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, existing.id, username]
+          );
+          updated++;
+        } else {
+          const eventId = e.id ? scopedEventId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          await tx.execute(
+            'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            [eventId, username, e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, now]
+          );
+          imported++;
+        }
       }
 
-      if (existing) {
-        // 更新现有待办
-        await db.run(
-          'UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?',
-          [t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, existing.id, username]
-        );
-        updated++;
-        skipped++;
-      } else {
-        // 插入新待办
-        const todoId = t.id ? scopedTodoId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        await db.run(
-          'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
-          [todoId, username, t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, now]
-        );
-        imported++;
+      // 导入待办
+      for (const t of parsed.todos) {
+        let existing;
+        const scopedTodoId = t.id ? scopeExternalCalendarId(username, t.id) : null;
+        if (t.id) {
+          existing = await tx.queryOne(
+            'SELECT id FROM todos WHERE id IN (?, ?) AND username = ?',
+            [t.id, scopedTodoId, username]
+          );
+        }
+
+        if (!existing && t.title && t.dueDate) {
+          existing = await tx.queryOne(
+            'SELECT id FROM todos WHERE username = ? AND title = ? AND dueDate = ?',
+            [username, t.title, t.dueDate]
+          );
+        }
+
+        if (existing) {
+          await tx.execute(
+            'UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?',
+            [t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, existing.id, username]
+          );
+          updated++;
+          skipped++;
+        } else {
+          const todoId = t.id ? scopedTodoId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          await tx.execute(
+            'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
+            [todoId, username, t.title, t.description || '', t.priority || 5, t.dueDate, t.completed ? 1 : 0, now, now]
+          );
+          imported++;
+        }
       }
-    }
+    });
 
     broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
     res.json({ success: true, imported, skipped, updated });
@@ -339,11 +351,10 @@ router.post('/import', async (req, res) => {
 // 清理重复事件 (基于标题、开始时间、结束时间、重复规则等全项匹配)
 router.post('/cleanup-duplicates', async (req, res) => {
   try {
-    const db = getConnection();
     const username = req.user;
     
     // 查找重复组：标题、开始时间、结束时间、重复规则、全天标志完全相同
-    const duplicates = await db.all(`
+    const duplicates = await db.queryAll(`
       SELECT title, startTime, endTime, recurrence, allDay, COUNT(*) as count 
       FROM events 
       WHERE username = ? 
@@ -354,29 +365,34 @@ router.post('/cleanup-duplicates', async (req, res) => {
     let deletedCount = 0;
     const now = Math.floor(Date.now() / 1000);
     
-    for (const dup of duplicates) {
-      // 对每一组重复项，保留 ID 最新（更新时间最近）的一条，删除其他的
-      const items = await db.all(
-        `SELECT id FROM events 
-         WHERE username = ? AND title = ? AND startTime = ? 
-         AND (endTime = ? OR (endTime IS NULL AND ? IS NULL))
-         AND (recurrence = ? OR (recurrence IS NULL AND ? IS NULL))
-         AND allDay = ?
-         ORDER BY updatedAt DESC`,
-        [username, dup.title, dup.startTime, dup.endTime, dup.endTime, dup.recurrence, dup.recurrence, dup.allDay]
-      );
-      
-      const idsToDelete = items.slice(1).map(item => item.id);
-      if (idsToDelete.length > 0) {
-        for (const id of idsToDelete) {
-          await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-              [Date.now().toString(36) + Math.random().toString(36).slice(2), username, toClientCalendarId(username, id), 'event', now]);
+    deletedCount = await db.withTransaction(async (tx) => {
+      let count = 0;
+      for (const dup of duplicates) {
+        const items = await tx.queryAll(
+          `SELECT id FROM events 
+           WHERE username = ? AND title = ? AND startTime = ? 
+           AND (endTime = ? OR (endTime IS NULL AND ? IS NULL))
+           AND (recurrence = ? OR (recurrence IS NULL AND ? IS NULL))
+           AND allDay = ?
+           ORDER BY updatedAt DESC`,
+          [username, dup.title, dup.startTime, dup.endTime, dup.endTime, dup.recurrence, dup.recurrence, dup.allDay]
+        );
+        
+        const idsToDelete = items.slice(1).map(item => item.id);
+        if (idsToDelete.length > 0) {
+          for (const id of idsToDelete) {
+            await tx.execute(
+              'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+              [Date.now().toString(36) + Math.random().toString(36).slice(2), username, toClientCalendarId(username, id), 'event', now]
+            );
+          }
+          const placeholders = idsToDelete.map(() => '?').join(',');
+          await tx.execute(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [username, ...idsToDelete]);
+          count += idsToDelete.length;
         }
-        const placeholders = idsToDelete.map(() => '?').join(',');
-        await db.run(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [username, ...idsToDelete]);
-        deletedCount += idsToDelete.length;
       }
-    }
+      return count;
+    });
     
     broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
     res.json({ success: true, deletedCount });
@@ -396,7 +412,7 @@ router.post('/', async (req, res) => {
     if (!startTs) return res.status(400).json({ error: '开始时间无效' });
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
-    await getConnection().run(
+    await db.execute(
       `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -420,7 +436,7 @@ router.put('/:id', async (req, res) => {
     const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd } = req.body;
     const candidates = getCalendarIdCandidates(req.user, req.params.id);
     const placeholders = candidates.map(() => '?').join(',');
-    const existing = await getConnection().get(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
+    const existing = await db.queryOne(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
     if (!existing) return res.status(404).json({ error: '事件不存在' });
 
     const updates = [];
@@ -452,7 +468,7 @@ router.put('/:id', async (req, res) => {
     params.push(Math.floor(Date.now() / 1000));
 
     params.push(existing.id, req.user);
-    await getConnection().run(`UPDATE events SET ${updates.join(', ')} WHERE id = ? AND username = ?`, params);
+    await db.execute(`UPDATE events SET ${updates.join(', ')} WHERE id = ? AND username = ?`, params);
 
     broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
 
@@ -464,21 +480,23 @@ router.put('/:id', async (req, res) => {
 
 // 删除
 router.delete('/:id', async (req, res) => {
-  const db = getConnection();
   const now = Math.floor(Date.now() / 1000);
   
   const candidates = getCalendarIdCandidates(req.user, req.params.id);
   const placeholders = candidates.map(() => '?').join(',');
-  const event = await db.get(`SELECT id FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
+  const event = await db.queryOne(`SELECT id FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
   if (!event) {
     return res.status(404).json({ error: '事件不存在' });
   }
 
   // 记录删除记录供 CalDAV 同步
-  await db.run('INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
-      [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, event.id), 'event', now]);
-      
-  await db.run('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
+  await db.withTransaction(async (tx) => {
+    await tx.execute(
+      'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+      [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, event.id), 'event', now]
+    );
+    await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
+  });
   
   broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
   
@@ -507,9 +525,9 @@ router.get('/calendar/day/:date', async (req, res) => {
     }
 
     const [todos, rawEvents, notes] = await Promise.all([
-      getConnection().all(todoQuery, todoParams),
-      getConnection().all('SELECT * FROM events WHERE username=? AND (recurrence IS NOT NULL OR (startTime<=? AND (endTime>=? OR endTime IS NULL)))', [req.user, end, start]),
-      getConnection().all('SELECT * FROM notes WHERE username=? AND deleted=0 AND updatedAt >= ?', [req.user, start])
+      db.queryAll(todoQuery, todoParams),
+      db.queryAll('SELECT * FROM events WHERE username=? AND (recurrence IS NOT NULL OR (startTime<=? AND (endTime>=? OR endTime IS NULL)))', [req.user, end, start]),
+      db.queryAll('SELECT * FROM notes WHERE username=? AND deleted=0 AND updatedAt >= ?', [req.user, start])
     ]);
     
     // 过滤出当天的笔记
@@ -605,14 +623,13 @@ router.get('/search', async (req, res) => {
     if (!query.trim()) return res.json({ todos: [], events: [], notes: [] });
 
     const username = req.user;
-    const db = getConnection();
     const pattern = `%${query}%`;
 
     // SQLite LIKE 默认对 ASCII 字符大小写不敏感，无需使用 LOWER() 函数
     const [todos, events, notes] = await Promise.all([
-      db.all('SELECT * FROM todos WHERE username = ? AND (title LIKE ? OR description LIKE ?)', [username, pattern, pattern]),
-      db.all('SELECT * FROM events WHERE username = ? AND (title LIKE ? OR description LIKE ?)', [username, pattern, pattern]),
-      db.all('SELECT * FROM notes WHERE username = ? AND deleted = 0 AND (title LIKE ? OR content LIKE ?)', [username, pattern, pattern])
+      db.queryAll('SELECT * FROM todos WHERE username = ? AND (title LIKE ? OR description LIKE ?)', [username, pattern, pattern]),
+      db.queryAll('SELECT * FROM events WHERE username = ? AND (title LIKE ? OR description LIKE ?)', [username, pattern, pattern]),
+      db.queryAll('SELECT * FROM notes WHERE username = ? AND deleted = 0 AND (title LIKE ? OR content LIKE ?)', [username, pattern, pattern])
     ]);
 
     res.json({
@@ -631,7 +648,7 @@ router.get('/:id', async (req, res) => {
   try {
     const candidates = getCalendarIdCandidates(req.user, req.params.id);
     const placeholders = candidates.map(() => '?').join(',');
-    const event = await getConnection().get(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
+    const event = await db.queryOne(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
     if (!event) return res.status(404).json({ error: '事件不存在' });
     res.json({ ...event, id: toClientCalendarId(req.user, event.id) });
   } catch (e) { res.status(500).json({ error: '获取详情失败' }); }
