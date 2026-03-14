@@ -10,6 +10,15 @@ const VCardParser = require('../utils/vCardParser');
 
 const router = express.Router();
 
+const COMPOUND_CJK_SURNAMES = new Set([
+  '欧阳', '太史', '端木', '上官', '司马', '东方', '独孤', '南宫', '万俟', '闻人',
+  '夏侯', '诸葛', '尉迟', '公羊', '赫连', '澹台', '皇甫', '宗政', '濮阳', '公冶',
+  '太叔', '申屠', '公孙', '慕容', '仲孙', '钟离', '长孙', '宇文', '司徒', '鲜于',
+  '司空', '闾丘', '子车', '亓官', '司寇', '巫马', '公西', '颛孙', '壤驷', '公良',
+  '漆雕', '乐正', '宰父', '谷梁', '拓跋', '夹谷', '轩辕', '令狐', '段干', '百里',
+  '呼延', '东郭', '南门', '羊舌', '微生', '梁丘', '左丘', '东门', '西门', '南荣'
+]);
+
 // 生成唯一ID
 function generateId() {
   return 'contact_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
@@ -34,6 +43,116 @@ const fieldNames = {
   bday: '生日',
   nickname: '昵称'
 };
+
+function normalizeWhitespace(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function containsCJK(text) {
+  return /[\u3400-\u9fff\uf900-\ufaff]/.test(text || '');
+}
+
+function normalizeContactArray(list, typeNormalizer = value => value) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map(item => ({
+      type: normalizeWhitespace(item?.type || ''),
+      value: typeNormalizer(normalizeWhitespace(item?.value || ''))
+    }))
+    .filter(item => item.value);
+}
+
+function splitFormattedName(fn) {
+  const formattedName = normalizeWhitespace(fn);
+  if (!formattedName) {
+    return { n_family: '', n_given: '' };
+  }
+
+  if (containsCJK(formattedName) && !formattedName.includes(' ')) {
+    if (formattedName.length >= 2) {
+      const family = COMPOUND_CJK_SURNAMES.has(formattedName.slice(0, 2))
+        ? formattedName.slice(0, 2)
+        : formattedName.slice(0, 1);
+      const given = formattedName.slice(family.length);
+      return { n_family: family, n_given: given };
+    }
+    return { n_family: formattedName, n_given: '' };
+  }
+
+  const parts = formattedName.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return {
+      n_family: parts[parts.length - 1],
+      n_given: parts.slice(0, -1).join(' ')
+    };
+  }
+
+  return { n_family: '', n_given: formattedName };
+}
+
+function buildFormattedName(contact) {
+  const family = normalizeWhitespace(contact.n_family);
+  const given = normalizeWhitespace(contact.n_given);
+  const middle = normalizeWhitespace(contact.n_middle);
+  const prefix = normalizeWhitespace(contact.n_prefix);
+  const suffix = normalizeWhitespace(contact.n_suffix);
+
+  if (!family && !given && !middle && !prefix && !suffix) {
+    return '';
+  }
+
+  if (containsCJK(`${family}${given}${middle}`) && !prefix && !suffix) {
+    return `${family}${given}${middle}`.trim();
+  }
+
+  return normalizeWhitespace([prefix, given, middle, family, suffix].filter(Boolean).join(' '));
+}
+
+function normalizeContactInput(payload) {
+  const normalized = {
+    fn: normalizeWhitespace(payload.fn),
+    n_family: normalizeWhitespace(payload.n_family),
+    n_given: normalizeWhitespace(payload.n_given),
+    n_middle: normalizeWhitespace(payload.n_middle),
+    n_prefix: normalizeWhitespace(payload.n_prefix),
+    n_suffix: normalizeWhitespace(payload.n_suffix),
+    org: normalizeWhitespace(payload.org),
+    title: normalizeWhitespace(payload.title),
+    url: normalizeWhitespace(payload.url),
+    photo: normalizeWhitespace(payload.photo),
+    note: String(payload.note || '').trim(),
+    bday: normalizeWhitespace(payload.bday),
+    nickname: normalizeWhitespace(payload.nickname)
+  };
+
+  if (normalized.fn) {
+    const inferred = splitFormattedName(normalized.fn);
+
+    if (!normalized.n_family && !normalized.n_given) {
+      normalized.n_family = inferred.n_family;
+      normalized.n_given = inferred.n_given;
+    } else if (!normalized.n_family && normalized.n_given && normalizeWhitespace(normalized.n_given) === normalized.fn) {
+      normalized.n_family = inferred.n_family;
+      normalized.n_given = inferred.n_given || normalized.n_given;
+    } else if (normalized.n_family && normalized.n_given && normalizeWhitespace(normalized.n_given) === normalized.fn) {
+      const expectedGiven = normalizeWhitespace(normalized.fn.replace(new RegExp(`^${normalized.n_family}`), ''));
+      if (expectedGiven) normalized.n_given = expectedGiven;
+    } else {
+      if (!normalized.n_family && inferred.n_family) normalized.n_family = inferred.n_family;
+      if (!normalized.n_given && inferred.n_given) normalized.n_given = inferred.n_given;
+    }
+  }
+
+  if (!normalized.fn) {
+    normalized.fn = buildFormattedName(normalized);
+  }
+
+  normalized.tel = normalizeContactArray(payload.tel, value => value.replace(/[^\d+]/g, ''));
+  normalized.email = normalizeContactArray(payload.email, value => value.toLowerCase());
+  normalized.adr = normalizeContactArray(payload.adr);
+
+  return normalized;
+}
 
 // 记录联系人历史
 async function recordContactHistory(username, contactId, action, field, oldValue, newValue) {
@@ -97,7 +216,7 @@ router.get('/', async (req, res) => {
   try {
     const { search, limit = 100, offset = 0 } = req.query;
 
-    let query = 'SELECT id, fn, n_family, n_given, org, tel, email, createdAt FROM contacts WHERE username = ?';
+    let query = 'SELECT id, fn, n_family, n_given, org, title, nickname, bday, url, note, tel, email, createdAt, updatedAt FROM contacts WHERE username = ?';
     const params = [req.user];
 
     if (search) {
@@ -107,7 +226,7 @@ router.get('/', async (req, res) => {
     }
 
     // 获取总数
-    const countQuery = query.replace(/^SELECT id, fn, n_family, n_given, org, tel, email, createdAt FROM/, 'SELECT COUNT(*) as total FROM');
+    const countQuery = query.replace(/^SELECT id, fn, n_family, n_given, org, title, nickname, bday, url, note, tel, email, createdAt, updatedAt FROM/, 'SELECT COUNT(*) as total FROM');
     const countResult = await db.queryOne(countQuery, params);
     const total = countResult.total;
 
@@ -317,20 +436,12 @@ router.get('/smart-duplicates', async (req, res) => {
 // 创建联系人
 router.post('/', async (req, res) => {
   try {
-    const { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname } = req.body;
+    const normalized = normalizeContactInput(req.body);
+    const { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname } = normalized;
 
     // 数据验证
     if (!fn || !fn.trim()) {
       return res.status(400).json({ error: '姓名不能为空' });
-    }
-
-    // 规范化电话号码：去掉所有非数字字符（保留 + 号）
-    let normalizedTel = tel;
-    if (Array.isArray(tel)) {
-      normalizedTel = tel.map(t => ({
-        ...t,
-        value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
-      }));
     }
 
     const id = generateId();
@@ -338,7 +449,7 @@ router.post('/', async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
 
     // 生成 vCard
-    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel: normalizedTel, email, adr, org, title, url, photo, note, bday, nickname, uid };
+    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname, uid };
     const vcard = VCardGenerator.contactToVCard(contactData);
 
     await db.execute(
@@ -349,9 +460,9 @@ router.post('/', async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, req.user, uid, fn, n_family || '', n_given || '', n_middle || '', n_prefix || '', n_suffix || '',
-        normalizedTel ? JSON.stringify(normalizedTel) : null,
-        email ? JSON.stringify(email) : null,
-        adr ? JSON.stringify(adr) : null,
+        tel.length > 0 ? JSON.stringify(tel) : null,
+        email.length > 0 ? JSON.stringify(email) : null,
+        adr.length > 0 ? JSON.stringify(adr) : null,
         org || '', title || '', url || '', photo || '', note || '', bday || '', nickname || '',
         vcard, now, now
       ]
@@ -371,20 +482,12 @@ router.post('/', async (req, res) => {
 // 更新联系人
 router.put('/:id', async (req, res) => {
   try {
-    const { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname } = req.body;
+    const normalized = normalizeContactInput(req.body);
+    const { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname } = normalized;
 
     // 数据验证
     if (!fn || !fn.trim()) {
       return res.status(400).json({ error: '姓名不能为空' });
-    }
-
-    // 规范化电话号码：去掉所有非数字字符（保留 + 号）
-    let normalizedTel = tel;
-    if (Array.isArray(tel)) {
-      normalizedTel = tel.map(t => ({
-        ...t,
-        value: typeof t.value === 'string' ? t.value.replace(/[^\d+]/g, '') : t.value
-      }));
     }
 
     const existing = await db.queryOne(
@@ -398,7 +501,7 @@ router.put('/:id', async (req, res) => {
     const now = Math.floor(Date.now() / 1000);
 
     // 生成 vCard
-    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel: normalizedTel, email, adr, org, title, url, photo, note, bday, nickname };
+    const contactData = { fn, n_family, n_given, n_middle, n_prefix, n_suffix, tel, email, adr, org, title, url, photo, note, bday, nickname };
     const vcard = VCardGenerator.contactToVCard(contactData);
 
     await db.execute(
@@ -409,9 +512,9 @@ router.put('/:id', async (req, res) => {
       WHERE id = ? AND username = ?`,
       [
         fn, n_family || '', n_given || '', n_middle || '', n_prefix || '', n_suffix || '',
-        normalizedTel ? JSON.stringify(normalizedTel) : null,
-        email ? JSON.stringify(email) : null,
-        adr ? JSON.stringify(adr) : null,
+        tel.length > 0 ? JSON.stringify(tel) : null,
+        email.length > 0 ? JSON.stringify(email) : null,
+        adr.length > 0 ? JSON.stringify(adr) : null,
         org || '', title || '', url || '', photo || '', note || '', bday || '', nickname || '',
         vcard, now,
         req.params.id, req.user
@@ -421,9 +524,9 @@ router.put('/:id', async (req, res) => {
     // 记录字段变更历史
     await recordFieldChanges(req.user, req.params.id, existing, {
       fn, n_family, n_given, n_middle, n_prefix, n_suffix,
-      tel: normalizedTel ? JSON.stringify(normalizedTel) : null,
-      email: email ? JSON.stringify(email) : null,
-      adr: adr ? JSON.stringify(adr) : null,
+      tel: tel.length > 0 ? JSON.stringify(tel) : null,
+      email: email.length > 0 ? JSON.stringify(email) : null,
+      adr: adr.length > 0 ? JSON.stringify(adr) : null,
       org, title, url, photo, note, bday, nickname
     });
 
@@ -432,6 +535,105 @@ router.put('/:id', async (req, res) => {
   } catch (e) {
     log('ERROR', '更新联系人失败', { username: req.user, contactId: req.params.id, error: e.message });
     res.status(500).json({ error: '更新失败' });
+  }
+});
+
+router.post('/format', async (req, res) => {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+    let contacts = [];
+
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => '?').join(',');
+      contacts = await db.queryAll(
+        `SELECT * FROM contacts WHERE username = ? AND id IN (${placeholders}) ORDER BY updatedAt DESC, createdAt DESC`,
+        [req.user, ...ids]
+      );
+    } else {
+      contacts = await db.queryAll(
+        'SELECT * FROM contacts WHERE username = ? ORDER BY updatedAt DESC, createdAt DESC',
+        [req.user]
+      );
+    }
+
+    let updatedCount = 0;
+
+    await db.withTransaction(async (tx) => {
+      for (const contact of contacts) {
+        let tel = [];
+        let email = [];
+        let adr = [];
+
+        try { tel = JSON.parse(contact.tel || '[]'); } catch (e) {}
+        try { email = JSON.parse(contact.email || '[]'); } catch (e) {}
+        try { adr = JSON.parse(contact.adr || '[]'); } catch (e) {}
+
+        const normalized = normalizeContactInput({
+          ...contact,
+          tel,
+          email,
+          adr
+        });
+
+        const vcard = VCardGenerator.contactToVCard({
+          ...normalized,
+          uid: contact.uid || contact.id
+        });
+
+        const telJson = normalized.tel.length > 0 ? JSON.stringify(normalized.tel) : null;
+        const emailJson = normalized.email.length > 0 ? JSON.stringify(normalized.email) : null;
+        const adrJson = normalized.adr.length > 0 ? JSON.stringify(normalized.adr) : null;
+
+        const changed = (
+          normalized.fn !== (contact.fn || '') ||
+          normalized.n_family !== (contact.n_family || '') ||
+          normalized.n_given !== (contact.n_given || '') ||
+          normalized.n_middle !== (contact.n_middle || '') ||
+          normalized.n_prefix !== (contact.n_prefix || '') ||
+          normalized.n_suffix !== (contact.n_suffix || '') ||
+          normalized.org !== (contact.org || '') ||
+          normalized.title !== (contact.title || '') ||
+          normalized.url !== (contact.url || '') ||
+          normalized.photo !== (contact.photo || '') ||
+          normalized.note !== (contact.note || '') ||
+          normalized.bday !== (contact.bday || '') ||
+          normalized.nickname !== (contact.nickname || '') ||
+          telJson !== (contact.tel || null) ||
+          emailJson !== (contact.email || null) ||
+          adrJson !== (contact.adr || null) ||
+          vcard !== (contact.vcard || '')
+        );
+
+        if (!changed) continue;
+
+        await tx.execute(
+          `UPDATE contacts SET
+            fn = ?, n_family = ?, n_given = ?, n_middle = ?, n_prefix = ?, n_suffix = ?,
+            tel = ?, email = ?, adr = ?, org = ?, title = ?, url = ?, photo = ?, note = ?,
+            bday = ?, nickname = ?, vcard = ?, updatedAt = ?
+          WHERE id = ? AND username = ?`,
+          [
+            normalized.fn, normalized.n_family, normalized.n_given, normalized.n_middle, normalized.n_prefix, normalized.n_suffix,
+            telJson, emailJson, adrJson, normalized.org, normalized.title, normalized.url, normalized.photo, normalized.note,
+            normalized.bday, normalized.nickname, vcard, now,
+            contact.id, req.user
+          ]
+        );
+
+        updatedCount += 1;
+      }
+    });
+
+    log('INFO', '批量格式化联系人完成', { username: req.user, updatedCount, total: contacts.length });
+    res.json({
+      message: updatedCount > 0 ? `已格式化 ${updatedCount} 个联系人` : '联系人已是规范格式',
+      updatedCount,
+      total: contacts.length
+    });
+  } catch (e) {
+    log('ERROR', '批量格式化联系人失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '格式化失败' });
   }
 });
 

@@ -8,15 +8,16 @@
   <link rel="stylesheet" href="/css/app.css">
   <style>
     :root { --row-h: 32px; }
-    body { background: var(--bg); color: var(--text); min-height: 100dvh; height: auto; display: flex; flex-direction: column; font-size: 13px; margin: 0; }
-    .main { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 12px; gap: 12px; margin-top: 40px; }
+    html, body { min-height: 100dvh; height: auto; overflow: auto; }
+    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; font-size: 13px; margin: 0; }
+    .main { flex: 1; min-height: calc(100dvh - 40px); overflow: visible; display: flex; flex-direction: column; padding: 12px; gap: 12px; margin-top: 40px; }
     .toolbar { display: flex; gap: 8px; align-items: center; background: var(--side); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); }
     .search-input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; transition: border-color 0.2s; }
     .search-input:focus { border-color: var(--accent); }
     #pagination { display: none; gap: 6px; align-items: center; }
     #pagination.show { display: flex; }
 
-    .table-container { flex: 1; min-height: 0; background: var(--side); border: 1px solid var(--border); border-radius: 6px; overflow: auto; }
+    .table-container { flex: 1; min-height: 0; background: var(--side); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; overflow-y: visible; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th { position: sticky; top: 0; background: var(--side); z-index: 10; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--gray); font-size: 12px; font-weight: 600; }
     td { padding: 4px 10px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: var(--row-h); }
@@ -26,17 +27,25 @@
 
     .col-cb { width: 36px; text-align: center; }
     .col-name { width: 100px; color: var(--accent); font-weight: 500; }
+    .col-family { width: 88px; }
+    .col-given { width: 96px; }
     .col-tel { width: 120px; }
     .col-email { width: 150px; }
     .col-org { width: 120px; }
+    .col-title { width: 110px; }
+    .col-nickname { width: 100px; }
+    .col-bday { width: 110px; }
+    .col-url { width: 180px; }
+    .col-note { width: 220px; }
+    .col-created { width: 150px; }
+    .col-updated { width: 150px; }
 
     @media (max-width: 600px) {
-      body { min-height: 100dvh; overflow-y: auto; }
-      .col-org, .col-email { display: none; }
+      html, body { min-height: 100dvh; overflow-y: auto; }
       .col-tel { width: auto; }
       .header b span { display: none; }
-      .main { overflow: auto; padding: 4px 4px calc(12px + env(safe-area-inset-bottom)); }
-      .table-container { flex: 1 1 auto; min-height: 240px; }
+      .main { overflow: visible; min-height: calc(100dvh - 40px); padding: 4px 4px calc(12px + env(safe-area-inset-bottom)); }
+      .table-container { flex: 1 1 auto; min-height: 240px; overflow-x: auto; overflow-y: visible; }
       .modal-content { width: min(100vw - 16px, 440px) !important; max-height: calc(100dvh - 16px); }
       .modal-body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     }
@@ -50,6 +59,22 @@
     .multi-item select { width: 80px; flex-shrink: 0; height: 30px; font-size: 12px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
     .multi-item input { flex: 1; height: 30px; font-size: 13px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
     .btn-xs { padding: 2px 8px; font-size: 12px; height: 26px; min-width: auto; border-radius: 4px; }
+    .contact-name-row { display: flex; gap: 6px; align-items: flex-end; }
+    .contact-name-row .form-group { margin-bottom: 0; }
+    .contact-name-row .name-family { flex: 1; }
+    .contact-name-row .name-given { flex: 1; }
+    .contact-name-row .name-full { flex: 1.4; }
+    .contact-advanced { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); margin-bottom: 10px; }
+    .contact-advanced summary { list-style: none; cursor: pointer; padding: 10px 12px; font-size: 12px; color: var(--gray); font-weight: 600; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+    .contact-advanced summary::-webkit-details-marker { display: none; }
+    .contact-advanced summary::after { content: '展开'; color: var(--accent); font-weight: 500; }
+    .contact-advanced[open] summary::after { content: '收起'; }
+    .contact-advanced-body { padding: 0 12px 12px; border-top: 1px solid var(--border); }
+    .compact-row { display: flex; gap: 6px; }
+    .compact-row .form-group { flex: 1; }
+    .compact-textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 13px; outline: none; resize: vertical; }
+    .contact-actions { display: flex; gap: 8px; padding: 10px 0 0; border: none; flex-wrap: nowrap; }
+    .contact-actions .btn { flex: 1; min-width: 0; }
     
     /* 查重和历史记录通用样式 */
     .item-card { padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; background: var(--bg); font-size: 13px; }
@@ -64,6 +89,9 @@
     #import-file { width: 100%; font-size: 12px; color: var(--gray); }
     #confirm-modal .modal-actions { display: flex; justify-content: center; align-items: center; width: 100%; }
     #confirm-modal .modal-actions .btn { flex: 1; min-width: 0; }
+    .column-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .column-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 13px; }
+    .column-item input { margin: 0; }
     #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(15,23,42,0.92); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 12px; z-index: 1200; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; max-width: min(90vw, 420px); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
     #toast.show { opacity: 1; }
     #toast.error { background: rgba(185,28,28,0.96); }
@@ -82,6 +110,8 @@
       <button class="tool-btn" onclick="$('import-modal').classList.add('show')">导入</button>
       <button class="tool-btn" onclick="location.href='/api/contacts/export'">导出</button>
       <button class="tool-btn" onclick="smartFindDuplicates()">查重</button>
+      <button class="tool-btn" onclick="formatContacts()">格式化</button>
+      <button class="tool-btn" onclick="openColumnsModal()">显示列</button>
     </div>
   </div>
 
@@ -96,12 +126,7 @@
     </div>
     <div class="table-container">
       <table>
-        <thead>
-          <tr>
-            <th class="col-cb"><input type="checkbox" id="sel-all" onclick="toggleAll(this.checked)"></th>
-            <th class="col-name">姓名</th><th class="col-tel">电话</th><th class="col-email">邮箱</th><th class="col-org">公司</th>
-          </tr>
-        </thead>
+        <thead id="contacts-head"></thead>
         <tbody id="list"></tbody>
       </table>
     </div>
@@ -109,25 +134,46 @@
 
   <!-- 编辑 -->
   <div class="modal" id="edit-modal">
-    <div class="modal-content" style="max-width:360px">
+    <div class="modal-content" style="max-width:440px">
       <div class="modal-header"><h3 id="modal-title">联系人</h3><button onclick="closeModal()">×</button></div>
       <form id="contact-form" onsubmit="saveContact(event)" class="modal-body">
-        <div style="display:flex;gap:6px">
-          <div class="form-group" style="flex:2"><label>名*</label><input name="n_given" required></div>
-          <div class="form-group" style="flex:1"><label>姓</label><input name="n_family"></div>
+        <div class="contact-name-row">
+          <div class="form-group name-family"><label>姓</label><input name="n_family"></div>
+          <div class="form-group name-given"><label>名*</label><input name="n_given" required></div>
+          <div class="form-group name-full"><label>全名*</label><input name="fn" required></div>
         </div>
-        <div class="form-group"><label>全名*</label><input name="fn" required></div>
         <div class="form-group"><label>电话</label><div id="tel-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('tel')">+ 添加号码</button></div>
         <div class="form-group"><label>邮箱</label><div id="email-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('email')">+ 添加邮箱</button></div>
         <div style="display:flex;gap:6px">
           <div class="form-group" style="flex:1"><label>公司</label><input name="org"></div>
           <div class="form-group" style="flex:1"><label>职位</label><input name="title"></div>
         </div>
-        <div class="form-group"><label>备注</label><textarea name="note" rows="2" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:13px;outline:none;resize:vertical"></textarea></div>
-        <div class="modal-actions" style="padding:10px 0 0;border:none">
+        <div class="form-group"><label>备注</label><textarea name="note" rows="2" class="compact-textarea"></textarea></div>
+        <details class="contact-advanced" id="contact-advanced">
+          <summary>更多字段</summary>
+          <div class="contact-advanced-body">
+            <div class="compact-row">
+              <div class="form-group"><label>前缀</label><input name="n_prefix"></div>
+              <div class="form-group"><label>中间名</label><input name="n_middle"></div>
+              <div class="form-group"><label>后缀</label><input name="n_suffix"></div>
+            </div>
+            <div class="compact-row">
+              <div class="form-group"><label>昵称</label><input name="nickname"></div>
+              <div class="form-group"><label>生日</label><input name="bday" placeholder="YYYY-MM-DD"></div>
+            </div>
+            <div class="form-group"><label>网址</label><input name="url" placeholder="https://example.com"></div>
+            <div class="form-group">
+              <label>地址</label>
+              <div id="adr-list"></div>
+              <button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('adr')">+ 添加地址</button>
+            </div>
+            <div class="form-group"><label>照片</label><textarea name="photo" rows="2" class="compact-textarea" placeholder="可填写 URL 或原始数据"></textarea></div>
+          </div>
+        </details>
+        <div class="modal-actions contact-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
           <button type="button" class="btn btn-secondary" id="history-btn" onclick="showHistory()" style="display:none">历史</button>
-          <button type="submit" class="btn btn-primary" style="flex:1">保存</button>
+          <button type="submit" class="btn btn-primary">保存</button>
         </div>
         <button type="button" class="btn btn-xs" style="width:100%;margin-top:10px;color:var(--red);background:none;border:none" id="del-contact-btn" onclick="deleteSingle()">删除此联系人</button>
       </form>
@@ -184,6 +230,20 @@
     </div>
   </div>
 
+  <div class="modal" id="columns-modal">
+    <div class="modal-content" style="max-width:360px">
+      <div class="modal-header"><h3>显示列</h3><button onclick="closeColumnsModal()">×</button></div>
+      <div class="modal-body">
+        <p class="form-hint" style="margin:0 0 10px">勾选需要显示的列，适合检查姓名、姓、名是否规范。</p>
+        <div id="column-options" class="column-grid"></div>
+        <div class="modal-actions" style="padding:10px 0 0;border:none">
+          <button class="btn btn-secondary" onclick="resetColumns()">恢复默认</button>
+          <button class="btn btn-primary" onclick="closeColumnsModal()">完成</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script>
@@ -191,6 +251,25 @@
     const esc = t => (t||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
     let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = 100, total = 0, query = '';
     let toastTimer = null;
+    let fullNameTouched = false;
+    let namePartsTouched = false;
+    const CONTACT_COLUMNS_KEY = 'contacts-visible-columns';
+    const DEFAULT_VISIBLE_COLUMNS = ['fn', 'tel', 'email', 'org', 'note'];
+    const CONTACT_COLUMNS = [
+      { key: 'fn', label: '全名', className: 'col-name' },
+      { key: 'n_family', label: '姓', className: 'col-family' },
+      { key: 'n_given', label: '名', className: 'col-given' },
+      { key: 'tel', label: '电话', className: 'col-tel' },
+      { key: 'email', label: '邮箱', className: 'col-email' },
+      { key: 'org', label: '公司', className: 'col-org' },
+      { key: 'title', label: '职位', className: 'col-title' },
+      { key: 'nickname', label: '昵称', className: 'col-nickname' },
+      { key: 'bday', label: '生日', className: 'col-bday' },
+      { key: 'url', label: '网址', className: 'col-url' },
+      { key: 'note', label: '备注', className: 'col-note' },
+      { key: 'createdAt', label: '创建时间', className: 'col-created' },
+      { key: 'updatedAt', label: '更新时间', className: 'col-updated' }
+    ];
 
     if (localStorage.getItem('p-theme') === 'dark') document.documentElement.classList.add('dark-mode');
 
@@ -242,21 +321,123 @@
       }
     }
 
+    function getVisibleColumns() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(CONTACT_COLUMNS_KEY) || '[]');
+        const valid = Array.isArray(saved)
+          ? saved.filter(key => CONTACT_COLUMNS.some(column => column.key === key))
+          : [];
+        return valid.length ? valid : [...DEFAULT_VISIBLE_COLUMNS];
+      } catch (error) {
+        return [...DEFAULT_VISIBLE_COLUMNS];
+      }
+    }
+
+    function setVisibleColumns(columns) {
+      localStorage.setItem(CONTACT_COLUMNS_KEY, JSON.stringify(columns));
+    }
+
+    function formatTimestamp(value) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric <= 0) return '-';
+      const ms = numeric < 1e12 ? numeric * 1000 : numeric;
+      const date = new Date(ms);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+    }
+
+    function getColumnValue(contact, key, tels, emails) {
+      if (key === 'fn') return contact.fn || '未命名';
+      if (key === 'n_family') return contact.n_family || '-';
+      if (key === 'n_given') return contact.n_given || '-';
+      if (key === 'tel') return (tels[0]?.value || '').replace(/[^\d+]/g, '') || '-';
+      if (key === 'email') return emails[0]?.value || '-';
+      if (key === 'org') return contact.org || '-';
+      if (key === 'title') return contact.title || '-';
+      if (key === 'nickname') return contact.nickname || '-';
+      if (key === 'bday') return contact.bday || '-';
+      if (key === 'url') return contact.url || '-';
+      if (key === 'note') return contact.note || '-';
+      if (key === 'createdAt') return formatTimestamp(contact.createdAt);
+      if (key === 'updatedAt') return formatTimestamp(contact.updatedAt);
+      return '-';
+    }
+
+    function renderTableHead() {
+      const visibleColumns = getVisibleColumns();
+      $('contacts-head').innerHTML = `
+        <tr>
+          <th class="col-cb"><input type="checkbox" id="sel-all" ${contacts.length && contacts.every(c => selected.has(c.id)) ? 'checked' : ''} onclick="toggleAll(this.checked)"></th>
+          ${visibleColumns.map(key => {
+            const column = CONTACT_COLUMNS.find(item => item.key === key);
+            return `<th class="${column.className}">${column.label}</th>`;
+          }).join('')}
+        </tr>
+      `;
+    }
+
     function render() {
+      const visibleColumns = getVisibleColumns();
+      renderTableHead();
       $('list').innerHTML = contacts.map(c => {
         let tels = [], emails = []; try { tels = JSON.parse(c.tel||'[]'); emails = JSON.parse(c.email||'[]'); } catch(e){}
-        const firstTel = (tels[0]?.value || '').replace(/[^\d+]/g, '');
         return `<tr class="${selected.has(c.id)?'selected':''}" onclick="onRowClick('${c.id}', event)">
           <td class="col-cb" onclick="event.stopPropagation()"><input type="checkbox" ${selected.has(c.id)?'checked':''} onchange="toggleSel('${c.id}', this.checked)"></td>
-          <td class="col-name">${esc(c.fn||'未命名')}</td>
-          <td class="col-tel">${esc(firstTel)}</td>
-          <td class="col-email">${esc(emails[0]?.value || '')}</td>
-          <td class="col-org">${esc(c.org||'-')}</td>
+          ${visibleColumns.map(key => {
+            const column = CONTACT_COLUMNS.find(item => item.key === key);
+            const value = getColumnValue(c, key, tels, emails);
+            return `<td class="${column.className}">${esc(value)}</td>`;
+          }).join('')}
         </tr>`;
-      }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>';
+      }).join('') || `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>`;
       $('count-info').textContent = `(${total}${selected.size?`/选${selected.size}`:''})`;
       $('pagination').classList.toggle('show', total > pageSize);
       $('page-info').textContent = `${page}/${Math.ceil(total/pageSize) || 1}`;
+    }
+
+    function renderColumnOptions() {
+      const visibleColumns = new Set(getVisibleColumns());
+      $('column-options').innerHTML = CONTACT_COLUMNS.map(column => `
+        <label class="column-item">
+          <input type="checkbox" ${visibleColumns.has(column.key) ? 'checked' : ''} onchange="toggleColumn('${column.key}', this.checked)">
+          <span>${column.label}</span>
+        </label>
+      `).join('');
+    }
+
+    function openColumnsModal() {
+      renderColumnOptions();
+      $('columns-modal').classList.add('show');
+    }
+
+    function closeColumnsModal() {
+      $('columns-modal').classList.remove('show');
+    }
+
+    function toggleColumn(key, checked) {
+      const visibleColumns = getVisibleColumns();
+      const nextColumns = checked
+        ? [...new Set([...visibleColumns, key])]
+        : visibleColumns.filter(item => item !== key);
+
+      if (!nextColumns.length) {
+        toast('至少保留一列', false);
+        renderColumnOptions();
+        return;
+      }
+
+      const orderedColumns = CONTACT_COLUMNS
+        .map(column => column.key)
+        .filter(columnKey => nextColumns.includes(columnKey));
+      setVisibleColumns(orderedColumns);
+      renderColumnOptions();
+      render();
+    }
+
+    function resetColumns() {
+      setVisibleColumns([...DEFAULT_VISIBLE_COLUMNS]);
+      renderColumnOptions();
+      render();
+      toast('已恢复默认显示列');
     }
 
     function showConfirm(message) {
@@ -291,8 +472,92 @@
     function toggleAll(checked) { contacts.forEach(c => checked ? selected.add(c.id) : selected.delete(c.id)); render(); }
     function onRowClick(id, e) { if (e.target.tagName !== 'INPUT') openModal(id); }
 
+    function normalizeWhitespace(text) {
+      return String(text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function containsCJK(text) {
+      return /[\u3400-\u9fff\uf900-\ufaff]/.test(text || '');
+    }
+
+    function splitFormattedName(fn) {
+      const formatted = normalizeWhitespace(fn);
+      if (!formatted) return { family: '', given: '' };
+      const compoundSurnames = new Set(['欧阳','太史','端木','上官','司马','东方','独孤','南宫','万俟','闻人','夏侯','诸葛','尉迟','公羊','赫连','澹台','皇甫','宗政','濮阳','公冶','太叔','申屠','公孙','慕容','仲孙','钟离','长孙','宇文','司徒','鲜于','司空','闾丘','子车','亓官','司寇','巫马','公西','颛孙','壤驷','公良','漆雕','乐正','宰父','谷梁','拓跋','夹谷','轩辕','令狐','段干','百里','呼延','东郭','南门','羊舌','微生','梁丘','左丘','东门','西门','南荣']);
+
+      if (containsCJK(formatted) && !formatted.includes(' ')) {
+        if (formatted.length < 2) return { family: formatted, given: '' };
+        const family = compoundSurnames.has(formatted.slice(0, 2)) ? formatted.slice(0, 2) : formatted.slice(0, 1);
+        return { family, given: formatted.slice(family.length) };
+      }
+
+      const parts = formatted.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return { family: parts[parts.length - 1], given: parts.slice(0, -1).join(' ') };
+      }
+      return { family: '', given: formatted };
+    }
+
+    function buildFormattedName(family, given) {
+      const cleanFamily = normalizeWhitespace(family);
+      const cleanGiven = normalizeWhitespace(given);
+      if (!cleanFamily && !cleanGiven) return '';
+      if (containsCJK(`${cleanFamily}${cleanGiven}`)) {
+        return `${cleanFamily}${cleanGiven}`.trim();
+      }
+      return normalizeWhitespace([cleanGiven, cleanFamily].filter(Boolean).join(' '));
+    }
+
+    function bindNameFields(form) {
+      const familyInput = form.elements.n_family;
+      const givenInput = form.elements.n_given;
+      const fullInput = form.elements.fn;
+
+      const syncFullName = () => {
+        const generated = buildFormattedName(familyInput.value, givenInput.value);
+        if (!fullNameTouched || !normalizeWhitespace(fullInput.value)) {
+          fullInput.value = generated;
+        }
+      };
+
+      const syncStructuredName = () => {
+        if (namePartsTouched) return;
+        const split = splitFormattedName(fullInput.value);
+        if (!familyInput.value.trim() || !givenInput.value.trim()) {
+          if (!familyInput.value.trim()) familyInput.value = split.family;
+          if (!givenInput.value.trim()) givenInput.value = split.given;
+        }
+      };
+
+      familyInput.oninput = () => {
+        namePartsTouched = true;
+        syncFullName();
+      };
+      givenInput.oninput = () => {
+        namePartsTouched = true;
+        syncFullName();
+      };
+      fullInput.oninput = () => {
+        fullNameTouched = true;
+        syncStructuredName();
+      };
+      fullInput.onblur = syncStructuredName;
+    }
+
+    function hasArrayContent(value) {
+      try {
+        const parsed = JSON.parse(value || '[]');
+        return Array.isArray(parsed) && parsed.some(item => normalizeWhitespace(item?.value));
+      } catch (error) {
+        return false;
+      }
+    }
+
     async function openModal(id = null) {
-      curId = id; const f = $('contact-form'); f.reset(); $('tel-list').innerHTML = ''; $('email-list').innerHTML = '';
+      curId = id; const f = $('contact-form'); f.reset(); $('tel-list').innerHTML = ''; $('email-list').innerHTML = ''; $('adr-list').innerHTML = '';
+      fullNameTouched = false;
+      namePartsTouched = false;
+      $('contact-advanced').open = false;
       $('modal-title').textContent = id ? '编辑联系人' : '添加联系人';
       $('del-contact-btn').style.display = id ? 'block' : 'none';
       $('history-btn').style.display = id ? 'block' : 'none';
@@ -300,26 +565,37 @@
         try {
           const c = await requestJSON(`/api/contacts/${id}`, {}, '获取联系人失败');
           if (c) {
-            ['n_family','n_given','fn','org','title','note'].forEach(k => {
+            ['n_family','n_given','fn','org','title','note','n_prefix','n_middle','n_suffix','nickname','bday','url','photo'].forEach(k => {
               if (f[k]) f[k].value = c[k]||'';
             });
             try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
             try { JSON.parse(c.email||'[]').forEach(m => addItem('email', m.type, m.value)); } catch(e){}
+            try { JSON.parse(c.adr||'[]').forEach(a => addItem('adr', a.type, a.value)); } catch(e){}
+            if (c.n_prefix || c.n_middle || c.n_suffix || c.nickname || c.bday || c.url || c.photo || hasArrayContent(c.adr)) {
+              $('contact-advanced').open = true;
+            }
           }
         } catch (error) {
           toast(error.message, false);
           return;
         }
       } else addItem('tel', 'CELL');
+      bindNameFields(f);
       $('edit-modal').classList.add('show');
     }
     function closeModal() { $('edit-modal').classList.remove('show'); }
 
     function addItem(k, type = '', val = '') {
       const d = document.createElement('div'); d.className = 'multi-item';
-      const os = k === 'tel' ? [['CELL','手机'],['WORK','工作'],['HOME','住宅']] : [['INTERNET','邮箱'],['WORK','工作'],['HOME','个人']];
+      const os = k === 'tel'
+        ? [['CELL','手机'],['WORK','工作'],['HOME','住宅']]
+        : k === 'email'
+          ? [['INTERNET','邮箱'],['WORK','工作'],['HOME','个人']]
+          : [['HOME','家庭'],['WORK','工作'],['OTHER','其他']];
+      const inputType = k === 'tel' ? 'tel' : k === 'email' ? 'email' : 'text';
+      const placeholder = k === 'tel' ? '号码' : k === 'email' ? '邮箱' : '地址';
       d.innerHTML = `<select>${os.map(o => `<option value="${o[0]}" ${type===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
-        <input type="${k==='tel'?'tel':'email'}" value="${esc(val)}" placeholder="${k==='tel'?'号码':'邮箱'}">
+        <input type="${inputType}" value="${esc(val)}" placeholder="${placeholder}">
         <button type="button" class="tool-btn" onclick="this.parentElement.remove()">×</button>`;
       $(k + '-list').appendChild(d);
     }
@@ -328,6 +604,7 @@
       e.preventDefault(); const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
       data.tel = [...$('tel-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
       data.email = [...$('email-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
+      data.adr = [...$('adr-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
       
       // 前端也做一次清洗，提升即时感
       if (Array.isArray(data.tel)) {
@@ -486,6 +763,23 @@
         </div>
         `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">无历史记录</div>';
         $('history-modal').classList.add('show');
+      } catch (error) {
+        toast(error.message, false);
+      }
+    }
+
+    async function formatContacts() {
+      const ids = [...selected];
+      const scopeLabel = ids.length > 0 ? `选中的 ${ids.length} 个联系人` : '全部联系人';
+      if (!(await showConfirm(`确定格式化${scopeLabel}吗？会清理多余空格，并在姓名字段缺失时尽量补全。`))) return;
+      try {
+        const result = await requestJSON('/api/contacts/format', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ ids })
+        }, '批量格式化失败');
+        await load();
+        toast(result?.message || '联系人已格式化');
       } catch (error) {
         toast(error.message, false);
       }
