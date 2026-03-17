@@ -119,8 +119,29 @@
     .modal-body { padding: 16px; overflow-y: auto; }
     .form-group { margin-bottom: 12px; }
     .form-group label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 6px; font-weight: 500; }
-    .form-row { display: flex; gap: 8px; }
-    .form-row > .form-group { flex: 1; min-width: 0; }
+    .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
+    .form-row > .form-group { min-width: 0; margin-bottom: 0; }
+    .form-row.dates-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .form-row.datetime-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .form-row input[type="date"],
+    .form-row input[type="datetime-local"] {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+    .field-inline { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .field-inline > select,
+    .field-inline > input,
+    .field-inline > textarea { flex: 1; min-width: 0; }
+    .field-inline-label { font-size: 11px; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+    .checkbox-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
+    .checkbox-row label { font-size: 11px; margin: 0; display: inline-flex; align-items: center; gap: 4px; }
+    .reminder-group select { margin-bottom: 2px !important; }
+    .checkbox-row.compact { gap: 6px; margin-top: 4px; }
+    .checkbox-row.compact label { font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); }
+    .checkbox-row.compact input[type="checkbox"] { margin: 0; }
     
     input, textarea, select { width: 100%; padding: 6px 8px; background: var(--side); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 13px; outline: none; box-sizing: border-box; }
     input:focus, textarea:focus, select:focus { border-color: var(--accent); }
@@ -149,6 +170,17 @@
         .month-day { min-height: 60px !important; height: auto !important; padding: 1px; }
         .modal-content { border-radius: 0; width: 100vw; height: 100dvh; max-height: 100dvh; max-width: 100% !important; }
         .modal-body { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+        .form-row { gap: 6px; }
+        .checkbox-row { gap: 6px; }
+        .field-inline { gap: 6px; }
+        .checkbox-row.compact { gap: 4px; }
+        .checkbox-row.compact label { padding: 2px 5px; font-size: 10px; }
+        .form-row input[type="date"],
+        .form-row input[type="datetime-local"] {
+          font-size: 12px;
+          padding-left: 4px;
+          padding-right: 4px;
+        }
         
         /* 确认框特殊处理 */
         #confirm-modal .modal-content { height: auto !important; max-height: 80vh !important; width: 85vw !important; max-width: 320px !important; border-radius: 12px !important; margin: auto; }
@@ -282,19 +314,19 @@
           <div class="form-group"><label>全天</label><select name="allDay" id="todo-allDay-select"><option value="false">否</option><option value="true" selected>是</option></select></div>
           <div class="form-group"><label>优先级</label><select name="priority"><option value="1">低</option><option value="2" selected>中</option><option value="3">高</option></select></div>
         </div>
-        <div class="form-row hidden" id="todo-datetime-row">
+        <div class="form-row datetime-row hidden" id="todo-datetime-row">
           <div class="form-group"><label>开始时间</label><input type="datetime-local" name="startTime"></div>
           <div class="form-group"><label>截止时间</label><input type="datetime-local" name="dueDate"></div>
         </div>
-        <div class="form-row" id="todo-date-row">
+        <div class="form-row dates-row" id="todo-date-row">
           <div class="form-group"><label>开始日期</label><input type="date" name="startDate"></div>
           <div class="form-group"><label>截止日期</label><input type="date" name="dueDateDate"></div>
         </div>
-        <div class="form-group"><label>提醒方式</label>
+        <div class="form-group reminder-group"><label>提醒方式</label>
           <select name="reminderTime"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
-          <div style="display: flex; gap: 8px; margin-top: 6px; align-items: center;">
-            <label class="flex items-center gap-1" style="font-size:11px"><input type="checkbox" name="reminderEmail" value="1" checked style="width:auto"> 邮件</label>
-            <label class="flex items-center gap-1" style="font-size:11px"><input type="checkbox" name="reminderBrowser" value="1" checked style="width:auto"> 浏览器</label>
+          <div class="checkbox-row compact">
+            <label><input type="checkbox" name="reminderEmail" value="1" checked style="width:auto"> 邮件</label>
+            <label><input type="checkbox" name="reminderBrowser" value="1" checked style="width:auto"> 浏览器</label>
           </div>
         </div>
         <div class="modal-actions">
@@ -315,31 +347,31 @@
           <div class="form-row">
             <div class="form-group"><label>全天</label><select name="allDay" id="allDay-select"><option value="false">否</option><option value="true" selected>是</option></select></div>
             <div class="form-group"><label>重复</label>
-              <div class="flex items-center gap-1">
-                <select name="recurrence" id="recurrence-select" style="flex:1">
+              <div class="field-inline">
+                <select name="recurrence" id="recurrence-select">
                   <option value="">不重复</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option>
                 </select>
-                <label id="lunar-checkbox-wrap" class="hidden" style="font-size:11px; white-space:nowrap; cursor:pointer">
+                <label id="lunar-checkbox-wrap" class="field-inline-label hidden">
                   <input type="checkbox" name="isLunar" id="isLunar-checkbox" style="width:12px; height:12px; vertical-align:middle"> 农历
                 </label>
               </div>
             </div>
           </div>
-          <div class="form-row hidden" id="datetime-row">
+          <div class="form-row datetime-row hidden" id="datetime-row">
             <div class="form-group"><label>开始 *</label><input type="datetime-local" name="startTime" required></div>
             <div class="form-group"><label>结束</label><input type="datetime-local" name="endTime"></div>
           </div>
-          <div class="form-row" id="date-row">
+          <div class="form-row dates-row" id="date-row">
             <div class="form-group"><label>开始日期 *</label><input type="date" name="startDate" required></div>
             <div class="form-group"><label>结束日期</label><input type="date" name="endDate"></div>
           </div>
         <div class="form-group hidden" id="recurrence-end-group"><label>结束日期</label><input type="date" name="recurrenceEnd"></div>
-        <div class="form-group"><label>提醒</label>
+        <div class="form-group reminder-group"><label>提醒</label>
           <select name="reminderTime" style="margin-bottom:4px"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;">
-            <label class="flex items-center gap-1" style="font-size:11px"><input type="checkbox" name="reminderEmail" value="1" checked style="width:auto"> 邮件</label>
-            <label class="flex items-center gap-1" style="font-size:11px"><input type="checkbox" name="reminderBrowser" value="1" checked style="width:auto"> 浏览器</label>
-            <label class="flex items-center gap-1" style="font-size:11px"><input type="checkbox" name="reminderCaldav" value="1" checked style="width:auto"> 日历应用</label>
+          <div class="checkbox-row compact">
+            <label><input type="checkbox" name="reminderEmail" value="1" checked style="width:auto"> 邮件</label>
+            <label><input type="checkbox" name="reminderBrowser" value="1" checked style="width:auto"> 浏览器</label>
+            <label><input type="checkbox" name="reminderCaldav" value="1" checked style="width:auto"> 日历应用</label>
           </div>
         </div>
         <div class="modal-actions">

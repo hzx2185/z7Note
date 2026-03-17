@@ -387,6 +387,19 @@ const APIManager = {
         });
     },
 
+    normalizeTimestamp(value) {
+        const raw = Number(value);
+        if (!Number.isFinite(raw) || raw <= 0) return null;
+        return raw > 10000000000 ? raw : raw * 1000;
+    },
+
+    formatDate(value) {
+        const ts = this.normalizeTimestamp(value);
+        if (!ts) return '-';
+        const date = new Date(ts);
+        return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('zh-CN');
+    },
+
     // 切换附件视图
     toggleAttachmentView() {
         this.attachmentViewMode = this.attachmentViewMode === 'grid' ? 'list' : 'grid';
@@ -1320,7 +1333,7 @@ const APIManager = {
                 typeLabel = '📎';
             }
 
-            const expiresText = s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : '永久';
+            const expiresText = s.expiresAt ? this.formatDate(s.expiresAt) : '永久';
             const escapedTitle = title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const shareUrl = `${location.protocol}//${location.host}/s/${s.token}`;
 

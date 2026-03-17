@@ -108,7 +108,12 @@ function buildFormattedName(contact) {
   return normalizeWhitespace([prefix, given, middle, family, suffix].filter(Boolean).join(' '));
 }
 
-function normalizeContactInput(payload) {
+function normalizeContactInput(payload, options = {}) {
+  const explicitEmptyFields = new Set(
+    Array.isArray(options.explicitEmptyFields)
+      ? options.explicitEmptyFields.map(field => String(field || '').trim()).filter(Boolean)
+      : []
+  );
   const normalized = {
     fn: normalizeWhitespace(payload.fn),
     n_family: normalizeWhitespace(payload.n_family),
@@ -128,22 +133,38 @@ function normalizeContactInput(payload) {
   if (normalized.fn) {
     const inferred = splitFormattedName(normalized.fn);
 
-    if (!normalized.n_family && !normalized.n_given) {
+    if (
+      !explicitEmptyFields.has('n_family') &&
+      !explicitEmptyFields.has('n_given') &&
+      !normalized.n_family &&
+      !normalized.n_given
+    ) {
       normalized.n_family = inferred.n_family;
       normalized.n_given = inferred.n_given;
-    } else if (!normalized.n_family && normalized.n_given && normalizeWhitespace(normalized.n_given) === normalized.fn) {
+    } else if (
+      !explicitEmptyFields.has('n_family') &&
+      !explicitEmptyFields.has('n_given') &&
+      !normalized.n_family &&
+      normalized.n_given &&
+      normalizeWhitespace(normalized.n_given) === normalized.fn
+    ) {
       normalized.n_family = inferred.n_family;
       normalized.n_given = inferred.n_given || normalized.n_given;
-    } else if (normalized.n_family && normalized.n_given && normalizeWhitespace(normalized.n_given) === normalized.fn) {
+    } else if (
+      !explicitEmptyFields.has('n_given') &&
+      normalized.n_family &&
+      normalized.n_given &&
+      normalizeWhitespace(normalized.n_given) === normalized.fn
+    ) {
       const expectedGiven = normalizeWhitespace(normalized.fn.replace(new RegExp(`^${normalized.n_family}`), ''));
       if (expectedGiven) normalized.n_given = expectedGiven;
     } else {
-      if (!normalized.n_family && inferred.n_family) normalized.n_family = inferred.n_family;
-      if (!normalized.n_given && inferred.n_given) normalized.n_given = inferred.n_given;
+      if (!explicitEmptyFields.has('n_family') && !normalized.n_family && inferred.n_family) normalized.n_family = inferred.n_family;
+      if (!explicitEmptyFields.has('n_given') && !normalized.n_given && inferred.n_given) normalized.n_given = inferred.n_given;
     }
   }
 
-  if (!normalized.fn) {
+  if (!normalized.fn && !explicitEmptyFields.has('fn')) {
     normalized.fn = buildFormattedName(normalized);
   }
 
@@ -152,6 +173,93 @@ function normalizeContactInput(payload) {
   normalized.adr = normalizeContactArray(payload.adr);
 
   return normalized;
+}
+
+const BATCH_EDITABLE_FIELDS = new Set(['fn', 'n_family', 'n_given', 'org', 'title', 'note', 'nickname', 'url', 'bday']);
+const recentBatchUpdateRequests = new Map();
+
+function cleanupRecentBatchUpdateRequests() {
+  const now = Date.now();
+  for (const [key, entry] of recentBatchUpdateRequests.entries()) {
+    if (!entry || entry.expiresAt <= now) {
+      recentBatchUpdateRequests.delete(key);
+    }
+  }
+}
+
+function parseContactJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function combineBatchFieldValue(field, mode, oldValue, incomingValue) {
+  const current = String(oldValue || '');
+  const next = String(incomingValue || '');
+  const separator = field === 'note' ? '\n' : '';
+
+  if (mode === 'clear') return '';
+  if (mode === 'set') return field === 'note' ? next.trim() : normalizeWhitespace(next);
+  if (mode === 'append') {
+    if (!current.trim()) return field === 'note' ? next.trim() : normalizeWhitespace(next);
+    if (!next.trim()) return field === 'note' ? current.trim() : normalizeWhitespace(current);
+    return field === 'note'
+      ? `${current.trim()}${separator}${next.trim()}`
+      : normalizeWhitespace(`${current}${separator}${next}`);
+  }
+  if (mode === 'prepend') {
+    if (!current.trim()) return field === 'note' ? next.trim() : normalizeWhitespace(next);
+    if (!next.trim()) return field === 'note' ? current.trim() : normalizeWhitespace(current);
+    return field === 'note'
+      ? `${next.trim()}${separator}${current.trim()}`
+      : normalizeWhitespace(`${next}${separator}${current}`);
+  }
+  return current;
+}
+
+function applyReplaceRules(value, rules) {
+  let result = String(value || '');
+  for (const rule of rules) {
+    if (!rule.from) continue;
+    result = result.split(rule.from).join(rule.to);
+  }
+  return result;
+}
+
+function normalizeBatchOperation(rawOperation) {
+  return {
+    field: String(rawOperation?.field || '').trim(),
+    mode: String(rawOperation?.mode || '').trim(),
+    from: String(rawOperation?.from || ''),
+    to: String(rawOperation?.to || '')
+  };
+}
+
+function buildHistoryDetails(entry) {
+  const field = normalizeWhitespace(entry?.field);
+  const oldValue = entry?.old_value == null ? '' : String(entry.old_value);
+  const newValue = entry?.new_value == null ? '' : String(entry.new_value);
+
+  if (entry?.action === 'create') {
+    if (field && newValue) return `${field}: ${newValue}`;
+    if (newValue) return newValue;
+    return field || '已创建联系人';
+  }
+
+  if (field) {
+    if (oldValue && newValue) return `${field}: ${oldValue} -> ${newValue}`;
+    if (oldValue && !newValue) return `${field}: ${oldValue} -> 已清空`;
+    if (!oldValue && newValue) return `${field}: (空) -> ${newValue}`;
+    return `${field}: 已更新`;
+  }
+
+  if (oldValue && newValue) return `${oldValue} -> ${newValue}`;
+  if (oldValue && !newValue) return `${oldValue} -> 已清空`;
+  if (!oldValue && newValue) return `(空) -> ${newValue}`;
+  return entry?.action === 'update' ? '已更新' : '已创建';
 }
 
 // 记录联系人历史
@@ -637,6 +745,192 @@ router.post('/format', async (req, res) => {
   }
 });
 
+router.post('/batch-update', async (req, res) => {
+  try {
+    cleanupRecentBatchUpdateRequests();
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+    const requestId = normalizeWhitespace(req.body?.requestId);
+    const requestCacheKey = requestId ? `${req.user}:${requestId}` : '';
+
+    if (!ids.length) {
+      return res.status(400).json({ error: '请先选择要修改的联系人' });
+    }
+
+    if (requestCacheKey && recentBatchUpdateRequests.has(requestCacheKey)) {
+      return res.json(recentBatchUpdateRequests.get(requestCacheKey).result);
+    }
+
+    const placeholders = ids.map(() => '?').join(',');
+    const contacts = await db.queryAll(
+      `SELECT * FROM contacts WHERE username = ? AND id IN (${placeholders}) ORDER BY updatedAt DESC, createdAt DESC`,
+      [req.user, ...ids]
+    );
+
+    if (!contacts.length) {
+      return res.status(404).json({ error: '未找到可修改的联系人' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const updates = [];
+    let operations = [];
+
+    if (Array.isArray(req.body?.operations) && req.body.operations.length > 0) {
+      operations = req.body.operations.map(normalizeBatchOperation);
+    } else {
+      const legacyMode = String(req.body?.mode || '').trim();
+      if (legacyMode === 'replace') {
+        const replaceFields = Array.isArray(req.body?.fields)
+          ? req.body.fields.map(field => String(field || '').trim()).filter(Boolean)
+          : [];
+        const replacementRules = Array.isArray(req.body?.replacements)
+          ? req.body.replacements
+              .map(rule => ({
+                from: String(rule?.from || ''),
+                to: String(rule?.to || '')
+              }))
+              .filter(rule => rule.from)
+          : [];
+        operations = replaceFields.flatMap(field => replacementRules.map(rule => ({
+          field,
+          mode: 'replace',
+          from: rule.from,
+          to: rule.to
+        })));
+      } else {
+        operations = [normalizeBatchOperation({
+          field: req.body?.field,
+          mode: legacyMode,
+          from: '',
+          to: req.body?.value
+        })];
+      }
+    }
+
+    operations = operations.filter(operation => operation.field && operation.mode);
+    if (!operations.length) {
+      return res.status(400).json({ error: '请至少提供一条批量修改规则' });
+    }
+
+    for (const operation of operations) {
+      if (!BATCH_EDITABLE_FIELDS.has(operation.field)) {
+        return res.status(400).json({ error: '存在不支持批量修改的字段' });
+      }
+      if (!['set', 'replace', 'append', 'prepend', 'clear'].includes(operation.mode)) {
+        return res.status(400).json({ error: '存在不支持的批量修改方式' });
+      }
+      if (operation.mode === 'replace' && !operation.from.trim()) {
+        return res.status(400).json({ error: '替换模式必须提供原内容' });
+      }
+      if (!['replace', 'clear'].includes(operation.mode) && !operation.to.trim()) {
+        return res.status(400).json({ error: '请填写要写入的新内容' });
+      }
+    }
+
+    for (const contact of contacts) {
+      const tel = parseContactJsonArray(contact.tel);
+      const email = parseContactJsonArray(contact.email);
+      const adr = parseContactJsonArray(contact.adr);
+      const patch = {};
+
+      for (const operation of operations) {
+        const baseValue = Object.prototype.hasOwnProperty.call(patch, operation.field)
+          ? patch[operation.field]
+          : contact[operation.field];
+
+        patch[operation.field] = operation.mode === 'replace'
+          ? applyReplaceRules(baseValue, [{ from: operation.from, to: operation.to }])
+          : combineBatchFieldValue(operation.field, operation.mode, baseValue, operation.to);
+      }
+
+      const explicitEmptyFields = [...new Set(operations
+        .filter(operation => operation.mode === 'clear')
+        .map(operation => operation.field))];
+
+      const normalized = normalizeContactInput({
+        ...contact,
+        tel,
+        email,
+        adr,
+        ...patch
+      }, {
+        explicitEmptyFields
+      });
+
+      const changedFields = [...new Set(operations.map(operation => operation.field))].filter(field => {
+        const before = String(contact[field] || '');
+        const after = String(normalized[field] || '');
+        return before !== after;
+      });
+
+      if (!changedFields.length) continue;
+
+      const vcard = VCardGenerator.contactToVCard({
+        ...normalized,
+        uid: contact.uid || contact.id
+      });
+
+      updates.push({
+        id: contact.id,
+        contact,
+        changedFields,
+        normalized,
+        vcard
+      });
+    }
+
+    if (!updates.length) {
+      return res.json({ message: '选中的联系人无需修改', updatedCount: 0 });
+    }
+
+    await db.withTransaction(async (tx) => {
+      for (const item of updates) {
+        const setClause = item.changedFields.map(field => `${field} = ?`).join(', ');
+        await tx.execute(
+          `UPDATE contacts SET ${setClause}, vcard = ?, updatedAt = ? WHERE id = ? AND username = ?`,
+          [...item.changedFields.map(field => item.normalized[field] || ''), item.vcard, now, item.id, req.user]
+        );
+      }
+    });
+
+    for (const item of updates) {
+      for (const field of item.changedFields) {
+        await recordContactHistory(
+          req.user,
+          item.id,
+          'update',
+          fieldNames[field] || field,
+          String(item.contact[field] || '') || null,
+          String(item.normalized[field] || '') || null
+        );
+      }
+    }
+
+    log('INFO', '批量修改联系人成功', {
+      username: req.user,
+      requestedCount: ids.length,
+      operations: operations.map(operation => ({ field: operation.field, mode: operation.mode })),
+      updatedCount: updates.length
+    });
+
+    const result = {
+      message: `已批量修改 ${updates.length} 个联系人`,
+      updatedCount: updates.length
+    };
+
+    if (requestCacheKey) {
+      recentBatchUpdateRequests.set(requestCacheKey, {
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        result
+      });
+    }
+
+    res.json(result);
+  } catch (e) {
+    log('ERROR', '批量修改联系人失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '批量修改失败' });
+  }
+});
+
 // 删除联系人
 router.delete('/:id', async (req, res) => {
   try {
@@ -1058,7 +1352,12 @@ router.get('/:id/history', async (req, res) => {
       [id, req.user]
     );
 
-    res.json({ history });
+    res.json({
+      history: history.map(item => ({
+        ...item,
+        details: buildHistoryDetails(item)
+      }))
+    });
   } catch (e) {
     log('ERROR', '获取历史记录失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '获取失败' });

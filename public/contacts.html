@@ -12,10 +12,18 @@
     body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; font-size: 13px; margin: 0; }
     .main { flex: 1; min-height: calc(100dvh - 40px); overflow: visible; display: flex; flex-direction: column; padding: 12px; gap: 12px; margin-top: 40px; }
     .toolbar { display: flex; gap: 8px; align-items: center; background: var(--side); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); }
-    .search-input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; transition: border-color 0.2s; }
+    .header-actions { display: flex; gap: 3px; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; align-items: center; }
+    .header-actions::-webkit-scrollbar { display: none; }
+    .header-actions .tool-btn { white-space: nowrap; }
+    .search-wrap { flex: 1 1 260px; min-width: 0; }
+    .search-input { width: 100%; min-width: 0; height: 32px; padding: 0 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; transition: border-color 0.2s; }
     .search-input:focus { border-color: var(--accent); }
-    #pagination { display: none; gap: 6px; align-items: center; }
+    #pagination { display: none; gap: 6px; align-items: center; min-width: 0; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+    #pagination::-webkit-scrollbar { display: none; }
     #pagination.show { display: flex; }
+    .page-size-select { height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 12px; }
+    .page-jump-btn { min-width: 26px; padding: 2px 5px; }
+    .page-input { width: 46px; height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 12px; text-align: center; }
 
     .table-container { flex: 1; min-height: 0; background: var(--side); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; overflow-y: visible; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -25,7 +33,8 @@
     tr:hover { background: rgba(128,128,128,0.05); cursor: pointer; }
     tr.selected { background: rgba(37,99,235,0.1); }
 
-    .col-cb { width: 36px; text-align: center; }
+    .col-cb { width: 46px; min-width: 46px; text-align: center; padding-left: 6px; padding-right: 6px; overflow: visible; text-overflow: clip; white-space: nowrap; }
+    .col-cb input[type="checkbox"] { width: 16px; height: 16px; margin: 0; vertical-align: middle; }
     .col-name { width: 100px; color: var(--accent); font-weight: 500; }
     .col-family { width: 88px; }
     .col-given { width: 96px; }
@@ -45,6 +54,15 @@
       .col-tel { width: auto; }
       .header b span { display: none; }
       .main { overflow: visible; min-height: calc(100dvh - 40px); padding: 4px 4px calc(12px + env(safe-area-inset-bottom)); }
+      .toolbar { flex-wrap: wrap; align-items: stretch; }
+      .search-wrap { flex: 1 1 100%; }
+      .header-actions { gap: 2px; max-width: calc(100vw - 118px); }
+      .header-actions .tool-btn { padding: 2px 4px; font-size: 12px; min-width: 20px; }
+      #pagination { gap: 4px; width: 100%; }
+      .page-size-select { height: 24px; padding: 0 4px; font-size: 11px; }
+      .page-jump-btn { min-width: 22px; padding: 2px 3px; }
+      .page-input { width: 38px; height: 24px; padding: 0 4px; font-size: 11px; }
+      .col-cb { width: 50px; min-width: 50px; padding-left: 4px; padding-right: 4px; }
       .table-container { flex: 1 1 auto; min-height: 240px; overflow-x: auto; overflow-y: visible; }
       .modal-content { width: min(100vw - 16px, 440px) !important; max-height: calc(100dvh - 16px); }
       .modal-body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
@@ -87,8 +105,24 @@
     #vcard-text { width: 100%; min-height: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-family: monospace; font-size: 12px; line-height: 1.5; resize: vertical; outline: none; box-sizing: border-box; }
     #vcard-text:focus { border-color: var(--accent); }
     #import-file { width: 100%; font-size: 12px; color: var(--gray); }
+    #confirm-modal { z-index: 10020 !important; }
+    #confirm-modal .modal-content { position: relative; z-index: 10021; }
     #confirm-modal .modal-actions { display: flex; justify-content: center; align-items: center; width: 100%; }
     #confirm-modal .modal-actions .btn { flex: 1; min-width: 0; }
+    .batch-edit-table { display: flex; flex-direction: column; gap: 10px; }
+    .batch-edit-table-wrap { overflow-x: auto; padding-bottom: 4px; }
+    .batch-edit-head,
+    .batch-edit-row { min-width: 540px; display: grid; grid-template-columns: 32px 76px 76px minmax(138px, 1fr) minmax(138px, 1fr) 36px; gap: 5px; align-items: center; }
+    .batch-edit-head { color: var(--gray); font-size: 12px; font-weight: 600; }
+    .batch-edit-row { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+    .batch-edit-row input[type="text"],
+    .batch-edit-row select { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 13px; min-width: 0; }
+    .batch-edit-row .tool-btn { width: 36px; min-width: 36px; height: 32px; padding: 0; }
+    .batch-edit-checkbox { display: flex; align-items: center; justify-content: center; }
+    #batch-edit-modal .modal-content { width: min(760px, calc(100vw - 16px)) !important; max-width: 760px !important; }
+    @media (max-width: 720px) {
+      #batch-edit-modal .modal-content { width: calc(100vw - 16px) !important; max-width: calc(100vw - 16px) !important; }
+    }
     .column-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .column-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 13px; }
     .column-item input { margin: 0; }
@@ -103,25 +137,38 @@
       <button onclick="location.href='/'" class="tool-btn">☰</button>
       <b style="font-size:14px">联系人 <span id="count-info" style="font-weight:normal;color:var(--gray);font-size:11px"></span></b>
     </div>
-    <div style="display:flex;gap:3px">
-      <button class="tool-btn" style="color:var(--red)" onclick="batchDelete()">删除</button>
-      <button class="tool-btn" style="color:var(--accent)" onclick="batchMerge()">合并</button>
-      <button class="tool-btn" onclick="openModal()">添加</button>
+    <div class="header-actions">
+      <button class="tool-btn" style="color:var(--red)" onclick="batchDelete()">删</button>
+      <button class="tool-btn" style="color:var(--accent)" onclick="batchMerge()">并</button>
+      <button class="tool-btn" onclick="openModal()">加</button>
       <button class="tool-btn" onclick="$('import-modal').classList.add('show')">导入</button>
       <button class="tool-btn" onclick="location.href='/api/contacts/export'">导出</button>
       <button class="tool-btn" onclick="smartFindDuplicates()">查重</button>
-      <button class="tool-btn" onclick="formatContacts()">格式化</button>
-      <button class="tool-btn" onclick="openColumnsModal()">显示列</button>
+      <button class="tool-btn" onclick="formatContacts()">格式</button>
+      <button class="tool-btn" onclick="openBatchEditModal()">批改</button>
+      <button class="tool-btn" onclick="openColumnsModal()">列</button>
     </div>
   </div>
 
-  <div class="main">
-    <div class="toolbar">
-      <input type="text" class="search-input" id="search-input" placeholder="搜索姓名、电话、邮箱..." oninput="onSearch()">
+    <div class="main">
+      <div class="toolbar">
+      <div class="search-wrap">
+        <input type="text" class="search-input" id="search-input" placeholder="搜索姓名、电话、邮箱..." oninput="onSearch()">
+      </div>
       <div id="pagination">
-        <button class="tool-btn btn-xs" onclick="changePage(-1)">‹</button>
+        <select id="page-size" class="page-size-select" onchange="setPageSize(this.value)">
+          <option value="20">20/页</option>
+          <option value="50">50/页</option>
+          <option value="100">100/页</option>
+          <option value="200">200/页</option>
+        </select>
+        <button class="tool-btn btn-xs page-jump-btn" onclick="goToPage(1)">首页</button>
+        <button class="tool-btn btn-xs page-jump-btn" onclick="changePage(-1)">上页</button>
+        <input id="page-input" class="page-input" type="number" min="1" inputmode="numeric" onkeydown="onPageInputKeydown(event)" aria-label="页码">
+        <button class="tool-btn btn-xs page-jump-btn" onclick="jumpToPageInput()">跳转</button>
+        <button class="tool-btn btn-xs page-jump-btn" onclick="changePage(1)">下页</button>
+        <button class="tool-btn btn-xs page-jump-btn" onclick="goToPage(getTotalPages())">末页</button>
         <span id="page-info" style="font-size:11px;color:var(--gray)"></span>
-        <button class="tool-btn btn-xs" onclick="changePage(1)">›</button>
       </div>
     </div>
     <div class="table-container">
@@ -139,7 +186,7 @@
       <form id="contact-form" onsubmit="saveContact(event)" class="modal-body">
         <div class="contact-name-row">
           <div class="form-group name-family"><label>姓</label><input name="n_family"></div>
-          <div class="form-group name-given"><label>名*</label><input name="n_given" required></div>
+          <div class="form-group name-given"><label>名</label><input name="n_given"></div>
           <div class="form-group name-full"><label>全名*</label><input name="fn" required></div>
         </div>
         <div class="form-group"><label>电话</label><div id="tel-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('tel')">+ 添加号码</button></div>
@@ -244,12 +291,39 @@
     </div>
   </div>
 
+  <div class="modal" id="batch-edit-modal">
+    <div class="modal-content">
+      <div class="modal-header"><h3>批量修改</h3><button onclick="closeBatchEditModal()">×</button></div>
+      <form id="batch-edit-form" class="modal-body" onsubmit="submitBatchEdit(event)">
+        <p id="batch-edit-scope" class="form-hint" style="margin:0 0 10px"></p>
+        <div class="batch-edit-table">
+          <div class="batch-edit-table-wrap">
+            <div class="batch-edit-head">
+              <div>选</div>
+              <div>字段</div>
+              <div>操作</div>
+              <div>原内容</div>
+              <div>新内容</div>
+              <div></div>
+            </div>
+            <div id="batch-edit-rows"></div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-xs" style="width:100%" onclick="addBatchEditRow()">+ 添加一条规则</button>
+        </div>
+        <div class="modal-actions" style="padding:10px 0 0;border:none">
+          <button type="button" class="btn btn-secondary" onclick="closeBatchEditModal()">取消</button>
+          <button type="submit" class="btn btn-primary">应用修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script>
     const $ = id => document.getElementById(id);
     const esc = t => (t||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = 100, total = 0, query = '';
+    let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = Number(localStorage.getItem('contacts-page-size') || 100), total = 0, query = '';
     let toastTimer = null;
     let fullNameTouched = false;
     let namePartsTouched = false;
@@ -283,15 +357,28 @@
     }
 
     async function requestJSON(url, options = {}, fallbackMessage = '请求失败') {
+      const { retryOnGateway = false, retryDelay = 800, ...fetchOptions } = options;
       let res;
       try {
-        res = await fetch(url, { credentials: 'include', ...options });
+        res = await fetch(url, { credentials: 'include', ...fetchOptions });
       } catch (error) {
         throw new Error('网络连接失败，请稍后重试');
       }
 
+      if (retryOnGateway && (res.status === 502 || res.status === 504)) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        try {
+          res = await fetch(url, { credentials: 'include', ...fetchOptions });
+        } catch (error) {
+          throw new Error('网络连接失败，请稍后重试');
+        }
+      }
+
       let data = null;
       const text = await res.text();
+      if (!res.ok && text && text.trim().startsWith('<')) {
+        throw new Error(`服务器返回 ${res.status} ${res.statusText || '错误'}，请稍后重试`);
+      }
       if (text) {
         try {
           data = JSON.parse(text);
@@ -312,6 +399,11 @@
         const data = await requestJSON(`/api/contacts?limit=${pageSize}&offset=${(page-1)*pageSize}${query?`&search=${encodeURIComponent(query)}`:''}`, {}, '加载联系人失败');
         contacts = data.contacts || [];
         total = data.total || 0;
+        const totalPages = getTotalPages();
+        if (page > totalPages && total > 0) {
+          page = totalPages;
+          return load();
+        }
         render();
       } catch (error) {
         contacts = [];
@@ -343,6 +435,19 @@
       const ms = numeric < 1e12 ? numeric * 1000 : numeric;
       const date = new Date(ms);
       return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
+    }
+
+    function getTotalPages() {
+      return Math.max(1, Math.ceil(total / pageSize) || 1);
+    }
+
+    function renderPagination() {
+      const totalPages = getTotalPages();
+      $('pagination').classList.toggle('show', total > 0);
+      $('page-size').value = String(pageSize);
+      $('page-input').value = String(page);
+      $('page-input').max = String(totalPages);
+      $('page-info').textContent = `${page}/${totalPages}`;
     }
 
     function getColumnValue(contact, key, tels, emails) {
@@ -390,8 +495,7 @@
         </tr>`;
       }).join('') || `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>`;
       $('count-info').textContent = `(${total}${selected.size?`/选${selected.size}`:''})`;
-      $('pagination').classList.toggle('show', total > pageSize);
-      $('page-info').textContent = `${page}/${Math.ceil(total/pageSize) || 1}`;
+      renderPagination();
     }
 
     function renderColumnOptions() {
@@ -411,6 +515,83 @@
 
     function closeColumnsModal() {
       $('columns-modal').classList.remove('show');
+    }
+
+    function openBatchEditModal() {
+      if (!selected.size) {
+        toast('请先选择要批量修改的联系人', false);
+        return;
+      }
+      $('batch-edit-form').reset();
+      $('batch-edit-rows').innerHTML = '';
+      addBatchEditRow();
+      $('batch-edit-scope').textContent = `将修改选中的 ${selected.size} 个联系人`;
+      $('batch-edit-modal').classList.add('show');
+    }
+
+    function closeBatchEditModal() {
+      $('batch-edit-modal').classList.remove('show');
+    }
+
+    function addBatchEditRow(field = 'org', mode = 'set', from = '', to = '') {
+      const row = document.createElement('div');
+      row.className = 'batch-edit-row';
+      row.innerHTML = `
+        <div class="batch-edit-cell batch-edit-checkbox"><input type="checkbox" class="batch-op-enabled" checked></div>
+        <div class="batch-edit-cell">
+          <select class="batch-op-field">
+            <option value="fn" ${field==='fn'?'selected':''}>全名</option>
+            <option value="n_family" ${field==='n_family'?'selected':''}>姓</option>
+            <option value="n_given" ${field==='n_given'?'selected':''}>名</option>
+            <option value="org" ${field==='org'?'selected':''}>公司</option>
+            <option value="title" ${field==='title'?'selected':''}>职位</option>
+            <option value="note" ${field==='note'?'selected':''}>备注</option>
+            <option value="nickname" ${field==='nickname'?'selected':''}>昵称</option>
+            <option value="url" ${field==='url'?'selected':''}>网址</option>
+            <option value="bday" ${field==='bday'?'selected':''}>生日</option>
+          </select>
+        </div>
+        <div class="batch-edit-cell">
+          <select class="batch-op-mode" onchange="updateBatchEditRowState(this.closest('.batch-edit-row'))">
+            <option value="set" ${mode==='set'?'selected':''}>覆盖</option>
+            <option value="replace" ${mode==='replace'?'selected':''}>替换</option>
+            <option value="append" ${mode==='append'?'selected':''}>追加</option>
+            <option value="prepend" ${mode==='prepend'?'selected':''}>前置</option>
+            <option value="clear" ${mode==='clear'?'selected':''}>清空</option>
+          </select>
+        </div>
+        <div class="batch-edit-cell"><input type="text" class="batch-op-from" placeholder="原内容" value="${esc(from)}"></div>
+        <div class="batch-edit-cell"><input type="text" class="batch-op-to" placeholder="新内容" value="${esc(to)}"></div>
+        <div class="batch-edit-cell"><button type="button" class="tool-btn" onclick="this.closest('.batch-edit-row').remove()">×</button></div>
+      `;
+      $('batch-edit-rows').appendChild(row);
+      updateBatchEditRowState(row);
+    }
+
+    function updateBatchEditRowState(row) {
+      if (!row) return;
+      const mode = row.querySelector('.batch-op-mode').value;
+      const fromInput = row.querySelector('.batch-op-from');
+      const toInput = row.querySelector('.batch-op-to');
+      if (mode === 'replace') {
+        fromInput.disabled = false;
+        toInput.disabled = false;
+        fromInput.placeholder = '原内容';
+        toInput.placeholder = '新内容';
+      } else if (mode === 'clear') {
+        fromInput.disabled = true;
+        toInput.disabled = true;
+        fromInput.value = '';
+        toInput.value = '';
+        fromInput.placeholder = '无需填写';
+        toInput.placeholder = '无需填写';
+      } else {
+        fromInput.disabled = true;
+        fromInput.value = '';
+        fromInput.placeholder = '此模式不使用';
+        toInput.disabled = false;
+        toInput.placeholder = mode === 'prepend' ? '要加到前面的内容' : mode === 'append' ? '要追加的内容' : '覆盖后的内容';
+      }
     }
 
     function toggleColumn(key, checked) {
@@ -467,7 +648,31 @@
     }
 
     function onSearch() { clearTimeout(this.t); this.t = setTimeout(() => { query = $('search-input').value; page = 1; load(); }, 300); }
-    function changePage(d) { if (page+d > 0 && page+d <= Math.ceil(total/pageSize)) { page += d; load(); } }
+    function goToPage(nextPage) {
+      const targetPage = Number(nextPage);
+      const totalPages = getTotalPages();
+      if (!Number.isFinite(targetPage) || targetPage < 1 || targetPage > totalPages || targetPage === page) return;
+      page = targetPage;
+      load();
+    }
+    function jumpToPageInput() {
+      goToPage(Number($('page-input').value));
+    }
+    function onPageInputKeydown(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        jumpToPageInput();
+      }
+    }
+    function changePage(d) { goToPage(page + d); }
+    function setPageSize(value) {
+      const nextSize = Number(value);
+      if (!Number.isFinite(nextSize) || nextSize <= 0 || nextSize === pageSize) return;
+      pageSize = nextSize;
+      localStorage.setItem('contacts-page-size', String(pageSize));
+      page = 1;
+      load();
+    }
     function toggleSel(id, checked) { checked ? selected.add(id) : selected.delete(id); render(); }
     function toggleAll(checked) { contacts.forEach(c => checked ? selected.add(c.id) : selected.delete(c.id)); render(); }
     function onRowClick(id, e) { if (e.target.tagName !== 'INPUT') openModal(id); }
@@ -758,8 +963,8 @@
         const { history = [] } = await requestJSON(`/api/contacts/${curId}/history`, {}, '获取历史记录失败');
         $('history-list').innerHTML = history.map(h => `
         <div class="item-card">
-          <div style="color:var(--gray);font-size:11px">${new Date(h.created_at).toLocaleString()}</div>
-          <div style="margin-top:2px">${esc(h.action === 'update' ? '更新' : '创建')} - ${esc(h.details)}</div>
+          <div style="color:var(--gray);font-size:11px">${formatTimestamp(h.created_at)}</div>
+          <div style="margin-top:2px">${esc(h.action === 'update' ? '更新' : '创建')} - ${esc(h.details || '')}</div>
         </div>
         `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">无历史记录</div>';
         $('history-modal').classList.add('show');
@@ -782,6 +987,67 @@
         toast(result?.message || '联系人已格式化');
       } catch (error) {
         toast(error.message, false);
+      }
+    }
+
+    async function submitBatchEdit(event) {
+      event.preventDefault();
+      const submitButton = event.submitter || document.querySelector('#batch-edit-form button[type="submit"]');
+      const requestId = `batch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      const ids = [...selected];
+      if (!ids.length) {
+        closeBatchEditModal();
+        return toast('请先选择要批量修改的联系人', false);
+      }
+      const operations = [...document.querySelectorAll('#batch-edit-rows .batch-edit-row')].map(row => ({
+        enabled: row.querySelector('.batch-op-enabled').checked,
+        field: row.querySelector('.batch-op-field').value,
+        mode: row.querySelector('.batch-op-mode').value,
+        from: row.querySelector('.batch-op-from').value,
+        to: row.querySelector('.batch-op-to').value
+      })).filter(item => item.enabled);
+
+      if (!operations.length) {
+        return toast('请至少勾选一条批量修改规则', false);
+      }
+
+      for (const operation of operations) {
+        if (operation.mode === 'replace' && !operation.from.trim()) {
+          return toast('替换模式需要填写原内容', false);
+        }
+        if (!['replace', 'clear'].includes(operation.mode) && !operation.to.trim()) {
+          return toast('请填写批量修改的新内容', false);
+        }
+      }
+
+      if (!(await showConfirm(`确定对选中的 ${ids.length} 个联系人应用 ${operations.length} 条修改规则吗？`))) return;
+      try {
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = '处理中...';
+        }
+        const result = await requestJSON('/api/contacts/batch-update', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ ids, operations, requestId }),
+          retryOnGateway: true
+        }, '批量修改失败');
+        closeBatchEditModal();
+        await load();
+        toast(result?.message || '联系人已批量修改');
+      } catch (error) {
+        if (/502|504|网关/.test(error.message)) {
+          closeBatchEditModal();
+          await load();
+          toast('网关异常，但修改很可能已生效，列表已刷新');
+        } else {
+          toast(error.message, false);
+        }
+      } finally {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = '应用修改';
+        }
       }
     }
 

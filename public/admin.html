@@ -310,6 +310,19 @@ const Admin = {
         return `${b.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
     },
 
+    normalizeTimestamp(value) {
+        const raw = Number(value);
+        if (!Number.isFinite(raw) || raw <= 0) return null;
+        return raw > 10000000000 ? raw : raw * 1000;
+    },
+
+    formatDate(value) {
+        const ts = this.normalizeTimestamp(value);
+        if (!ts) return '-';
+        const date = new Date(ts);
+        return Number.isNaN(date.getTime()) ? '-' : date.toLocaleDateString('zh-CN');
+    },
+
     escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, ch => ({
             '&': '&amp;',
@@ -430,8 +443,8 @@ const Admin = {
                     <td>${ownerHtml}</td>
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${titleHtml}">${titleHtml}</td>
                     <td><span class="u-badge">${s.targetType==='note'?'笔记':'文件'}</span></td>
-                    <td>${new Date(s.createdAt).toLocaleDateString()}</td>
-                    <td style="${isExpired?'color:var(--red)':''}">${s.expiresAt ? new Date(s.expiresAt).toLocaleDateString() : '永久'}</td>
+                    <td>${this.formatDate(s.createdAt)}</td>
+                    <td style="${isExpired?'color:var(--red)':''}">${s.expiresAt ? this.formatDate(s.expiresAt) : '永久'}</td>
                     <td style="text-align:right">
                         <button class="tool-btn" onclick="Admin.revokeShare('${tokenJs}')">撤销</button>
                     </td>
