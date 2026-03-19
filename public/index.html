@@ -283,9 +283,10 @@
             <div id="main-view" class="edit-only">
                 <div id="editor-wrapper" style="flex:1; display:flex; flex-direction:column; min-width:0; background:var(--bg); overflow:hidden; position:relative;">
                     <div id="editor-scroller">
-                        <div id="note-title-wrapper" class="note-title-wrapper">
-                            <input type="text" id="note-title-input" placeholder="分类_标题" class="note-title-input" oninput="ui.handleTitleInput(this.value)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-bwignore="true" data-1p-ignore="true">
-                        </div>
+<div id="note-title-wrapper" class="note-title-wrapper">
+    <input type="text" id="note-title-input" placeholder="分类_标题" class="note-title-input" oninput="ui.handleTitleInput(this.value)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-bwignore="true" data-1p-ignore="true">
+    <div id="note-meta" class="note-meta">创建：- · 修改：-</div>
+</div>
                         <div id="editor-container" data-ms-editor="false" style="flex:1; width:100%;"></div>
                     </div>
                 </div>

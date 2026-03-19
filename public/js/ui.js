@@ -1046,6 +1046,52 @@ const UIManager = {
         return `${note.id}|${note.title || ''}|${content}`;
     },
 
+    normalizeTimestamp(ts) {
+        if (ts === null || ts === undefined || ts === '') return null;
+        if (typeof ts === 'string') {
+            const parsed = Date.parse(ts);
+            if (!Number.isFinite(parsed) || parsed <= 0) return null;
+            return parsed;
+        }
+        const num = Number(ts);
+        if (!Number.isFinite(num) || num <= 0) return null;
+        return num > 10000000000 ? num : num * 1000;
+    },
+
+    formatTimestamp(ts) {
+        const normalized = this.normalizeTimestamp(ts);
+        return normalized ? new Date(normalized).toLocaleString('zh-CN') : '-';
+    },
+
+    formatCompactTimestamp(ts) {
+        const normalized = this.normalizeTimestamp(ts);
+        if (!normalized) return '-';
+        const date = new Date(normalized);
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${month}-${day} ${hours}:${minutes}`;
+    },
+
+    updateNoteMeta(note) {
+        const metaEl = document.getElementById('note-meta');
+        if (!metaEl) return;
+        if (!note) {
+            metaEl.textContent = '';
+            metaEl.title = '';
+            return;
+        }
+        const createdFull = this.formatTimestamp(note.createdAt);
+        const updatedFull = this.formatTimestamp(note.updatedAt);
+        const createdCompact = this.formatCompactTimestamp(note.createdAt);
+        const updatedCompact = this.formatCompactTimestamp(note.updatedAt);
+        metaEl.title = `创建：${createdFull} · 修改：${updatedFull}`;
+        metaEl.textContent = window.innerWidth <= 640
+            ? `改 ${updatedCompact}`
+            : `创 ${createdCompact} · 改 ${updatedCompact}`;
+    },
+
     _captureActiveNoteSnapshot() {
         if (!this.activeId) return null;
         const idx = this.notes.findIndex(x => x.id.toString() === this.activeId.toString());
@@ -1183,12 +1229,17 @@ const UIManager = {
 
         // 保存笔记，标题不变（用户需要手工修改标题）
         const now = Math.floor(Date.now() / 1000);
+        const createdAt = this.notes[idx].createdAt || currentNote.createdAt || now;
         this.notes[idx] = {
             ...this.notes[idx],
             content,
+            createdAt,
             updatedAt: now,
             isTemp: false
         };
+        if (this.notes[idx].id === this.activeId) {
+            this.updateNoteMeta(this.notes[idx]);
+        }
 
         // 更新编辑器最后修改时间
         this._editorLastUpdateTime = now * 1000; // UI 内部计时仍可保留 ms 用于防抖比较，但在 note 结构中存秒
@@ -1225,6 +1276,7 @@ const UIManager = {
                     id: note.id,
                     title: note.title,
                     content: note.content,
+                    createdAt: note.createdAt,
                     updatedAt: note.updatedAt
                 }])
             }, 20000);
@@ -1250,7 +1302,11 @@ const UIManager = {
                         };
                     }
                 }
-                this._lastSavedSignature = this._buildNoteSignature(this.notes[idx] || noteToUpdate || note);
+                const latestNote = this.notes[idx] || noteToUpdate || note;
+                if (latestNote && latestNote.id === this.activeId) {
+                    this.updateNoteMeta(latestNote);
+                }
+                this._lastSavedSignature = this._buildNoteSignature(latestNote);
                 this._saveFailureCount = 0;
                 this._saveCooldownUntil = 0;
                 return true;
@@ -1581,6 +1637,7 @@ const UIManager = {
             if (titleInput) titleInput.value = n.title || '';
 
             this._lastSavedSignature = this._buildNoteSignature(n, n.content || '');
+            this.updateNoteMeta(n);
 
             this.initEditor(n.content || '');
             
@@ -1605,6 +1662,7 @@ const UIManager = {
         const oldFullTitle = n.title;
         n.title = val;
         n.updatedAt = Math.floor(Date.now() / 1000);
+        this.updateNoteMeta(n);
 
         // 实时更新侧边栏对应项的标题显示
         const noteEl = document.querySelector(`.note-item[data-id="${this.activeId}"] .note-info`);

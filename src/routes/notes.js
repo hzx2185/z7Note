@@ -19,6 +19,19 @@ function sanitizeTitle(title) {
   return title.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function normalizeNoteTimestamp(value, fallback) {
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.floor(parsed / 1000);
+    }
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value > 2000000000 ? Math.floor(value / 1000) : Math.floor(value);
+  }
+  return fallback;
+}
+
 // 获取用户信息
 router.get('/api/user-info', async (req, res) => {
   try {
@@ -100,8 +113,8 @@ router.get('/api/files', async (req, res) => {
     const includeDeleted = req.query.includeDeleted === 'true';
 
     let query = includeDeleted
-      ? 'SELECT id, title, content, updatedAt FROM notes WHERE username = ?'
-      : 'SELECT id, title, content, updatedAt FROM notes WHERE username = ? AND deleted = 0';
+      ? 'SELECT id, title, content, createdAt, updatedAt FROM notes WHERE username = ?'
+      : 'SELECT id, title, content, createdAt, updatedAt FROM notes WHERE username = ? AND deleted = 0';
 
     query += ' ORDER BY updatedAt DESC LIMIT 500';
 
@@ -143,7 +156,7 @@ router.get('/api/notes', async (req, res) => {
 router.get('/api/notes/trash', async (req, res) => {
   try {
     const notes = await db.queryAll(
-      'SELECT id, title, updatedAt FROM notes WHERE username = ? AND deleted = 1 ORDER BY updatedAt DESC',
+      'SELECT id, title, createdAt, updatedAt FROM notes WHERE username = ? AND deleted = 1 ORDER BY updatedAt DESC',
       [req.user]
     );
     res.json(notes);
@@ -346,9 +359,10 @@ router.post('/api/notes', async (req, res) => {
     const noteContent = content || '';
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const now = Math.floor(Date.now() / 1000);
     await db.execute(
-      'INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)',
-      [id, req.user, sanitizeTitle(title) || '新笔记', noteContent, Math.floor(Date.now() / 1000)]
+      'INSERT INTO notes (id, username, title, content, createdAt, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, ?, 0)',
+      [id, req.user, sanitizeTitle(title) || '新笔记', noteContent, now, now]
     );
     const note = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [id, req.user]);
     res.json(note);
@@ -738,7 +752,7 @@ router.post('/api/files', async (req, res) => {
 
       // 检查是否已有该笔记，计算容量变化
       const existingNote = await db.queryOne(
-        'SELECT LENGTH(content) as size FROM notes WHERE id = ? AND username = ?',
+        'SELECT LENGTH(content) as size, createdAt FROM notes WHERE id = ? AND username = ?',
         [item.id, req.user]
       );
 
@@ -768,17 +782,20 @@ router.post('/api/files', async (req, res) => {
     await db.withTransaction(async (tx) => {
       for (const item of validItems) {
         // 处理时间戳：确保不为空或 0
-        let timestamp = item.updatedAt;
-        if (!timestamp || timestamp === 0 || isNaN(timestamp)) {
-          timestamp = Math.floor(Date.now() / 1000);
-        }
+        const now = Math.floor(Date.now() / 1000);
+        const updatedAt = normalizeNoteTimestamp(item.updatedAt, now);
+        const createdAt = normalizeNoteTimestamp(
+          item.createdAt,
+          existingNote?.createdAt || updatedAt || now
+        );
 
         await tx.upsert('notes', {
           id: item.id,
           username: req.user,
           title: item.title || '未命名',
           content: item.content || '',
-          updatedAt: timestamp,
+          createdAt,
+          updatedAt,
           deleted: item.deleted ? 1 : 0
         }, [
           'title',

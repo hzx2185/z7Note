@@ -8,6 +8,19 @@ const { safePath, isValidFilename } = require('../utils/path');
 
 const router = express.Router();
 
+function normalizeImportTimestamp(value, fallback) {
+  if (typeof value === 'string') {
+    const parsed = new Date(value).getTime();
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.floor(parsed / 1000);
+    }
+  } else if (typeof value === 'number') {
+    if (value > 2000000000) return Math.floor(value / 1000);
+    if (value > 0) return Math.floor(value);
+  }
+  return fallback;
+}
+
 // 获取用户统计信息
 router.get('/api/user/stats', async (req, res) => {
   try {
@@ -131,20 +144,15 @@ router.post('/api/import', async (req, res) => {
     if (notes && Array.isArray(notes)) {
       for (const note of notes) {
         if (note.username === req.user) {
-          // 处理时间戳：支持 ISO 字符串、毫秒、秒
-          let updatedAt = note.updatedAt;
-          if (typeof updatedAt === 'string') {
-            updatedAt = Math.floor(new Date(updatedAt).getTime() / 1000);
-          } else if (typeof updatedAt === 'number' && updatedAt > 2000000000) {
-            updatedAt = Math.floor(updatedAt / 1000);
-          } else if (!updatedAt || updatedAt === 0) {
-            // 如果时间戳为空、null、undefined 或 0，使用当前时间
-            updatedAt = Math.floor(Date.now() / 1000);
+          const now = Math.floor(Date.now() / 1000);
+          let updatedAt = normalizeImportTimestamp(note.updatedAt, now);
+          if (!updatedAt || updatedAt <= 0 || isNaN(updatedAt)) {
+            updatedAt = now;
           }
 
-          // 最终验证：确保时间戳是有效的正整数
-          if (!updatedAt || updatedAt <= 0 || isNaN(updatedAt)) {
-            updatedAt = Math.floor(Date.now() / 1000);
+          let createdAt = normalizeImportTimestamp(note.createdAt, updatedAt);
+          if (!createdAt || createdAt <= 0 || isNaN(createdAt)) {
+            createdAt = updatedAt;
           }
 
           await db.upsert('notes', {
@@ -152,6 +160,7 @@ router.post('/api/import', async (req, res) => {
             username: req.user,
             title: note.title,
             content: note.content,
+            createdAt,
             updatedAt,
             deleted: note.deleted || 0
           }, ['title', 'content', 'updatedAt', 'deleted'], ['id']);

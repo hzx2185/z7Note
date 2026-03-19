@@ -25,7 +25,7 @@ async function exportUserData(username, backupConfig) {
   try {
     // 1. 导出笔记数据
     const notes = await db.queryAll(
-      'SELECT id, title, content, updatedAt FROM notes WHERE username = ? AND deleted = 0',
+      'SELECT id, title, content, createdAt, updatedAt FROM notes WHERE username = ? AND deleted = 0',
       [username]
     );
     const notesData = {
@@ -35,7 +35,8 @@ async function exportUserData(username, backupConfig) {
         id: note.id,
         title: note.title,
         content: note.content,
-        updatedAt: new Date(note.updatedAt * 1000).toISOString()
+        createdAt: note.createdAt ? new Date(note.createdAt * 1000).toISOString() : null,
+        updatedAt: note.updatedAt ? new Date(note.updatedAt * 1000).toISOString() : null
       }))
     };
     textFiles.push({ filename: `${username}-notes.json`, buffer: Buffer.from(JSON.stringify(notesData, null, 2), 'utf-8') });

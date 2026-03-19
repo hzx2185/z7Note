@@ -821,7 +821,9 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
 
 .note-title-wrapper { 
     display: flex;
+    flex-direction: row;
     align-items: center;
+    gap: 10px;
     width: 100%; 
     padding: 8px 16px; 
     background: var(--bg); 
@@ -841,16 +843,28 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
     border: none !important; 
     outline: none !important;
     background: transparent; 
-    font-size: 16px; 
+    font-size: 14px;
     font-weight: 600; 
     color: var(--text); 
     padding: 0; 
     margin: 0; 
-    line-height: 1.35; 
+    line-height: 1.08;
     appearance: none;
     -webkit-appearance: none;
 }
 .note-title-input::placeholder { color: var(--gray); font-weight: 500; }
+.note-meta {
+    font-size: 11px;
+    color: var(--gray);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+    max-width: min(42%, 280px);
+    text-align: right;
+}
+.note-meta:empty { display: none; }
 
 #2fa-modal .compact-modal { width: min(460px, 92vw); overflow-x: hidden; }
 #2fa-modal .compact-form-body { padding: 16px; overflow-x: hidden; }
@@ -873,8 +887,9 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
 #2fa-modal .twofa-feedback { color: var(--gray); font-size: 12px; line-height: 1.5; text-align: center; }
 #2fa-modal .twofa-warning { color: var(--accent); font-weight: 600; }
 @media (max-width: 640px) {
-  .note-title-wrapper { padding: 8px 12px; }
-  .note-title-input { font-size: 15px; }
+  .note-title-wrapper { padding: 8px 12px; gap: 8px; }
+  .note-title-input { font-size: 13px; line-height: 1.05; }
+  .note-meta { font-size: 11px; max-width: 44%; }
   #2fa-modal .compact-modal { width: min(96vw, 460px); }
   #2fa-modal .compact-form-body { padding: 14px; }
   #2fa-modal .twofa-actions { flex-direction: column; }

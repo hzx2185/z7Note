@@ -35,6 +35,7 @@ async function createBaseTables(db) {
     username TEXT,
     title TEXT,
     content TEXT,
+    createdAt INTEGER,
     updatedAt INTEGER,
     deleted INTEGER DEFAULT 0
   )`);
@@ -129,6 +130,11 @@ async function createBaseIndexes(db) {
 }
 
 async function migrateBaseSchema(db) {
+  if (!(await sqliteHasColumn(db, 'notes', 'createdAt'))) {
+    await db.exec('ALTER TABLE notes ADD COLUMN createdAt INTEGER');
+    await db.exec('UPDATE notes SET createdAt = COALESCE(NULLIF(createdAt, 0), updatedAt) WHERE createdAt IS NULL OR createdAt = 0');
+  }
+
   if (!(await sqliteHasColumn(db, 'users', 'noteLimit'))) {
     await db.exec(`ALTER TABLE users ADD COLUMN noteLimit INTEGER DEFAULT ${config.defaultNoteLimit}`);
     await db.exec(`ALTER TABLE users ADD COLUMN fileLimit INTEGER DEFAULT ${config.defaultFileLimit}`);

@@ -116,6 +116,42 @@ async function findNote(username, filename) {
   return await db.queryOne('SELECT * FROM notes WHERE username = ? AND title = ? AND deleted = 0', [username, titleWithoutMd]);
 }
 
+function normalizeTimestampToSeconds(timestamp) {
+  const parsed = Number(timestamp);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  const seconds = parsed > 1e12 ? Math.floor(parsed / 1000) : Math.floor(parsed);
+  const minTimestamp = 946684800; // 2000-01-01
+  const maxTimestamp = Math.floor(Date.now() / 1000) + 366 * 24 * 60 * 60;
+  if (seconds < minTimestamp || seconds > maxTimestamp) {
+    return null;
+  }
+
+  return seconds;
+}
+
+function parseWebDavTimestamp(req) {
+  const ownCloudTimestamp = req.get('x-oc-mtime');
+  const normalizedOwnCloudTimestamp = normalizeTimestampToSeconds(ownCloudTimestamp);
+  if (normalizedOwnCloudTimestamp) {
+    return normalizedOwnCloudTimestamp;
+  }
+
+  const candidateHeader = req.get('x-last-modified') || req.get('last-modified');
+  if (!candidateHeader) {
+    return null;
+  }
+
+  const parsedDate = Date.parse(candidateHeader);
+  if (Number.isNaN(parsedDate)) {
+    return null;
+  }
+
+  return normalizeTimestampToSeconds(parsedDate);
+}
+
 // 全局中间件
 router.use((req, res, next) => {
   // 统一路径斜杠
@@ -388,29 +424,31 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       contentStr = convertAttachmentPathToWeb(contentStr, username);
 
       const now = Math.floor(Date.now() / 1000);
+      const clientTimestamp = parseWebDavTimestamp(req);
+      const effectiveTimestamp = clientTimestamp || now;
       // 去掉 .md 后缀
       const cleanTitle = filename.replace(/\.md$/i, '');
 
       if (note) {
-        await db.execute('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?', [contentStr, now, note.id, username]);
+        await db.execute('UPDATE notes SET content = ?, updatedAt = ? WHERE id = ? AND username = ?', [contentStr, effectiveTimestamp, note.id, username]);
         // 通知 WebSocket 客户端
         const updatedNote = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [note.id, username]);
         if (updatedNote) {
           log('INFO', 'WebDAV 准备广播笔记更新', { noteId: updatedNote.id, title: updatedNote.title });
           broadcastNoteUpdate(username, updatedNote);
         }
-        res.setHeader('ETag', `"${now}"`);
+        res.setHeader('ETag', `"${effectiveTimestamp}"`);
         return res.status(204).end(); // 204 No Content (Standard for update)
       } else {
         const id = 'note_' + crypto.randomBytes(8).toString('hex');
-        await db.execute('INSERT INTO notes (id, username, title, content, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, 0)', [id, username, cleanTitle, contentStr, now]);
+        await db.execute('INSERT INTO notes (id, username, title, content, createdAt, updatedAt, deleted) VALUES (?, ?, ?, ?, ?, ?, 0)', [id, username, cleanTitle, contentStr, effectiveTimestamp, effectiveTimestamp]);
         // 通知 WebSocket 客户端
         const newNote = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [id, username]);
         if (newNote) {
           log('INFO', 'WebDAV 准备广播新笔记', { noteId: newNote.id, title: newNote.title });
           broadcastNoteUpdate(username, newNote);
         }
-        res.setHeader('ETag', `"${now}"`);
+        res.setHeader('ETag', `"${effectiveTimestamp}"`);
         return res.status(201).end(); // 201 Created
       }
     }
