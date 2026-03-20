@@ -4,9 +4,32 @@ const log = require('../utils/logger');
 const TimeHelper = require('../utils/timeHelper');
 const { broadcast } = require('./ws');
 const lunarHelper = require('../utils/lunarHelper');
+const { generateRecurringEvents } = require('../utils/recurringEvents');
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 
 const router = express.Router();
+
+function normalizeEventRange(startTime, endTime, allDay) {
+  if (allDay) {
+    return TimeHelper.normalizeAllDayRange(startTime, endTime);
+  }
+
+  return {
+    startTime: TimeHelper.parseToTs(startTime),
+    endTime: TimeHelper.parseToTs(endTime)
+  };
+}
+
+function expandRecurringInstancesForRange(event, startDate, endDate) {
+  const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
+  if (!recurrence || !recurrence.type) return [];
+
+  const instances = generateRecurringEvents({ ...event, recurrence }, startDate, endDate);
+  return instances.map(instance => ({
+    ...instance,
+    _originalId: instance.parentEventId || event.id
+  }));
+}
 
 // 批量创建
 router.post('/batch', async (req, res) => {
@@ -23,7 +46,8 @@ router.post('/batch', async (req, res) => {
         const { title, description, startTime, endTime, allDay } = e;
         if (!title) continue;
 
-        const startTs = TimeHelper.parseToTs(startTime);
+        const normalizedRange = normalizeEventRange(startTime, endTime, allDay);
+        const startTs = normalizedRange.startTime;
         if (!startTs) continue;
 
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -32,7 +56,7 @@ router.post('/batch', async (req, res) => {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id, req.user, title.trim(), description || '',
-            startTs, TimeHelper.parseToTs(endTime), allDay ? 1 : 0, '#2563eb',
+            startTs, normalizedRange.endTime, allDay ? 1 : 0, '#2563eb',
             now, now
           ]
         );
@@ -158,6 +182,40 @@ router.get('/expand-lunar', async (req, res) => {
   }
 });
 
+// 批量展开重复事件 (供月视图统一使用，包含公历/农历)
+router.get('/expand-recurring', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) return res.status(400).json({ error: '缺少范围参数' });
+
+    const start = parseInt(startDate, 10);
+    const end = parseInt(endDate, 10);
+    const masters = await db.queryAll(
+      "SELECT * FROM events WHERE username = ? AND recurrence IS NOT NULL AND recurrence != ''",
+      [req.user]
+    );
+
+    const expanded = [];
+    for (const master of masters) {
+      try {
+        expanded.push(...expandRecurringInstancesForRange(master, start, end));
+      } catch (error) {
+        log('WARN', '展开重复事件失败', { username: req.user, eventId: master.id, error: error.message });
+      }
+    }
+
+    res.json(expanded.map(event => ({
+      ...event,
+      id: toClientCalendarId(req.user, event.id),
+      _originalId: event._originalId ? toClientCalendarId(req.user, event._originalId) : event._originalId,
+      parentEventId: event.parentEventId ? toClientCalendarId(req.user, event.parentEventId) : event.parentEventId
+    })));
+  } catch (e) {
+    log('ERROR', '批量展开重复事件失败', { username: req.user, error: e.message });
+    res.status(500).json({ error: '展开失败' });
+  }
+});
+
 // 数据规范化/修复
 router.post('/format', async (req, res) => {
   try {
@@ -171,18 +229,16 @@ router.post('/format', async (req, res) => {
         
         if (event.allDay === 1) {
             // 核心修复：全天事件标准化 (RFC 5545)
-            
-            // 1. 将开始时间对齐到最近的 UTC 00:00:00 (86400的倍数)
-            const utcStart = Math.round(event.startTime / 86400) * 86400;
+
+            const normalizedRange = TimeHelper.normalizeAllDayRange(event.startTime, event.endTime);
+            const utcStart = normalizedRange.startTime;
             if (utcStart !== event.startTime) {
                 newStart = utcStart;
                 needsUpdate = true;
             }
             
             // 2. 确保结束时间是排他的 (下一天 00:00:00)
-            // 计算跨度，至少为 1 天
-            let days = Math.max(1, Math.round((event.endTime - event.startTime) / 86400));
-            const utcEnd = utcStart + (days * 86400);
+            const utcEnd = normalizedRange.endTime;
             if (utcEnd !== event.endTime) {
                 newEnd = utcEnd;
                 needsUpdate = true;
@@ -266,6 +322,11 @@ router.post('/import', async (req, res) => {
       // 导入事件
       for (const e of parsed.events) {
         const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
+        const normalizedRange = normalizeEventRange(e.startTime, e.endTime, e.allDay);
+        if (!normalizedRange.startTime) {
+          skipped++;
+          continue;
+        }
 
         let existing;
         const scopedEventId = e.id ? scopeExternalCalendarId(username, e.id) : null;
@@ -291,14 +352,14 @@ router.post('/import', async (req, res) => {
 
           await tx.execute(
             'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
-            [e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, existing.id, username]
+            [e.title, e.description || '', normalizedRange.startTime, normalizedRange.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, TimeHelper.parseToTs(e.recurrenceEnd), now, existing.id, username]
           );
           updated++;
         } else {
           const eventId = e.id ? scopedEventId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           await tx.execute(
             'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-            [eventId, username, e.title, e.description || '', e.startTime, e.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, e.recurrenceEnd || null, now, now]
+            [eventId, username, e.title, e.description || '', normalizedRange.startTime, normalizedRange.endTime, e.allDay ? 1 : 0, e.color || '#2563eb', recurrenceStr, TimeHelper.parseToTs(e.recurrenceEnd), now, now]
           );
           imported++;
         }
@@ -408,7 +469,8 @@ router.post('/', async (req, res) => {
     const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd } = req.body;
     if (!title) return res.status(400).json({ error: '标题不能为空' });
 
-    const startTs = TimeHelper.parseToTs(startTime);
+    const normalizedRange = normalizeEventRange(startTime, endTime, allDay);
+    const startTs = normalizedRange.startTime;
     if (!startTs) return res.status(400).json({ error: '开始时间无效' });
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -417,7 +479,7 @@ router.post('/', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, req.user, title.trim(), description || '',
-        startTs, TimeHelper.parseToTs(endTime), allDay ? 1 : 0, '#2563eb',
+        startTs, normalizedRange.endTime, allDay ? 1 : 0, '#2563eb',
         reminderEmail ? 1 : 0, reminderBrowser ? 1 : 0, reminderCaldav ? 1 : 0,
         recurrence || null, TimeHelper.parseToTs(recurrenceEnd),
         Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)
@@ -445,8 +507,6 @@ router.put('/:id', async (req, res) => {
     const fields = {
       title: (v) => v?.trim(),
       description: (v) => v,
-      startTime: TimeHelper.parseToTs,
-      endTime: TimeHelper.parseToTs,
       allDay: (v) => v ? 1 : 0,
       reminderEmail: (v) => v ? 1 : 0,
       reminderBrowser: (v) => v ? 1 : 0,
@@ -460,6 +520,21 @@ router.put('/:id', async (req, res) => {
         updates.push(`${key} = ?`);
         params.push(parser(req.body[key]));
       }
+    }
+
+    if (req.body.startTime !== undefined || req.body.endTime !== undefined || req.body.allDay !== undefined) {
+      const normalizedRange = normalizeEventRange(
+        req.body.startTime !== undefined ? req.body.startTime : existing.startTime,
+        req.body.endTime !== undefined ? req.body.endTime : existing.endTime,
+        req.body.allDay !== undefined ? req.body.allDay : existing.allDay
+      );
+
+      if (!normalizedRange.startTime) {
+        return res.status(400).json({ error: '开始时间无效' });
+      }
+
+      updates.push('startTime = ?', 'endTime = ?');
+      params.push(normalizedRange.startTime, normalizedRange.endTime);
     }
 
     if (updates.length === 0) return res.json({ success: true });
@@ -568,39 +643,7 @@ router.get('/calendar/day/:date', async (req, res) => {
       } else {
         // 重复事件，展开
         try {
-          const r = typeof e.recurrence === 'string' ? JSON.parse(e.recurrence) : e.recurrence;
-          
-          // 处理农历重复
-          if (r.type && r.type.startsWith('lunar_')) {
-            const lunarEvents = lunarHelper.generateLunarRecurringEvents(e, start, end);
-            expandedEvents.push(...lunarEvents);
-            return;
-          }
-
-          let cur = new Date(e.startTime * 1000);
-          const maxEnd = e.recurrenceEnd ? new Date(e.recurrenceEnd * 1000) : dayEnd;
-          
-          let count = 0;
-          while (cur <= maxEnd && cur <= dayEnd && count < 100) {
-            // 检查是否在当天
-            if (cur >= dayStart && cur <= dayEnd) {
-              expandedEvents.push({
-                ...e,
-                _originalId: e.id,
-                isRecurringInstance: true,
-                startTime: Math.floor(cur.getTime() / 1000),
-                endTime: e.endTime ? Math.floor(cur.getTime() / 1000 + (e.endTime - e.startTime)) : null
-              });
-            }
-            
-            // 根据重复类型推进时间
-            if (r.type === 'daily') cur.setDate(cur.getDate() + (r.interval || 1));
-            else if (r.type === 'weekly') cur.setDate(cur.getDate() + 7 * (r.interval || 1));
-            else if (r.type === 'monthly') cur.setMonth(cur.getMonth() + (r.interval || 1));
-            else if (r.type === 'yearly') cur.setFullYear(cur.getFullYear() + (r.interval || 1));
-            else break;
-            count++;
-          }
+          expandedEvents.push(...expandRecurringInstancesForRange(e, start, end));
         } catch (err) {
           // 解析失败，添加原始事件
           expandedEvents.push(e);

@@ -161,6 +161,83 @@ const CalendarApp = (function() {
       return `${year}-${month}-${day}`;
     },
 
+    parseDateInputToUtcTs(dateStr) {
+      if (!dateStr) return null;
+      const [year, month, day] = dateStr.split('-').map(Number);
+      if (!year || !month || !day) return null;
+      return Math.floor(Date.UTC(year, month - 1, day) / 1000);
+    },
+
+    formatUtcTsToDateInput(ts) {
+      if (!ts && ts !== 0) return '';
+      const d = new Date(ts * 1000);
+      if (isNaN(d.getTime())) return '';
+      return utils.formatUTCDate(d);
+    },
+
+    setLunarOptionVisibility(visible) {
+      const lunarCheckboxWrap = document.getElementById('lunar-checkbox-wrap');
+      const lunarCheckbox = document.getElementById('isLunar-checkbox');
+      if (!lunarCheckboxWrap) return;
+
+      lunarCheckboxWrap.classList.toggle('hidden', !visible);
+      if (!visible && lunarCheckbox) {
+        lunarCheckbox.checked = false;
+      }
+    },
+
+    setRecurrenceEndVisibility(visible) {
+      const recurrenceEndGroup = document.getElementById('recurrence-end-group');
+      if (!recurrenceEndGroup) return;
+      recurrenceEndGroup.classList.toggle('hidden', !visible);
+    },
+
+    getDefaultRecurrenceEndDate() {
+      const form = elements.eventForm;
+      const allDayInput = form?.querySelector('[name="allDay"]');
+      const startDateInput = form?.querySelector('[name="startDate"]');
+      const endDateInput = form?.querySelector('[name="endDate"]');
+      const startTimeInput = form?.querySelector('[name="startTime"]');
+      const endTimeInput = form?.querySelector('[name="endTime"]');
+
+      let baseDate = null;
+      const isAllDay = allDayInput?.value === 'true';
+
+      if (isAllDay) {
+        const baseDateStr = endDateInput?.value || startDateInput?.value;
+        if (baseDateStr) {
+          const [year, month, day] = baseDateStr.split('-').map(Number);
+          if (year && month && day) {
+            baseDate = new Date(Date.UTC(year, month - 1, day));
+          }
+        }
+      } else {
+        const baseDateStr = endTimeInput?.value || startTimeInput?.value;
+        if (baseDateStr) {
+          const parsed = new Date(baseDateStr);
+          if (!Number.isNaN(parsed.getTime())) {
+            baseDate = new Date(Date.UTC(
+              parsed.getFullYear(),
+              parsed.getMonth(),
+              parsed.getDate()
+            ));
+          }
+        }
+      }
+
+      if (!baseDate) {
+        baseDate = new Date(state.selectedDate);
+        baseDate = new Date(Date.UTC(
+          baseDate.getFullYear(),
+          baseDate.getMonth(),
+          baseDate.getDate()
+        ));
+      }
+
+      baseDate.setUTCFullYear(baseDate.getUTCFullYear() + 1);
+      return utils.formatUTCDate(baseDate);
+    },
+
     formatDisplayDate(date) {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
@@ -1220,9 +1297,7 @@ const CalendarApp = (function() {
       const expanded = [];
       const monthStart = new Date(year, month, 1);
       const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
-
-      const lunarEvents = [];
-      const otherEvents = [];
+      const recurringMasters = [];
 
       events.forEach(event => {
         if (!event.recurrence) {
@@ -1236,119 +1311,25 @@ const CalendarApp = (function() {
             expanded.push(event);
             return;
           }
-
-          if (recurrence.type === 'lunar_monthly' || recurrence.type === 'lunar_yearly') {
-            lunarEvents.push(event);
-          } else {
-            otherEvents.push(event);
-          }
+          recurringMasters.push(event);
         } catch (e) {
           console.error('解析重复规则失败:', event, e);
           expanded.push(event);
         }
       });
 
-      // 处理公历重复事件
-      otherEvents.forEach(event => {
-        try {
-          const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
-          const startDate = new Date(event.startTime * 1000);
-          const endDate = event.recurrenceEnd ? new Date(event.recurrenceEnd * 1000) : null;
-
-          if (recurrence.type === 'weekly' && !recurrence.daysOfWeek) {
-            recurrence.daysOfWeek = [startDate.getDay()];
-          }
-
-          const current = new Date(startDate);
-          let breakLoop = false;
-
-          // 快进到月份开始
-          if (current < monthStart) {
-            let periodMs = 0;
-            switch (recurrence.type) {
-              case 'daily':
-                periodMs = 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
-                break;
-              case 'weekly':
-                periodMs = 7 * 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
-                break;
-              case 'monthly':
-                const yearDiff = monthStart.getFullYear() - current.getFullYear();
-                const monthDiff = monthStart.getMonth() - current.getMonth();
-                const totalMonths = yearDiff * 12 + monthDiff;
-                const periodsToSkip = Math.max(0, totalMonths);
-                current.setMonth(current.getMonth() + periodsToSkip * (recurrence.interval || 1));
-                periodMs = 0;
-                break;
-              case 'yearly':
-                periodMs = 365 * 24 * 60 * 60 * 1000 * (recurrence.interval || 1);
-                break;
-            }
-
-            if (periodMs > 0) {
-              const periodsToSkip = Math.ceil((monthStart - current) / periodMs);
-              current.setTime(current.getTime() + periodsToSkip * periodMs);
-            }
-          }
-
-          while ((!endDate || current <= endDate) && current <= monthEnd) {
-            let shouldAdd = true;
-            if (recurrence.type === 'weekly' && recurrence.daysOfWeek) {
-              shouldAdd = recurrence.daysOfWeek.includes(current.getDay());
-            }
-
-            if (shouldAdd) {
-              expanded.push({
-                ...event,
-                _originalId: event.id,
-                _instanceTime: Math.floor(current.getTime() / 1000),
-                isRecurringInstance: true,
-                startTime: Math.floor(current.getTime() / 1000),
-                endTime: event.endTime ?
-                  Math.floor(current.getTime() / 1000 + (event.endTime - event.startTime)) :
-                  null
-              });
-            }
-
-            switch (recurrence.type) {
-              case 'daily':
-                current.setDate(current.getDate() + (recurrence.interval || 1));
-                break;
-              case 'weekly':
-                current.setDate(current.getDate() + 1);
-                break;
-              case 'monthly':
-                current.setMonth(current.getMonth() + (recurrence.interval || 1));
-                break;
-              case 'yearly':
-                current.setFullYear(current.getFullYear() + (recurrence.interval || 1));
-                break;
-              default:
-                breakLoop = true;
-                break;
-            }
-
-            if (breakLoop) break;
-          }
-        } catch (e) {
-          console.error('展开重复事件失败:', event, e);
-          expanded.push(event);
-        }
-      });
-
-      // 处理农历重复事件
-      if (lunarEvents.length > 0) {
+      if (recurringMasters.length > 0) {
         const startDate = Math.floor(monthStart.getTime() / 1000);
         const endDate = Math.floor(monthEnd.getTime() / 1000);
 
         try {
-          const response = await fetch(`/api/events/expand-lunar?startDate=${startDate}&endDate=${endDate}`, {
+          const response = await fetch(`/api/events/expand-recurring?startDate=${startDate}&endDate=${endDate}`, {
             credentials: 'include'
           });
 
           if (response.ok) {
-            const lunarExpanded = await response.json();
-            lunarExpanded.forEach(instance => {
+            const recurringExpanded = await response.json();
+            recurringExpanded.forEach(instance => {
               expanded.push({
                 ...instance,
                 _originalId: instance.parentEventId || instance._originalId || instance.id,
@@ -1357,7 +1338,7 @@ const CalendarApp = (function() {
             });
           }
         } catch (error) {
-          console.error('获取农历重复事件失败:', error);
+          console.error('获取重复事件失败:', error);
         }
       }
 
@@ -2180,11 +2161,8 @@ const CalendarApp = (function() {
         startDateInput.value = dateStr;
         endDateInput.value = dateStr;
         
-        // 初始化重复事件的结束日期为当前日期加上一年
-        const defaultEndDate = new Date();
-        defaultEndDate.setFullYear(defaultEndDate.getFullYear() + 1);
-        const recurrenceEndDateStr = utils.formatDate(defaultEndDate);
-        recurrenceEndInput.value = recurrenceEndDateStr;
+        // 初始化重复事件的结束日期为“事件日期 + 1 年”，避免被今天日期错误截短
+        recurrenceEndInput.value = utils.getDefaultRecurrenceEndDate();
         
         // 明确初始化checkbox状态
         const reminderEmailInput = elements.eventForm.querySelector('[name="reminderEmail"]');
@@ -2355,7 +2333,7 @@ const CalendarApp = (function() {
         const recurrenceType = isLunar ? `lunar_${data.recurrence}` : data.recurrence;
         data.recurrence = JSON.stringify({ type: recurrenceType });
         if (data.recurrenceEnd) {
-          data.recurrenceEnd = Math.floor(new Date(data.recurrenceEnd).getTime() / 1000);
+          data.recurrenceEnd = utils.parseDateInputToUtcTs(data.recurrenceEnd);
         }
       } else {
         data.recurrence = null;
@@ -2703,30 +2681,30 @@ const CalendarApp = (function() {
           elements.eventForm.querySelector('[name="recurrence"]').value = baseType;
           
           const lunarCheckbox = document.getElementById('isLunar-checkbox');
-          const lunarWrap = document.getElementById('lunar-checkbox-wrap');
-          if (lunarCheckbox && lunarWrap) {
+          utils.setLunarOptionVisibility(baseType === 'yearly' || baseType === 'monthly');
+          if (lunarCheckbox) {
             lunarCheckbox.checked = isLunar;
-            lunarWrap.style.display = (baseType === 'yearly' || baseType === 'monthly') ? 'inline-block' : 'none';
           }
 
           if (event.recurrenceEnd) {
-            const endDate = new Date(event.recurrenceEnd * 1000);
-            elements.eventForm.querySelector('[name="recurrenceEnd"]').value = endDate.toISOString().slice(0, 10);
-            document.getElementById('recurrence-end-group').style.display = 'block';
+            elements.eventForm.querySelector('[name="recurrenceEnd"]').value = utils.formatUtcTsToDateInput(event.recurrenceEnd);
+            utils.setRecurrenceEndVisibility(true);
           } else {
             elements.eventForm.querySelector('[name="recurrenceEnd"]').value = '';
-            document.getElementById('recurrence-end-group').style.display = 'none';
+            utils.setRecurrenceEndVisibility(false);
           }
         } catch (e) {
           console.error('解析recurrence失败:', e);
           elements.eventForm.querySelector('[name="recurrence"]').value = '';
           elements.eventForm.querySelector('[name="recurrenceEnd"]').value = '';
-          document.getElementById('recurrence-end-group').style.display = 'none';
+          utils.setRecurrenceEndVisibility(false);
+          utils.setLunarOptionVisibility(false);
         }
       } else {
         elements.eventForm.querySelector('[name="recurrence"]').value = '';
         elements.eventForm.querySelector('[name="recurrenceEnd"]').value = '';
-        document.getElementById('recurrence-end-group').style.display = 'none';
+        utils.setRecurrenceEndVisibility(false);
+        utils.setLunarOptionVisibility(false);
       }
 
       elements.eventForm.dataset.eventId = eventId;
@@ -3385,25 +3363,16 @@ const CalendarApp = (function() {
     if (recurrenceSelect && recurrenceEndGroup) {
       recurrenceSelect.addEventListener('change', (e) => {
         const val = e.target.value;
-        recurrenceEndGroup.style.display = val ? 'block' : 'none';
+        utils.setRecurrenceEndVisibility(Boolean(val));
         
         // 仅在“每年”或“每月”重复时显示农历选项
-        if (lunarCheckboxWrap) {
-          lunarCheckboxWrap.style.display = (val === 'yearly' || val === 'monthly') ? 'inline-block' : 'none';
-          if (lunarCheckboxWrap.style.display === 'none') {
-            document.getElementById('isLunar-checkbox').checked = false;
-          }
-        }
+        utils.setLunarOptionVisibility(val === 'yearly' || val === 'monthly');
         
         // 当选择重复类型时，设置默认的结束日期
         if (e.target.value) {
           const recurrenceEndInput = elements.eventForm.querySelector('[name="recurrenceEnd"]');
           if (!recurrenceEndInput.value) {
-            // 设置默认结束日期为当前日期加上一年
-            const defaultEndDate = new Date();
-            defaultEndDate.setFullYear(defaultEndDate.getFullYear() + 1);
-            const dateStr = utils.formatDate(defaultEndDate);
-            recurrenceEndInput.value = dateStr;
+            recurrenceEndInput.value = utils.getDefaultRecurrenceEndDate();
           }
         }
       });

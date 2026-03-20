@@ -3,6 +3,77 @@
  */
 
 class TimeHelper {
+  static getAppTimeZone() {
+    return 'Asia/Shanghai';
+  }
+
+  static getDatePartsInTimeZone(ts, timeZone = TimeHelper.getAppTimeZone()) {
+    if (!ts && ts !== 0) return null;
+    const d = new Date(ts * 1000);
+
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const parts = formatter.formatToParts(d);
+      return {
+        year: Number(parts.find(p => p.type === 'year').value),
+        month: Number(parts.find(p => p.type === 'month').value),
+        day: Number(parts.find(p => p.type === 'day').value)
+      };
+    } catch (e) {
+      return {
+        year: d.getFullYear(),
+        month: d.getMonth() + 1,
+        day: d.getDate()
+      };
+    }
+  }
+
+  static toUtcMidnightTs(year, month, day) {
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000);
+  }
+
+  static getUtcDateParts(ts) {
+    if (!ts && ts !== 0) return null;
+    const d = new Date(ts * 1000);
+    return {
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+      day: d.getUTCDate()
+    };
+  }
+
+  static normalizeAllDayRange(startTs, endTs, timeZone = TimeHelper.getAppTimeZone()) {
+    if (startTs === undefined || startTs === null || startTs === '') {
+      return { startTime: null, endTime: null };
+    }
+
+    const normalizedStartTs = TimeHelper.parseToTs(startTs);
+    const normalizedEndTs = TimeHelper.parseToTs(endTs);
+
+    if (!normalizedStartTs) {
+      return { startTime: null, endTime: null };
+    }
+
+    // 全天事件在系统内统一按 UTC 00:00/排他性结束日存储。
+    // 这里必须按 UTC 日期归一化，避免 00:00 UTC 在东八区被再次解释成“当天上午”，
+    // 从而让保存一次就把结束日期偷偷往后推一天。
+    const startParts = TimeHelper.getUtcDateParts(normalizedStartTs);
+    const startTime = TimeHelper.toUtcMidnightTs(startParts.year, startParts.month, startParts.day);
+
+    const inclusiveEndSource = normalizedEndTs && normalizedEndTs > normalizedStartTs
+      ? normalizedEndTs - 1
+      : normalizedStartTs;
+    const endParts = TimeHelper.getUtcDateParts(inclusiveEndSource);
+    const endTime = TimeHelper.toUtcMidnightTs(endParts.year, endParts.month, endParts.day + 1);
+
+    return { startTime, endTime };
+  }
+
   /**
    * 将任何输入解析为秒级 Unix 时间戳
    */

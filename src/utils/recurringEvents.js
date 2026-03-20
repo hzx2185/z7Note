@@ -4,6 +4,10 @@
 
 const { generateLunarRecurringEvents } = require('./lunarHelper');
 
+function getUtcMonthDays(year, monthIndex) {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
 /**
  * 生成重复事件
  * @param {Object} masterEvent - 主事件
@@ -27,14 +31,18 @@ function generateRecurringEvents(masterEvent, startDate, endDate) {
   const daysOfWeek = recurrence.daysOfWeek || []; // 周几重复(仅weekly)
   const dayOfMonth = recurrence.dayOfMonth; // 每月的第几天(仅monthly)
   const monthOfYear = recurrence.monthOfYear; // 每年的第几个月(仅yearly)
+  const masterStartDate = new Date(startTime * 1000);
+  masterStartDate.setUTCHours(0, 0, 0, 0);
+  const masterDayOfMonth = masterStartDate.getUTCDate();
+  const masterMonthOfYear = masterStartDate.getUTCMonth() + 1;
 
   // 重复结束日期
   const endRecurrenceDate = recurrenceEnd ? new Date(recurrenceEnd * 1000) : new Date(endDate * 1000);
-  endRecurrenceDate.setHours(23, 59, 59, 999);
+  endRecurrenceDate.setUTCHours(23, 59, 59, 999);
 
   // 生成重复事件
   let currentDate = new Date(startTime * 1000);
-  currentDate.setHours(0, 0, 0, 0);
+  currentDate.setUTCHours(0, 0, 0, 0);
 
   const maxIterations = 1000; // 防止无限循环
   let iterations = 0;
@@ -59,47 +67,48 @@ function generateRecurringEvents(masterEvent, startDate, endDate) {
     // 计算下一个日期
     switch (recurrenceType) {
       case 'daily':
-        currentDate.setDate(currentDate.getDate() + interval);
+        currentDate.setUTCDate(currentDate.getUTCDate() + interval);
         break;
 
       case 'weekly':
         if (daysOfWeek.length > 0) {
           // 指定周几重复
-          const currentDay = currentDate.getDay();
+          const currentDay = currentDate.getUTCDay();
           let nextDay = daysOfWeek.find(d => d > currentDay);
           if (nextDay === undefined) {
             // 下一周
             nextDay = daysOfWeek[0];
-            currentDate.setDate(currentDate.getDate() + (7 - currentDay + nextDay));
+            currentDate.setUTCDate(currentDate.getUTCDate() + (7 - currentDay + nextDay));
           } else {
-            currentDate.setDate(currentDate.getDate() + (nextDay - currentDay));
+            currentDate.setUTCDate(currentDate.getUTCDate() + (nextDay - currentDay));
           }
         } else {
           // 每周重复
-          currentDate.setDate(currentDate.getDate() + (7 * interval));
+          currentDate.setUTCDate(currentDate.getUTCDate() + (7 * interval));
         }
         break;
 
       case 'monthly':
         if (dayOfMonth) {
           // 指定每月的第几天
-          currentDate.setMonth(currentDate.getMonth() + interval);
-          currentDate.setDate(Math.min(dayOfMonth, new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()));
+          currentDate.setUTCMonth(currentDate.getUTCMonth() + interval, 1);
+          currentDate.setUTCDate(Math.min(dayOfMonth, getUtcMonthDays(currentDate.getUTCFullYear(), currentDate.getUTCMonth())));
         } else {
-          // 每月同一天
-          currentDate.setMonth(currentDate.getMonth() + interval);
+          // 每月同一天，固定锚在主事件的日，避免 31 号等边界不断漂移
+          currentDate.setUTCMonth(currentDate.getUTCMonth() + interval, 1);
+          currentDate.setUTCDate(Math.min(masterDayOfMonth, getUtcMonthDays(currentDate.getUTCFullYear(), currentDate.getUTCMonth())));
         }
         break;
 
       case 'yearly':
         if (monthOfYear && dayOfMonth) {
           // 指定每年的某月某日
-          currentDate.setFullYear(currentDate.getFullYear() + interval);
-          currentDate.setMonth(monthOfYear - 1);
-          currentDate.setDate(Math.min(dayOfMonth, new Date(currentDate.getFullYear(), monthOfYear, 0).getDate()));
+          currentDate.setUTCFullYear(currentDate.getUTCFullYear() + interval, monthOfYear - 1, 1);
+          currentDate.setUTCDate(Math.min(dayOfMonth, getUtcMonthDays(currentDate.getUTCFullYear(), monthOfYear - 1)));
         } else {
-          // 每年同一天
-          currentDate.setFullYear(currentDate.getFullYear() + interval);
+          // 每年同一天，固定锚在主事件原始月/日
+          currentDate.setUTCFullYear(currentDate.getUTCFullYear() + interval, masterMonthOfYear - 1, 1);
+          currentDate.setUTCDate(Math.min(masterDayOfMonth, getUtcMonthDays(currentDate.getUTCFullYear(), masterMonthOfYear - 1)));
         }
         break;
 
@@ -153,7 +162,7 @@ function matchesRecurrenceRule(date, recurrence, startDate) {
 
     case 'weekly':
       if (daysOfWeek.length > 0) {
-        return daysOfWeek.includes(date.getDay());
+        return daysOfWeek.includes(date.getUTCDay());
       }
       // 计算周数间隔
       const weekDiff = Math.floor((date - startDate) / (7 * 24 * 60 * 60 * 1000));
@@ -161,20 +170,20 @@ function matchesRecurrenceRule(date, recurrence, startDate) {
 
     case 'monthly':
       if (dayOfMonth) {
-        return date.getDate() === dayOfMonth;
+        return date.getUTCDate() === dayOfMonth;
       }
-      const monthDiff = (date.getFullYear() - startDate.getFullYear()) * 12 +
-                       (date.getMonth() - startDate.getMonth());
-      return monthDiff % interval === 0 && date.getDate() === startDate.getDate();
+      const monthDiff = (date.getUTCFullYear() - startDate.getUTCFullYear()) * 12 +
+                       (date.getUTCMonth() - startDate.getUTCMonth());
+      return monthDiff % interval === 0 && date.getUTCDate() === startDate.getUTCDate();
 
     case 'yearly':
       if (monthOfYear && dayOfMonth) {
-        return date.getMonth() + 1 === monthOfYear && date.getDate() === dayOfMonth;
+        return date.getUTCMonth() + 1 === monthOfYear && date.getUTCDate() === dayOfMonth;
       }
-      const yearDiff = date.getFullYear() - startDate.getFullYear();
+      const yearDiff = date.getUTCFullYear() - startDate.getUTCFullYear();
       return yearDiff % interval === 0 &&
-             date.getMonth() === startDate.getMonth() &&
-             date.getDate() === startDate.getDate();
+             date.getUTCMonth() === startDate.getUTCMonth() &&
+             date.getUTCDate() === startDate.getUTCDate();
 
     default:
       return false;

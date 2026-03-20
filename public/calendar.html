@@ -120,6 +120,7 @@
     .modal-body { padding: 16px; overflow-y: auto; }
     .form-group { margin-bottom: 12px; }
     .form-group label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 6px; font-weight: 500; }
+    .field-hint { margin-top: 4px; font-size: 11px; line-height: 1.4; color: var(--gray); }
     .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start; }
     .form-row > .form-group { min-width: 0; margin-bottom: 0; }
     .form-row.dates-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -173,6 +174,7 @@
         .modal-content { border-radius: 0; width: 100vw; height: 100dvh; max-height: 100dvh; max-width: 100% !important; }
         .modal-body { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
         .form-row { gap: 6px; }
+        .field-hint { font-size: 10px; }
         .checkbox-row { gap: 6px; }
         .field-inline { gap: 6px; }
         .checkbox-row.compact { gap: 4px; }
@@ -367,7 +369,11 @@
             <div class="form-group"><label>开始日期 *</label><input type="date" name="startDate" required></div>
             <div class="form-group"><label>结束日期</label><input type="date" name="endDate"></div>
           </div>
-        <div class="form-group hidden" id="recurrence-end-group"><label>结束日期</label><input type="date" name="recurrenceEnd"></div>
+        <div class="form-group hidden" id="recurrence-end-group">
+          <label>重复至</label>
+          <input type="date" name="recurrenceEnd">
+          <div class="field-hint">包含当天，留空则持续重复</div>
+        </div>
         <div class="form-group reminder-group"><label>提醒</label>
           <select name="reminderTime" style="margin-bottom:4px"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
           <div class="checkbox-row compact">
