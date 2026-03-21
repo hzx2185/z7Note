@@ -6,6 +6,7 @@ const express = require('express');
 const { getUserReminderSettings, updateUserReminderSettings, checkAndSendPendingReminders } = require('../services/reminderService');
 const log = require('../utils/logger');
 const db = require('../db/client');
+const config = require('../config');
 
 const router = express.Router();
 
@@ -40,6 +41,9 @@ router.put('/', async (req, res) => {
  */
 router.post('/check', async (req, res) => {
   try {
+    if (!config.adminUsers.includes(req.user)) {
+      return res.status(403).json({ error: '无权限' });
+    }
     await checkAndSendPendingReminders();
     res.json({ status: 'ok', message: '提醒检查完成' });
   } catch (e) {

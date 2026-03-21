@@ -12,6 +12,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const config = require('../config');
 const { broadcastNoteUpdate, broadcastNoteDelete } = require('./ws');
+const { safePath, isValidFilename } = require('../utils/path');
 
 const router = express.Router();
 
@@ -325,7 +326,16 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
     const isAttachment = !filename.toLowerCase().endsWith('.md');
     if (isAttachment) {
       const userUploadDir = path.join(config.paths.uploads, username);
-      const filePath = path.join(userUploadDir, filename);
+      if (!isValidFilename(filename)) {
+        return res.status(400).send('Invalid filename');
+      }
+
+      let filePath;
+      try {
+        filePath = safePath(userUploadDir, filename);
+      } catch (err) {
+        return res.status(400).send('Invalid filename');
+      }
 
       // 确保上传目录存在
       try {
