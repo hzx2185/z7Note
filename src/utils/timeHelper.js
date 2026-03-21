@@ -61,6 +61,26 @@ class TimeHelper {
     }
   }
 
+  static getTimeStringInTimeZone(ts, timeZone = TimeHelper.getAppTimeZone()) {
+    if (!ts && ts !== 0) return '00:00';
+    const d = new Date(ts * 1000);
+
+    try {
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(d);
+      const hour = parts.find(p => p.type === 'hour')?.value || '00';
+      const minute = parts.find(p => p.type === 'minute')?.value || '00';
+      return `${hour}:${minute}`;
+    } catch (e) {
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+  }
+
   static toUtcMidnightTs(year, month, day) {
     return Math.floor(Date.UTC(year, month - 1, day) / 1000);
   }

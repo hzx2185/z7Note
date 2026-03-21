@@ -156,8 +156,10 @@ function calculateReminderTime(startTime, settings, item = null) {
  * 检查是否在免打扰时间段
  */
 function isQuietTime(settings) {
-  const now = new Date();
-  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const currentTime = TimeHelper.getTimeStringInTimeZone(
+    Math.floor(Date.now() / 1000),
+    TimeHelper.getAppTimeZone()
+  );
   const quietStart = settings.quiet_start_time || '22:00';
   const quietEnd = settings.quiet_end_time || '08:00';
 
