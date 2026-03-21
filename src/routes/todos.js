@@ -6,6 +6,21 @@ const TimeHelper = require('../utils/timeHelper');
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 
 const router = express.Router();
+const REMINDER_PRESETS = new Set(['none', '15m', 'same_day_9am', 'one_day_9am']);
+
+function getDefaultReminderPreset(allDay) {
+  return allDay ? 'same_day_9am' : '15m';
+}
+
+function normalizeReminderPreset(reminderPreset, allDay) {
+  if (!reminderPreset || !REMINDER_PRESETS.has(reminderPreset)) {
+    return getDefaultReminderPreset(allDay);
+  }
+  if (!allDay && (reminderPreset === 'same_day_9am' || reminderPreset === 'one_day_9am')) {
+    return '15m';
+  }
+  return reminderPreset;
+}
 
 function mapTodoForClient(username, todo) {
   if (!todo) return todo;
@@ -70,7 +85,7 @@ router.get('/api/todos/:id', async (req, res) => {
 // 创建待办事项
 router.post('/api/todos', async (req, res) => {
   try {
-    const { title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser } = req.body;
+    const { title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser, reminderPreset } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: '标题不能为空' });
@@ -88,10 +103,12 @@ router.post('/api/todos', async (req, res) => {
       return res.status(400).json({ error: '优先级必须是1、2或3' });
     }
 
+    const normalizedAllDay = allDay !== undefined ? !!allDay : true;
+    const normalizedReminderPreset = normalizeReminderPreset(reminderPreset, normalizedAllDay);
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
     await db.execute(
-      `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser, reminderPreset, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         req.user,
@@ -101,10 +118,11 @@ router.post('/api/todos', async (req, res) => {
         priority !== undefined ? parseInt(priority) : 1,
         TimeHelper.parseToTs(dueDate),
         TimeHelper.parseToTs(startTime),
-        allDay !== undefined ? (allDay ? 1 : 0) : 1,
+        normalizedAllDay ? 1 : 0,
         noteId || null,
         reminderEmail !== undefined ? (reminderEmail ? 1 : 0) : 0,
         reminderBrowser !== undefined ? (reminderBrowser ? 1 : 0) : 1,
+        normalizedReminderPreset,
         Math.floor(Date.now() / 1000),
         Math.floor(Date.now() / 1000)
       ]
@@ -160,6 +178,12 @@ router.put('/api/todos/:id', async (req, res) => {
           params.push(val);
         }
       }
+    }
+
+    if (req.body.reminderPreset !== undefined || req.body.allDay !== undefined) {
+      const nextAllDay = req.body.allDay !== undefined ? !!req.body.allDay : !!existing.allDay;
+      updates.push('reminderPreset = ?');
+      params.push(normalizeReminderPreset(req.body.reminderPreset !== undefined ? req.body.reminderPreset : existing.reminderPreset, nextAllDay));
     }
 
     if (updates.length > 0) {

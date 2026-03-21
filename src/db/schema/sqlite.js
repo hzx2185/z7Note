@@ -135,6 +135,30 @@ async function migrateBaseSchema(db) {
     await db.exec('UPDATE notes SET createdAt = COALESCE(NULLIF(createdAt, 0), updatedAt) WHERE createdAt IS NULL OR createdAt = 0');
   }
 
+  if (await sqliteHasColumn(db, 'events', 'recurrence') && !(await sqliteHasColumn(db, 'events', 'excludedDates'))) {
+    await db.exec('ALTER TABLE events ADD COLUMN excludedDates TEXT');
+  }
+
+  if (!(await sqliteHasColumn(db, 'events', 'reminderPreset'))) {
+    await db.exec('ALTER TABLE events ADD COLUMN reminderPreset TEXT');
+  }
+
+  if (!(await sqliteHasColumn(db, 'todos', 'reminderPreset'))) {
+    await db.exec('ALTER TABLE todos ADD COLUMN reminderPreset TEXT');
+  }
+
+  await db.exec(`
+    UPDATE events
+    SET reminderPreset = CASE WHEN allDay = 1 THEN 'same_day_9am' ELSE '15m' END
+    WHERE reminderPreset IS NULL OR trim(reminderPreset) = ''
+  `);
+
+  await db.exec(`
+    UPDATE todos
+    SET reminderPreset = CASE WHEN allDay = 1 THEN 'same_day_9am' ELSE '15m' END
+    WHERE reminderPreset IS NULL OR trim(reminderPreset) = ''
+  `);
+
   if (!(await sqliteHasColumn(db, 'users', 'noteLimit'))) {
     await db.exec(`ALTER TABLE users ADD COLUMN noteLimit INTEGER DEFAULT ${config.defaultNoteLimit}`);
     await db.exec(`ALTER TABLE users ADD COLUMN fileLimit INTEGER DEFAULT ${config.defaultFileLimit}`);

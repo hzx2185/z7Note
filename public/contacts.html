@@ -976,7 +976,7 @@
     async function formatContacts() {
       const ids = [...selected];
       const scopeLabel = ids.length > 0 ? `选中的 ${ids.length} 个联系人` : '全部联系人';
-      if (!(await showConfirm(`确定格式化${scopeLabel}吗？会清理多余空格，并在姓名字段缺失时尽量补全。`))) return;
+      if (!(await showConfirm(`确定格式化${scopeLabel}吗？会清理多余空格，并在全名缺失时尽量从现有姓名字段补全，不会再自动拆分补全姓和名。`))) return;
       try {
         const result = await requestJSON('/api/contacts/format', {
           method:'POST',

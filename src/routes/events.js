@@ -4,10 +4,30 @@ const log = require('../utils/logger');
 const TimeHelper = require('../utils/timeHelper');
 const { broadcast } = require('./ws');
 const lunarHelper = require('../utils/lunarHelper');
-const { generateRecurringEvents } = require('../utils/recurringEvents');
+const {
+  generateRecurringEvents,
+  parseExcludedDates,
+  getNextRecurringOccurrenceStart
+} = require('../utils/recurringEvents');
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 
 const router = express.Router();
+
+const REMINDER_PRESETS = new Set(['none', '15m', 'same_day_9am', 'one_day_9am']);
+
+function getDefaultReminderPreset(allDay) {
+  return allDay ? 'same_day_9am' : '15m';
+}
+
+function normalizeReminderPreset(reminderPreset, allDay) {
+  if (typeof reminderPreset === 'string' && REMINDER_PRESETS.has(reminderPreset)) {
+    if (!allDay && (reminderPreset === 'same_day_9am' || reminderPreset === 'one_day_9am')) {
+      return '15m';
+    }
+    return reminderPreset;
+  }
+  return getDefaultReminderPreset(allDay);
+}
 
 function normalizeEventRange(startTime, endTime, allDay) {
   if (allDay) {
@@ -29,6 +49,23 @@ function expandRecurringInstancesForRange(event, startDate, endDate) {
     ...instance,
     _originalId: instance.parentEventId || event.id
   }));
+}
+
+function createDeleteMarkerId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function normalizeOccurrenceStartTime(value) {
+  const ts = Number(value);
+  return Number.isFinite(ts) && ts > 0 ? Math.floor(ts) : null;
+}
+
+function serializeExcludedDates(values) {
+  const sorted = Array.from(values)
+    .map(v => Number(v))
+    .filter(v => Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b);
+  return sorted.length > 0 ? JSON.stringify(sorted) : null;
 }
 
 // 批量创建
@@ -466,7 +503,7 @@ router.post('/cleanup-duplicates', async (req, res) => {
 // 创建事件
 router.post('/', async (req, res) => {
   try {
-    const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd } = req.body;
+    const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd } = req.body;
     if (!title) return res.status(400).json({ error: '标题不能为空' });
 
     const normalizedRange = normalizeEventRange(startTime, endTime, allDay);
@@ -474,13 +511,14 @@ router.post('/', async (req, res) => {
     if (!startTs) return res.status(400).json({ error: '开始时间无效' });
 
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const normalizedReminderPreset = normalizeReminderPreset(reminderPreset, !!allDay);
     await db.execute(
-      `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, req.user, title.trim(), description || '',
         startTs, normalizedRange.endTime, allDay ? 1 : 0, '#2563eb',
-        reminderEmail ? 1 : 0, reminderBrowser ? 1 : 0, reminderCaldav ? 1 : 0,
+        reminderEmail ? 1 : 0, reminderBrowser ? 1 : 0, reminderCaldav ? 1 : 0, normalizedReminderPreset,
         recurrence || null, TimeHelper.parseToTs(recurrenceEnd),
         Math.floor(Date.now()/1000), Math.floor(Date.now()/1000)
       ]
@@ -495,7 +533,7 @@ router.post('/', async (req, res) => {
 // 更新事件
 router.put('/:id', async (req, res) => {
   try {
-    const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, recurrence, recurrenceEnd } = req.body;
+    const { title, description, startTime, endTime, allDay, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd } = req.body;
     const candidates = getCalendarIdCandidates(req.user, req.params.id);
     const placeholders = candidates.map(() => '?').join(',');
     const existing = await db.queryOne(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
@@ -537,6 +575,16 @@ router.put('/:id', async (req, res) => {
       params.push(normalizedRange.startTime, normalizedRange.endTime);
     }
 
+    if (req.body.reminderPreset !== undefined || req.body.allDay !== undefined) {
+      updates.push('reminderPreset = ?');
+      params.push(
+        normalizeReminderPreset(
+          reminderPreset,
+          req.body.allDay !== undefined ? !!req.body.allDay : !!existing.allDay
+        )
+      );
+    }
+
     if (updates.length === 0) return res.json({ success: true });
 
     updates.push('updatedAt = ?');
@@ -550,6 +598,179 @@ router.put('/:id', async (req, res) => {
     res.json({ success: true });
   } catch (e) { 
     res.status(500).json({ error: '更新失败: ' + e.message }); 
+  }
+});
+
+router.post('/:id/delete-scope', async (req, res) => {
+  try {
+    const {
+      scope,
+      occurrenceStartTime,
+      deletePrevious,
+      deleteCurrent,
+      deleteFuture
+    } = req.body || {};
+
+    const candidates = getCalendarIdCandidates(req.user, req.params.id);
+    const placeholders = candidates.map(() => '?').join(',');
+    const event = await db.queryOne(
+      `SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`,
+      [req.user, ...candidates]
+    );
+    if (!event) {
+      return res.status(404).json({ error: '事件不存在' });
+    }
+
+    const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
+    if (!recurrence || !recurrence.type) {
+      return res.status(400).json({ error: '这不是重复事件' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const normalizedOccurrenceStartTime = normalizeOccurrenceStartTime(occurrenceStartTime);
+
+    let effectiveDeletePrevious = deletePrevious === true;
+    let effectiveDeleteCurrent = deleteCurrent === true;
+    let effectiveDeleteFuture = deleteFuture === true;
+
+    if (
+      deletePrevious === undefined &&
+      deleteCurrent === undefined &&
+      deleteFuture === undefined
+    ) {
+      if (scope === 'single') {
+        effectiveDeleteCurrent = true;
+      } else if (scope === 'future') {
+        effectiveDeleteCurrent = true;
+        effectiveDeleteFuture = true;
+      } else if (scope === 'all') {
+        effectiveDeletePrevious = true;
+        effectiveDeleteCurrent = true;
+        effectiveDeleteFuture = true;
+      }
+    }
+
+    if (!effectiveDeletePrevious && !effectiveDeleteCurrent && !effectiveDeleteFuture) {
+      return res.status(400).json({ error: '删除范围无效' });
+    }
+
+    if (
+      !(effectiveDeletePrevious && effectiveDeleteCurrent && effectiveDeleteFuture) &&
+      !normalizedOccurrenceStartTime
+    ) {
+      return res.status(400).json({ error: '缺少重复实例时间' });
+    }
+
+    await db.withTransaction(async (tx) => {
+      const deleteAll = effectiveDeletePrevious && effectiveDeleteCurrent && effectiveDeleteFuture;
+      const duration = event.endTime ? Math.max(0, event.endTime - event.startTime) : 0;
+      const excludedDates = parseExcludedDates(event.excludedDates);
+
+      if (deleteAll) {
+        await tx.execute(
+          'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+          [createDeleteMarkerId(), req.user, toClientCalendarId(req.user, event.id), 'event', now]
+        );
+        await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
+        return;
+      }
+
+      if (!effectiveDeletePrevious && effectiveDeleteCurrent && !effectiveDeleteFuture) {
+        excludedDates.add(normalizedOccurrenceStartTime);
+        await tx.execute(
+          'UPDATE events SET excludedDates = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [serializeExcludedDates(excludedDates), now, event.id, req.user]
+        );
+        return;
+      }
+
+      if (!effectiveDeletePrevious && !effectiveDeleteCurrent && effectiveDeleteFuture) {
+        await tx.execute(
+          'UPDATE events SET recurrenceEnd = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [normalizedOccurrenceStartTime, now, event.id, req.user]
+        );
+        return;
+      }
+
+      if (!effectiveDeletePrevious && effectiveDeleteCurrent && effectiveDeleteFuture) {
+        excludedDates.add(normalizedOccurrenceStartTime);
+        await tx.execute(
+          'UPDATE events SET recurrenceEnd = ?, excludedDates = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [
+            normalizedOccurrenceStartTime - 1,
+            serializeExcludedDates(excludedDates),
+            now,
+            event.id,
+            req.user
+          ]
+        );
+        return;
+      }
+
+      if (effectiveDeletePrevious && !effectiveDeleteCurrent && !effectiveDeleteFuture) {
+        const keptExcludedDates = new Set(
+          Array.from(excludedDates).filter(value => value >= normalizedOccurrenceStartTime)
+        );
+        await tx.execute(
+          'UPDATE events SET startTime = ?, endTime = ?, excludedDates = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [
+            normalizedOccurrenceStartTime,
+            duration > 0 ? normalizedOccurrenceStartTime + duration : event.endTime,
+            serializeExcludedDates(keptExcludedDates),
+            now,
+            event.id,
+            req.user
+          ]
+        );
+        return;
+      }
+
+      if (effectiveDeletePrevious && effectiveDeleteCurrent && !effectiveDeleteFuture) {
+        const nextOccurrenceStart = getNextRecurringOccurrenceStart(event, normalizedOccurrenceStartTime);
+        if (!nextOccurrenceStart) {
+          await tx.execute(
+            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
+            [createDeleteMarkerId(), req.user, toClientCalendarId(req.user, event.id), 'event', now]
+          );
+          await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
+          return;
+        }
+
+        const keptExcludedDates = new Set(
+          Array.from(excludedDates).filter(value => value >= nextOccurrenceStart)
+        );
+        await tx.execute(
+          'UPDATE events SET startTime = ?, endTime = ?, excludedDates = ?, updatedAt = ? WHERE id = ? AND username = ?',
+          [
+            nextOccurrenceStart,
+            duration > 0 ? nextOccurrenceStart + duration : event.endTime,
+            serializeExcludedDates(keptExcludedDates),
+            now,
+            event.id,
+            req.user
+          ]
+        );
+        return;
+      }
+
+      if (effectiveDeletePrevious && !effectiveDeleteCurrent && effectiveDeleteFuture) {
+        await tx.execute(
+          'UPDATE events SET startTime = ?, endTime = ?, recurrence = NULL, recurrenceEnd = NULL, excludedDates = NULL, updatedAt = ? WHERE id = ? AND username = ?',
+          [
+            normalizedOccurrenceStartTime,
+            duration > 0 ? normalizedOccurrenceStartTime + duration : event.endTime,
+            now,
+            event.id,
+            req.user
+          ]
+        );
+      }
+    });
+
+    broadcast('calendar_update', { username: req.user, type: 'sync' }, { targetUsername: req.user });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: '删除失败: ' + error.message });
   }
 });
 
@@ -568,7 +789,7 @@ router.delete('/:id', async (req, res) => {
   await db.withTransaction(async (tx) => {
     await tx.execute(
       'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-      [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, event.id), 'event', now]
+      [createDeleteMarkerId(), req.user, toClientCalendarId(req.user, event.id), 'event', now]
     );
     await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
   });

@@ -7,6 +7,34 @@ class TimeHelper {
     return 'Asia/Shanghai';
   }
 
+  static getTimeZoneOffsetMinutes(ts, timeZone = TimeHelper.getAppTimeZone()) {
+    const d = new Date(ts * 1000);
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        timeZoneName: 'shortOffset',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(d);
+      const rawOffset = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT+00:00';
+      const normalized = rawOffset.replace('GMT', '');
+      const match = normalized.match(/^([+-])(\d{1,2})(?::?(\d{2}))?$/);
+      if (!match) return 0;
+      const sign = match[1] === '-' ? -1 : 1;
+      const hours = parseInt(match[2], 10);
+      const minutes = parseInt(match[3] || '0', 10);
+      return sign * (hours * 60 + minutes);
+    } catch (e) {
+      return -d.getTimezoneOffset();
+    }
+  }
+
   static getDatePartsInTimeZone(ts, timeZone = TimeHelper.getAppTimeZone()) {
     if (!ts && ts !== 0) return null;
     const d = new Date(ts * 1000);
@@ -35,6 +63,12 @@ class TimeHelper {
 
   static toUtcMidnightTs(year, month, day) {
     return Math.floor(Date.UTC(year, month - 1, day) / 1000);
+  }
+
+  static toTimeZoneClockTs(year, month, day, hour = 0, minute = 0, second = 0, timeZone = TimeHelper.getAppTimeZone()) {
+    const utcGuess = Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000);
+    const offsetMinutes = TimeHelper.getTimeZoneOffsetMinutes(utcGuess, timeZone);
+    return utcGuess - offsetMinutes * 60;
   }
 
   static getUtcDateParts(ts) {
@@ -138,6 +172,43 @@ class TimeHelper {
     const d = new Date(ts * 1000);
     const offset = d.getTimezoneOffset() * 60000;
     return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+  }
+
+  static getReminderPresetTs(targetTs, preset, timeZone = TimeHelper.getAppTimeZone(), options = {}) {
+    const { allDay = false } = options;
+    if (!targetTs || !preset || preset === 'none') return null;
+
+    if (preset === '15m') {
+      if (allDay) {
+        const dateParts = TimeHelper.getDatePartsInTimeZone(targetTs, timeZone);
+        if (!dateParts) return null;
+        const allDayStartTs = TimeHelper.toTimeZoneClockTs(
+          dateParts.year,
+          dateParts.month,
+          dateParts.day,
+          0,
+          0,
+          0,
+          timeZone
+        );
+        return allDayStartTs - 15 * 60;
+      }
+      return targetTs - 15 * 60;
+    }
+
+    const dateParts = TimeHelper.getDatePartsInTimeZone(targetTs, timeZone);
+    if (!dateParts) return null;
+
+    if (preset === 'same_day_9am') {
+      return TimeHelper.toTimeZoneClockTs(dateParts.year, dateParts.month, dateParts.day, 9, 0, 0, timeZone);
+    }
+
+    if (preset === 'one_day_9am') {
+      const previousDateParts = TimeHelper.getDatePartsInTimeZone(targetTs - 24 * 60 * 60, timeZone);
+      return TimeHelper.toTimeZoneClockTs(previousDateParts.year, previousDateParts.month, previousDateParts.day, 9, 0, 0, timeZone);
+    }
+
+    return null;
   }
 }
 

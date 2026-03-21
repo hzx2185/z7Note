@@ -7,6 +7,7 @@ const db = require('../db/client');
 const { sendMail } = require('./mailer');
 const { broadcast } = require('../routes/ws');
 const log = require('../utils/logger');
+const TimeHelper = require('../utils/timeHelper');
 
 let isChecking = false;
 
@@ -126,7 +127,18 @@ async function updateUserReminderSettings(username, settings) {
 /**
  * 计算提醒时间
  */
-function calculateReminderTime(startTime, settings) {
+function calculateReminderTime(startTime, settings, item = null) {
+  if (item && item.reminderPreset) {
+    if (item.reminderPreset === 'none') {
+      return null;
+    }
+    const timeZone = item.timezone || TimeHelper.getAppTimeZone();
+    const presetTime = TimeHelper.getReminderPresetTs(startTime, item.reminderPreset, timeZone, {
+      allDay: !!item.allDay
+    });
+    if (presetTime !== null) return presetTime;
+  }
+
   const eventDate = new Date(startTime * 1000);
   const advanceDays = settings.reminder_advance_days !== undefined ? settings.reminder_advance_days : 1;
   const advanceHours = settings.reminder_advance_hours !== undefined ? settings.reminder_advance_hours : 0;
@@ -385,7 +397,10 @@ async function checkAndSendPendingReminders() {
         );
 
         for (const event of events) {
-          const reminderTime = calculateReminderTime(event.startTime, settings);
+          const reminderTime = calculateReminderTime(event.startTime, settings, event);
+          if (reminderTime === null) {
+            continue;
+          }
           // 只有在提醒时间点到事件开始前的窗口内才发送
           if (reminderTime <= now && event.startTime > now) {
             await sendReminder(username, 'event', event, settings);
@@ -409,7 +424,10 @@ async function checkAndSendPendingReminders() {
         );
 
         for (const todo of todos) {
-          const reminderTime = calculateReminderTime(todo.dueDate, settings);
+          const reminderTime = calculateReminderTime(todo.dueDate, settings, todo);
+          if (reminderTime === null) {
+            continue;
+          }
           if (reminderTime <= now && todo.dueDate > now) {
             await sendReminder(username, 'todo', todo, settings);
           }

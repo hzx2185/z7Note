@@ -109,6 +109,7 @@ function buildFormattedName(contact) {
 }
 
 function normalizeContactInput(payload, options = {}) {
+  const inferStructuredNameFromFn = options.inferStructuredNameFromFn !== false;
   const explicitEmptyFields = new Set(
     Array.isArray(options.explicitEmptyFields)
       ? options.explicitEmptyFields.map(field => String(field || '').trim()).filter(Boolean)
@@ -130,7 +131,7 @@ function normalizeContactInput(payload, options = {}) {
     nickname: normalizeWhitespace(payload.nickname)
   };
 
-  if (normalized.fn) {
+  if (normalized.fn && inferStructuredNameFromFn) {
     const inferred = splitFormattedName(normalized.fn);
 
     if (
@@ -682,6 +683,8 @@ router.post('/format', async (req, res) => {
           tel,
           email,
           adr
+        }, {
+          inferStructuredNameFromFn: false
         });
 
         const vcard = VCardGenerator.contactToVCard({

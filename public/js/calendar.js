@@ -19,6 +19,7 @@ const CalendarApp = (function() {
     sidebar: {
       currentTab: 'all', // all, event, todo, note
       searchQuery: '',
+      onlyRecurring: false,
       // 滚动加载相关
       loadedDays: 0, // 已加载的天数（前后各多少天）
       isLoadingMore: false,
@@ -27,7 +28,8 @@ const CalendarApp = (function() {
       // 数据缓存 - 按日期分组
       dataByDate: new Map(), // key: 'YYYY-MM-DD', value: { todos: [], events: [], notes: [] }
       // 渲染顺序
-      renderedDates: [] // 已渲染的日期列表
+      renderedDates: [], // 已渲染的日期列表
+      futureRecurringEvents: []
     }
       ,
       // 批量选择状态
@@ -45,6 +47,8 @@ const CalendarApp = (function() {
     sidebarDate: document.getElementById('sidebar-date'),
     sidebarContent: document.getElementById('sidebar-content'),
     sidebarSearch: document.getElementById('sidebar-search'),
+    eventSubfilters: document.getElementById('event-subfilters'),
+    sidebarRecurringOnly: document.getElementById('sidebar-recurring-only'),
     sidebarTabs: document.querySelectorAll('.sidebar-tab'),
     todoModal: document.getElementById('todo-modal'),
     eventModal: document.getElementById('event-modal'),
@@ -345,6 +349,11 @@ const CalendarApp = (function() {
       }
     },
 
+    isRetryableGatewayError(error) {
+      const message = String(error?.message || error || '');
+      return /HTTP 502|HTTP 504|Failed to fetch|NetworkError|Load failed/i.test(message);
+    },
+
     async getDayData(dateStr) {
       try {
         const response = await fetch(`/api/events/calendar/day/${dateStr}?t=${Date.now()}`, {
@@ -484,6 +493,26 @@ const CalendarApp = (function() {
       });
     },
 
+    async deleteRecurringEvent(id, data) {
+      const url = `/api/events/${id}/delete-scope`;
+      const options = {
+        method: 'POST',
+        body: JSON.stringify(data)
+      };
+
+      try {
+        return await this.request(url, options);
+      } catch (error) {
+        if (!this.isRetryableGatewayError(error)) {
+          throw error;
+        }
+
+        console.warn('重复事件删除遇到网关/网络抖动，准备重试一次:', error);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return this.request(url, options);
+      }
+    },
+
     async updateEvent(id, data) {
       return this.request(`/api/events/${id}`, {
         method: 'PUT',
@@ -520,6 +549,11 @@ const CalendarApp = (function() {
         elements.sidebarSearch.addEventListener('input', utils.debounce(async (e) => {
           const query = e.target.value.trim().toLowerCase();
           state.sidebar.searchQuery = query;
+
+          if (state.sidebar.currentTab === 'event' && state.sidebar.onlyRecurring) {
+            this.render();
+            return;
+          }
           
           if (query) {
             try {
@@ -535,6 +569,16 @@ const CalendarApp = (function() {
           
           this.render();
         }, 300));
+      }
+
+      if (elements.sidebarRecurringOnly) {
+        elements.sidebarRecurringOnly.addEventListener('change', async (e) => {
+          state.sidebar.onlyRecurring = !!e.target.checked;
+          if (state.sidebar.onlyRecurring) {
+            await this.loadFutureRecurringEvents();
+          }
+          this.render();
+        });
       }
 
       // 绑定滚动加载事件
@@ -555,13 +599,56 @@ const CalendarApp = (function() {
       elements.sidebarTabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
       });
+
+      if (elements.eventSubfilters) {
+        elements.eventSubfilters.classList.toggle('hidden', tab !== 'event');
+      }
       
       // 如果切换到待办标签，加载所有待办事项数据
       if (tab === 'todo') {
         await this.loadAllTodos();
       }
+
+      if (tab === 'event' && state.sidebar.onlyRecurring) {
+        await this.loadFutureRecurringEvents();
+      }
       
       this.render();
+    },
+
+    // 加载所有事件数据
+    async loadAllEvents() {
+      try {
+        const response = await fetch('/api/events', {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const allEvents = await response.json();
+        state.allEvents = allEvents;
+
+        // 只清空现有的事件数据，保留待办和笔记
+        state.sidebar.dataByDate.forEach(data => {
+          data.events = [];
+        });
+
+        allEvents.forEach(event => {
+          if (!event.startTime) return;
+          const dateStr = utils.formatDate(new Date(event.startTime * 1000));
+          if (!state.sidebar.dataByDate.has(dateStr)) {
+            state.sidebar.dataByDate.set(dateStr, { todos: [], events: [], notes: [] });
+          }
+          const dayData = state.sidebar.dataByDate.get(dateStr);
+          dayData.events.push(event);
+        });
+
+        this.render();
+      } catch (error) {
+        console.error('加载事件失败:', error);
+      }
     },
     
     // 加载所有待办事项数据
@@ -665,6 +752,68 @@ const CalendarApp = (function() {
 
       } catch (error) {
         console.error('加载单天数据失败:', error);
+      }
+    },
+
+    async loadFutureRecurringEvents() {
+      try {
+        const response = await fetch('/api/events', {
+          credentials: 'include'
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const allEvents = await response.json();
+        const selectedDate = new Date(state.selectedDate);
+        selectedDate.setHours(0, 0, 0, 0);
+        const startTs = Math.floor(selectedDate.getTime() / 1000);
+
+        const recurringMasters = allEvents.filter(event => {
+          if (!event || !event.recurrence) return false;
+          try {
+            const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
+            return !!(recurrence && recurrence.type);
+          } catch (error) {
+            return false;
+          }
+        });
+
+        if (recurringMasters.length === 0) {
+          state.sidebar.futureRecurringEvents = [];
+          return;
+        }
+
+        const defaultEnd = new Date(selectedDate);
+        defaultEnd.setFullYear(defaultEnd.getFullYear() + 3);
+        defaultEnd.setHours(23, 59, 59, 999);
+
+        const maxEndTs = recurringMasters.reduce((max, event) => {
+          const recurrenceEnd = Number(event.recurrenceEnd || 0);
+          return recurrenceEnd > max ? recurrenceEnd : max;
+        }, Math.floor(defaultEnd.getTime() / 1000));
+
+        const expandResponse = await fetch(`/api/events/expand-recurring?startDate=${startTs}&endDate=${maxEndTs}`, {
+          credentials: 'include'
+        });
+
+        if (!expandResponse.ok) {
+          throw new Error(`HTTP ${expandResponse.status}`);
+        }
+
+        const instances = await expandResponse.json();
+        state.sidebar.futureRecurringEvents = instances
+          .filter(event => event && event.startTime >= startTs)
+          .map(event => ({
+            ...event,
+            _originalId: event.parentEventId || event._originalId || event.id,
+            isRecurringInstance: true
+          }))
+          .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+      } catch (error) {
+        console.error('加载未来重复事件失败:', error);
+        state.sidebar.futureRecurringEvents = [];
       }
     },
 
@@ -790,6 +939,11 @@ const CalendarApp = (function() {
 
       container.innerHTML = '';
 
+      if (state.sidebar.currentTab === 'event' && state.sidebar.onlyRecurring) {
+        this.renderRecurringEventList(container);
+        return;
+      }
+
       // 获取所有日期并排序
         
         // 如果有搜索内容，优先显示搜索结果
@@ -807,18 +961,20 @@ const CalendarApp = (function() {
           searchGroup.appendChild(searchHeader);
 
           if (searchData) {
+            const filteredSearchData = this.filterData(searchData);
+
             // 渲染搜索结果
             let hasResults = false;
-            if (searchData.events && searchData.events.length > 0) {
-              searchData.events.forEach(event => searchGroup.appendChild(this.renderEventItem(event)));
+            if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') && filteredSearchData.events && filteredSearchData.events.length > 0) {
+              filteredSearchData.events.forEach(event => searchGroup.appendChild(this.renderEventItem(event)));
               hasResults = true;
             }
-            if (searchData.todos && searchData.todos.length > 0) {
-              searchData.todos.forEach(todo => searchGroup.appendChild(this.renderTodoItem(todo)));
+            if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'todo') && filteredSearchData.todos && filteredSearchData.todos.length > 0) {
+              filteredSearchData.todos.forEach(todo => searchGroup.appendChild(this.renderTodoItem(todo)));
               hasResults = true;
             }
-            if (searchData.notes && searchData.notes.length > 0) {
-              searchData.notes.forEach(note => searchGroup.appendChild(this.renderNoteItem(note)));
+            if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'note') && filteredSearchData.notes && filteredSearchData.notes.length > 0) {
+              filteredSearchData.notes.forEach(note => searchGroup.appendChild(this.renderNoteItem(note)));
               hasResults = true;
             }
             
@@ -1042,7 +1198,7 @@ const CalendarApp = (function() {
         });
       }
 
-      // 显示加载更多提示（待办标签除外）
+      // 显示加载更多提示（待办全量列表标签除外）
       if (state.sidebar.currentTab !== 'todo') {
         if (state.sidebar.hasMoreBefore) {
           const loadMoreBefore = document.createElement('div');
@@ -1069,13 +1225,156 @@ const CalendarApp = (function() {
       }
     },
 
+    renderRecurringEventList(container) {
+      const query = state.sidebar.searchQuery;
+      const grouped = new Map();
+
+      state.sidebar.futureRecurringEvents.forEach(event => {
+        const key = event._originalId || event.id;
+        if (!key) return;
+
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            masterId: key,
+            title: event.title || '未命名重复事件',
+            description: event.description || '',
+            color: event.color || '#2563eb',
+            allDay: !!event.allDay,
+            recurrence: event.recurrence,
+            recurrenceEnd: event.recurrenceEnd || null,
+            occurrences: []
+          });
+        }
+
+        const series = grouped.get(key);
+        series.occurrences.push(event);
+        if (!series.recurrenceEnd && event.recurrenceEnd) {
+          series.recurrenceEnd = event.recurrenceEnd;
+        }
+      });
+
+      let seriesList = Array.from(grouped.values()).map(series => {
+        series.occurrences.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+        series.nextOccurrence = series.occurrences[0] || null;
+        series.futureCount = series.occurrences.length;
+        return series;
+      });
+
+      if (query) {
+        seriesList = seriesList.filter(series =>
+          (series.title && series.title.toLowerCase().includes(query)) ||
+          (series.description && series.description.toLowerCase().includes(query))
+        );
+      }
+
+      if (seriesList.length === 0) {
+        container.innerHTML = `<div class="empty-state">${query ? '未找到匹配的未来重复事件' : '暂无未来重复事件'}</div>`;
+        return;
+      }
+
+      seriesList.sort((a, b) => {
+        const aTime = a.nextOccurrence?.startTime || 0;
+        const bTime = b.nextOccurrence?.startTime || 0;
+        return aTime - bTime;
+      });
+
+      const section = document.createElement('div');
+      section.className = 'date-group';
+
+      const header = document.createElement('div');
+      header.className = 'date-group-header';
+      header.textContent = `未来重复系列 (${seriesList.length})`;
+      header.style.color = 'var(--accent)';
+      section.appendChild(header);
+
+      seriesList.forEach(series => {
+        section.appendChild(this.renderRecurringSeriesItem(series));
+      });
+
+      container.appendChild(section);
+    },
+
+    renderRecurringSeriesItem(series) {
+      const item = document.createElement('div');
+      item.className = 'event-item';
+      item.style.borderLeftColor = series.color || '#2563eb';
+
+      const next = series.nextOccurrence;
+      const recurrence = typeof series.recurrence === 'string'
+        ? (() => {
+            try { return JSON.parse(series.recurrence); } catch (e) { return null; }
+          })()
+        : series.recurrence;
+
+      const recurrenceLabelMap = {
+        daily: '每天',
+        weekly: '每周',
+        monthly: '每月',
+        yearly: '每年'
+      };
+
+      let nextLabel = '无后续时间';
+      if (next?.startTime) {
+        if (series.allDay) {
+          const startInfo = utils.getAllDayDisplayDate(next.startTime, false);
+          nextLabel = `下次 ${startInfo ? startInfo.shortStr : ''}`;
+        } else {
+          nextLabel = `下次 ${utils.formatSidebarDate(new Date(next.startTime * 1000))} ${utils.formatTime(next.startTime * 1000)}`;
+        }
+      }
+
+      let untilLabel = '无限期';
+      if (series.recurrenceEnd) {
+        untilLabel = utils.formatSidebarDate(new Date(series.recurrenceEnd * 1000));
+      }
+
+      const recurrenceType = recurrenceLabelMap[recurrence?.type] || '重复';
+      const countLabel = series.futureCount > 1 ? `未来 ${series.futureCount} 次` : '未来 1 次';
+
+      item.innerHTML = `
+        <div class="event-content" data-id="${next?.id || series.masterId}">
+          <div class="event-title">${utils.escapeHtml(series.title)} <span class="recurrence-badge">重复</span></div>
+          <div class="event-time">${recurrenceType} · ${countLabel}</div>
+          <div class="event-time">${nextLabel} · 至 ${untilLabel}</div>
+        </div>
+        <div class="event-actions">
+          <button class="edit-btn" data-id="${series.masterId}" title="编辑">✎</button>
+          <button class="delete-btn" data-id="${next?.id || series.masterId}" title="删除">×</button>
+        </div>
+      `;
+
+      const eventContent = item.querySelector('.event-content');
+      eventContent.addEventListener('click', () => handlers.editEvent(next || { id: series.masterId }));
+
+      const editBtn = item.querySelector('.edit-btn');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.editEvent(next || { id: series.masterId });
+      });
+
+      const deleteBtn = item.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handlers.deleteEvent(next?.id || series.masterId);
+      });
+
+      return item;
+    },
+
     // 过滤数据
     filterData(dayData) {
       const query = state.sidebar.searchQuery;
+      const onlyRecurring = state.sidebar.currentTab === 'event' && state.sidebar.onlyRecurring;
       
-      const filterItems = (items) => {
-        if (!query) return items;
-        return items.filter(item => 
+      const filterItems = (items, options = {}) => {
+        let filtered = items;
+
+        if (options.onlyRecurring) {
+          filtered = filtered.filter(item => item.isRecurringInstance || !!item.recurrence);
+        }
+
+        if (!query) return filtered;
+        return filtered.filter(item =>
           (item.title && item.title.toLowerCase().includes(query)) ||
           (item.description && item.description.toLowerCase().includes(query))
         );
@@ -1083,7 +1382,7 @@ const CalendarApp = (function() {
 
       return {
         todos: filterItems(dayData.todos),
-        events: filterItems(dayData.events),
+        events: filterItems(dayData.events, { onlyRecurring }),
         notes: filterItems(dayData.notes)
       };
     },
@@ -1212,7 +1511,7 @@ const CalendarApp = (function() {
         </div>
         <div class="event-actions">
           <button class="edit-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="编辑">✎</button>
-          <button class="delete-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="删除">×</button>
+          <button class="delete-btn" data-id="${event.id}" title="删除">×</button>
         </div>
       `;
 
@@ -1228,7 +1527,7 @@ const CalendarApp = (function() {
       const deleteBtn = item.querySelector('.delete-btn');
       deleteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        handlers.deleteEvent(event.isRecurringInstance ? event._originalId : event.id);
+        handlers.deleteEvent(event.id);
       });
 
       return item;
@@ -1263,6 +1562,9 @@ const CalendarApp = (function() {
     async refresh() {
       const dateStr = utils.formatDate(state.selectedDate);
       await this.loadDayData(dateStr);
+      if (state.sidebar.currentTab === 'event' && state.sidebar.onlyRecurring) {
+        await this.loadFutureRecurringEvents();
+      }
       this.render();
       this.loadStats();
     },
@@ -1698,6 +2000,49 @@ const CalendarApp = (function() {
 
   // ==================== 事件处理 ====================
   const handlers = {
+    getDefaultReminderPreset(isAllDay) {
+      return isAllDay ? 'same_day_9am' : '15m';
+    },
+
+    getAllowedReminderPresets(isAllDay) {
+      return isAllDay
+        ? new Set(['none', '15m', 'same_day_9am', 'one_day_9am'])
+        : new Set(['none', '15m']);
+    },
+
+    syncReminderPresetOptions(selectId, isAllDay) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+
+      const allowedPresets = handlers.getAllowedReminderPresets(isAllDay);
+      Array.from(select.options).forEach(option => {
+        const visible = allowedPresets.has(option.value);
+        option.hidden = !visible;
+        option.disabled = !visible;
+      });
+
+      if (!allowedPresets.has(select.value)) {
+        handlers.setReminderPresetValue(selectId, handlers.getDefaultReminderPreset(isAllDay), false);
+      }
+    },
+
+    setReminderPresetValue(selectId, preset, markTouched = false) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      if (select.value !== preset) {
+        select.value = preset;
+      }
+      select.dataset.userTouched = markTouched ? '1' : '0';
+    },
+
+    maybeUpdateReminderPresetDefault(selectId, isAllDay) {
+      const select = document.getElementById(selectId);
+      if (!select) return;
+      handlers.syncReminderPresetOptions(selectId, isAllDay);
+      if (select.dataset.userTouched === '1') return;
+      handlers.setReminderPresetValue(selectId, handlers.getDefaultReminderPreset(isAllDay), false);
+    },
+
     // 批量添加相关方法
     openBatchTextModal() {
       const modal = document.getElementById('batch-text-modal');
@@ -2118,6 +2463,8 @@ const CalendarApp = (function() {
         const reminderBrowserInput = elements.todoForm.querySelector('[name="reminderBrowser"]');
         if (reminderEmailInput) reminderEmailInput.checked = true;  // 默认勾选邮件提醒
         if (reminderBrowserInput) reminderBrowserInput.checked = true;  // 默认勾选浏览器提醒
+        handlers.syncReminderPresetOptions('todo-reminderPreset', true);
+        handlers.setReminderPresetValue('todo-reminderPreset', handlers.getDefaultReminderPreset(true), false);
         
         const modalTitle = elements.todoModal.querySelector('.modal-title');
         if (modalTitle) modalTitle.textContent = '添加待办事项';
@@ -2171,6 +2518,8 @@ const CalendarApp = (function() {
         if (reminderEmailInput) reminderEmailInput.checked = true;  // 默认勾选邮件提醒
         if (reminderBrowserInput) reminderBrowserInput.checked = true;  // 默认勾选浏览器提醒
         if (reminderCaldavInput) reminderCaldavInput.checked = true;  // 默认勾选日历应用提醒
+        handlers.syncReminderPresetOptions('event-reminderPreset', true);
+        handlers.setReminderPresetValue('event-reminderPreset', handlers.getDefaultReminderPreset(true), false);
         
         const modalTitle = elements.eventModal.querySelector('.modal-title');
         if (modalTitle) modalTitle.textContent = '添加事件';
@@ -2364,7 +2713,38 @@ const CalendarApp = (function() {
       }
     },
 
-    // 显示精简确认框 (支持可选复选框)
+    async getRecurringDeleteSummary(originalId, occurrenceStartTime) {
+      try {
+        const allEvents = await api.request('/api/events');
+        const masterEvent = allEvents.find(event => String(event.id) === String(originalId));
+        if (!masterEvent || !masterEvent.recurrence) return null;
+
+        const rangeStart = masterEvent.startTime;
+        const rangeEnd = masterEvent.recurrenceEnd || Math.max(
+          occurrenceStartTime + 366 * 24 * 60 * 60,
+          (masterEvent.startTime || occurrenceStartTime) + 5 * 366 * 24 * 60 * 60
+        );
+
+        const expandedEvents = await api.request(
+          `/api/events/expand-recurring?startDate=${rangeStart}&endDate=${rangeEnd}`
+        );
+
+        const occurrences = expandedEvents
+          .filter(event => String(event._originalId || event.parentEventId || event.id) === String(originalId))
+          .sort((a, b) => a.startTime - b.startTime);
+
+        const previous = occurrences.filter(event => event.startTime < occurrenceStartTime).length;
+        const current = occurrences.some(event => event.startTime === occurrenceStartTime) ? 1 : 1;
+        const future = occurrences.filter(event => event.startTime > occurrenceStartTime).length;
+
+        return { previous, current, future };
+      } catch (error) {
+        console.warn('计算重复事件删除范围统计失败:', error);
+        return null;
+      }
+    },
+
+    // 显示精简确认框 (支持可选复选框、单选项和自定义操作按钮)
     showConfirm(message, options = {}) {
       return new Promise((resolve) => {
         const modal = document.getElementById('confirm-modal');
@@ -2374,29 +2754,137 @@ const CalendarApp = (function() {
         const checkboxLabelEl = document.getElementById('confirm-checkbox-label');
         const okBtn = document.getElementById('confirm-ok');
         const cancelBtn = document.getElementById('confirm-cancel');
+        const actionsEl = document.getElementById('confirm-actions');
+        const originalActionsMarkup = actionsEl.innerHTML;
+        const originalExtraMarkup = extraEl.innerHTML;
+        let selectedChoice = options.defaultChoice || '';
+        const selectedCheckboxChoices = new Set(Array.isArray(options.defaultCheckedValues) ? options.defaultCheckedValues : []);
+        const updateConfirmDisabledState = () => {
+          if (Array.isArray(options.checkboxChoices) && options.checkboxChoices.length > 0) {
+            okBtn.disabled = selectedCheckboxChoices.size === 0;
+            return;
+          }
+          okBtn.disabled = false;
+        };
+        const cleanup = (result) => {
+          modal.classList.remove('show');
+          actionsEl.classList.remove('stacked-actions');
+          actionsEl.innerHTML = originalActionsMarkup;
+          extraEl.classList.add('hidden');
+          extraEl.classList.remove('confirm-choice-list');
+          extraEl.innerHTML = originalExtraMarkup;
+          extraEl.style.display = 'none';
+          resolve(result);
+        };
 
         msgEl.textContent = message;
-        
-        if (options.showCheckbox) {
+
+        if (Array.isArray(options.checkboxChoices) && options.checkboxChoices.length > 0) {
+          extraEl.classList.remove('hidden');
+          extraEl.style.display = 'block';
+          extraEl.classList.add('confirm-choice-list');
+          extraEl.innerHTML = options.checkboxChoices.map((choice) => `
+            <label class="confirm-choice-item">
+              <input
+                type="checkbox"
+                name="confirm-checkbox-choice"
+                value="${choice.value}"
+                ${selectedCheckboxChoices.has(choice.value) ? 'checked' : ''}
+              >
+              <span class="confirm-choice-text">
+                <span class="confirm-choice-title">${choice.label}</span>
+                ${choice.meta ? `<span class="confirm-choice-meta">${choice.meta}</span>` : ''}
+              </span>
+            </label>
+          `).join('');
+          extraEl.querySelectorAll('input[name="confirm-checkbox-choice"]').forEach(input => {
+            input.addEventListener('change', () => {
+              if (input.checked) {
+                selectedCheckboxChoices.add(input.value);
+              } else {
+                selectedCheckboxChoices.delete(input.value);
+              }
+              updateConfirmDisabledState();
+            });
+          });
+        } else if (Array.isArray(options.choices) && options.choices.length > 0) {
+          extraEl.classList.remove('hidden');
+          extraEl.style.display = 'block';
+          extraEl.classList.add('confirm-choice-list');
+          extraEl.innerHTML = options.choices.map((choice, index) => `
+            <label class="confirm-choice-item">
+              <input
+                type="radio"
+                name="confirm-choice"
+                value="${choice.value}"
+                ${choice.value === selectedChoice || (!selectedChoice && index === 0) ? 'checked' : ''}
+              >
+              <span class="confirm-choice-text">
+                <span class="confirm-choice-title">${choice.label}</span>
+                ${choice.meta ? `<span class="confirm-choice-meta">${choice.meta}</span>` : ''}
+              </span>
+            </label>
+          `).join('');
+          selectedChoice = selectedChoice || options.choices[0].value;
+          extraEl.querySelectorAll('input[name="confirm-choice"]').forEach(input => {
+            input.addEventListener('change', () => {
+              selectedChoice = input.value;
+            });
+          });
+        } else if (options.showCheckbox) {
+          extraEl.classList.remove('hidden');
           extraEl.style.display = 'flex';
           checkboxLabelEl.textContent = options.checkboxLabel || '选项';
           checkboxEl.checked = !!options.checkboxChecked;
         } else {
+          extraEl.classList.add('hidden');
           extraEl.style.display = 'none';
         }
         
-        modal.classList.add('show');
+        if (Array.isArray(options.actions) && options.actions.length > 0) {
+          const useStackedActions = options.layout === 'stacked' || options.actions.length >= 3;
+          actionsEl.innerHTML = '';
+          actionsEl.classList.toggle('stacked-actions', useStackedActions);
+          options.actions.forEach((action, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = action.className || `btn ${index === options.actions.length - 1 ? 'btn-primary' : ''}`.trim();
+            button.textContent = action.label;
+            button.onclick = () => cleanup(action.value);
+            actionsEl.appendChild(button);
+          });
+          if (!options.hideCancel) {
+            const cancelActionBtn = document.createElement('button');
+            cancelActionBtn.type = 'button';
+            cancelActionBtn.className = 'btn';
+            cancelActionBtn.textContent = options.cancelLabel || '取消';
+            cancelActionBtn.onclick = () => cleanup(false);
+            if (useStackedActions) {
+              actionsEl.appendChild(cancelActionBtn);
+            } else {
+              actionsEl.prepend(cancelActionBtn);
+            }
+          }
+        }
 
-        okBtn.onclick = () => { 
-          modal.classList.remove('show'); 
-          if (options.showCheckbox) {
-            resolve({ confirmed: true, checked: checkboxEl.checked });
+        modal.classList.add('show');
+        okBtn.textContent = options.confirmLabel || '确定';
+        cancelBtn.textContent = options.cancelLabel || '取消';
+        updateConfirmDisabledState();
+
+        okBtn.onclick = () => {
+          if (Array.isArray(options.checkboxChoices) && options.checkboxChoices.length > 0) {
+            cleanup(Array.from(selectedCheckboxChoices));
+          } else if (Array.isArray(options.choices) && options.choices.length > 0) {
+            cleanup(selectedChoice || false);
+          } else if (options.showCheckbox) {
+            cleanup({ confirmed: true, checked: checkboxEl.checked });
           } else {
-            resolve(true);
+            cleanup(true);
           }
         };
-        cancelBtn.onclick = () => { modal.classList.remove('show'); resolve(false); };
-        modal.onclick = (e) => { if (e.target === modal) { modal.classList.remove('show'); resolve(false); } };
+        cancelBtn.onclick = () => cleanup(false);
+        modal.onclick = (e) => { if (e.target === modal) cleanup(false); };
       });
     },
 
@@ -2586,6 +3074,12 @@ const CalendarApp = (function() {
       
       if (reminderEmailInput) reminderEmailInput.checked = todo.reminderEmail === 1;
       if (reminderBrowserInput) reminderBrowserInput.checked = todo.reminderBrowser === 1;
+      handlers.syncReminderPresetOptions('todo-reminderPreset', allDay);
+      handlers.setReminderPresetValue(
+        'todo-reminderPreset',
+        todo.reminderPreset || handlers.getDefaultReminderPreset(allDay),
+        false
+      );
 
       elements.todoForm.dataset.todoId = todo.id;
       const modalTitle = elements.todoModal.querySelector('.modal-title');
@@ -2604,13 +3098,34 @@ const CalendarApp = (function() {
 
         // 处理重复事件实例 (例如: ID_时间戳)
         if (id.includes('_')) {
-          // 尝试从 ID 中切分，或者从缓存中找
-          let originalId = id.split('_')[0];
-          
-          // 如果是订阅日历 sub_ 开头，已经在上面被拦截，这里处理的是普通重复事件
-          if (await this.showConfirm('这是一个重复事件系列。确定要删除整个重复事件系列吗？')) {
+          const lastUnderscoreIndex = id.lastIndexOf('_');
+          const originalId = id.slice(0, lastUnderscoreIndex);
+          const occurrenceStartTime = Number(id.slice(lastUnderscoreIndex + 1));
+
+          const summary = await this.getRecurringDeleteSummary(originalId, occurrenceStartTime);
+          const previousCount = summary?.previous ?? 0;
+          const currentCount = 1;
+          const futureCount = summary?.future ?? 0;
+
+          const deleteScope = await this.showConfirm('这是重复事件。请选择删除范围：', {
+            confirmLabel: '确定删除',
+            cancelLabel: '取消',
+            defaultCheckedValues: ['current', 'future'],
+            checkboxChoices: [
+              { value: 'previous', label: `之前 ${previousCount} 个` },
+              { value: 'current', label: `本次 ${currentCount} 个` },
+              { value: 'future', label: `未来 ${futureCount} 个` }
+            ]
+          });
+
+          if (Array.isArray(deleteScope) && deleteScope.length > 0) {
             try {
-              await api.deleteEvent(originalId);
+              await api.deleteRecurringEvent(originalId, {
+                occurrenceStartTime,
+                deletePrevious: deleteScope.includes('previous'),
+                deleteCurrent: deleteScope.includes('current'),
+                deleteFuture: deleteScope.includes('future')
+              });
               sidebarRenderer.refresh();
               dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
             } catch (error) {
@@ -2655,6 +3170,12 @@ const CalendarApp = (function() {
       if (reminderEmailInput) reminderEmailInput.checked = event.reminderEmail === 1;
       if (reminderBrowserInput) reminderBrowserInput.checked = event.reminderBrowser === 1;
       if (reminderCaldavInput) reminderCaldavInput.checked = event.reminderCaldav === 1;
+      handlers.syncReminderPresetOptions('event-reminderPreset', !!event.allDay);
+      handlers.setReminderPresetValue(
+        'event-reminderPreset',
+        event.reminderPreset || handlers.getDefaultReminderPreset(!!event.allDay),
+        false
+      );
         
         // 处理全天事件的日期显示
         if (event.allDay) {
@@ -3384,6 +3905,7 @@ const CalendarApp = (function() {
         allDaySelect.addEventListener('change', (e) => {
           const isAllDay = e.target.value === 'true';
           handlers.updateAllDayUI(isAllDay);
+          handlers.maybeUpdateReminderPresetDefault('event-reminderPreset', isAllDay);
           
           // 当切换到全天事件时，确保日期框的值被正确设置
           if (isAllDay) {
@@ -3408,6 +3930,7 @@ const CalendarApp = (function() {
         todoAllDaySelect.addEventListener('change', (e) => {
           const isAllDay = e.target.value === 'true';
           handlers.updateTodoAllDayUI(isAllDay);
+          handlers.maybeUpdateReminderPresetDefault('todo-reminderPreset', isAllDay);
           
           const dateStr = utils.formatDate(state.selectedDate);
           if (isAllDay) {
@@ -3421,6 +3944,22 @@ const CalendarApp = (function() {
             if (!startTimeInput.value) startTimeInput.value = `${dateStr}T09:00`;
             if (!dueDateInput.value) dueDateInput.value = `${dateStr}T18:00`;
           }
+        });
+      }
+
+      const eventReminderPresetSelect = document.getElementById('event-reminderPreset');
+      if (eventReminderPresetSelect) {
+        handlers.syncReminderPresetOptions('event-reminderPreset', true);
+        eventReminderPresetSelect.addEventListener('change', () => {
+          eventReminderPresetSelect.dataset.userTouched = '1';
+        });
+      }
+
+      const todoReminderPresetSelect = document.getElementById('todo-reminderPreset');
+      if (todoReminderPresetSelect) {
+        handlers.syncReminderPresetOptions('todo-reminderPreset', true);
+        todoReminderPresetSelect.addEventListener('change', () => {
+          todoReminderPresetSelect.dataset.userTouched = '1';
         });
       }
 

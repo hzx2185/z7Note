@@ -4,6 +4,72 @@
  */
 
 const { parseRecurrenceRule, createRecurrenceRule } = require('./recurringEvents');
+const TimeHelper = require('./timeHelper');
+
+function getReminderTrigger(event) {
+  const preset = event.reminderPreset || (event.allDay ? 'same_day_9am' : '15m');
+  const timeZone = event.timezone || TimeHelper.getAppTimeZone();
+
+  switch (preset) {
+    case '15m':
+      if (event.allDay) {
+        const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
+          allDay: true
+        });
+        return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
+      }
+      return ':-PT15M';
+    case 'same_day_9am':
+      if (event.allDay) {
+        const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
+          allDay: true
+        });
+        return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
+      }
+      return ':-PT15M';
+    case 'one_day_9am':
+      if (event.allDay) {
+        const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
+          allDay: true
+        });
+        return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
+      }
+      return ':-P1D';
+    default:
+      return null;
+  }
+}
+
+function parseAbsoluteTrigger(trigger) {
+  const match = String(trigger || '').trim().toUpperCase().match(/(?:;VALUE=DATE-TIME:)?(\d{8}T\d{6}Z)$/);
+  if (!match) return null;
+
+  const value = match[1];
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6));
+  const day = Number(value.slice(6, 8));
+  const hour = Number(value.slice(9, 11));
+  const minute = Number(value.slice(11, 13));
+  const second = Number(value.slice(13, 15));
+  return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000);
+}
+
+function inferReminderPreset(event, trigger) {
+  const normalized = String(trigger || '').trim().toUpperCase();
+  if (normalized === '-PT15M') return '15m';
+  if (event.allDay) {
+    const timeZone = event.timezone || TimeHelper.getAppTimeZone();
+    const triggerTs = parseAbsoluteTrigger(normalized);
+    const sameDayTs = TimeHelper.getReminderPresetTs(event.startTime, 'same_day_9am', timeZone, { allDay: true });
+    const oneDayTs = TimeHelper.getReminderPresetTs(event.startTime, 'one_day_9am', timeZone, { allDay: true });
+    const fifteenMinuteTs = TimeHelper.getReminderPresetTs(event.startTime, '15m', timeZone, { allDay: true });
+
+    if (triggerTs && fifteenMinuteTs && Math.abs(triggerTs - fifteenMinuteTs) <= 60) return '15m';
+    if (triggerTs && sameDayTs && Math.abs(triggerTs - sameDayTs) <= 60) return 'same_day_9am';
+    if (triggerTs && oneDayTs && Math.abs(triggerTs - oneDayTs) <= 60) return 'one_day_9am';
+  }
+  return event.allDay ? 'same_day_9am' : '15m';
+}
 
 /**
  * 将事件转换为ICS格式（增强版）
@@ -78,9 +144,10 @@ function exportToICS(events, options = {}) {
     // 提醒功能（VALARM）
     if (includeReminders && targetApp !== 'outlook') {
       // Outlook 对 VALARM 支持有限
-      if (event.reminderEmail || event.reminderBrowser || event.reminderCaldav) {
+      const reminderTrigger = getReminderTrigger(event);
+      if (reminderTrigger && (event.reminderEmail || event.reminderBrowser || event.reminderCaldav)) {
         lines.push('BEGIN:VALARM');
-        lines.push('TRIGGER:-PT15M'); // 默认提前15分钟
+        lines.push(`TRIGGER${reminderTrigger}`);
         lines.push('ACTION:DISPLAY');
         lines.push(`DESCRIPTION:${escapeICS(event.title)}`);
         lines.push('END:VALARM');
@@ -88,7 +155,7 @@ function exportToICS(events, options = {}) {
         // 如果启用了邮件提醒
         if (event.reminderEmail) {
           lines.push('BEGIN:VALARM');
-          lines.push('TRIGGER:-PT15M');
+          lines.push(`TRIGGER${reminderTrigger}`);
           lines.push('ACTION:EMAIL');
           lines.push(`SUMMARY:Reminder: ${escapeICS(event.title)}`);
           lines.push(`DESCRIPTION:${escapeICS(event.description || event.title)}`);
@@ -162,11 +229,17 @@ function importFromICS(icsContent, options = {}) {
     if (line === 'END:VEVENT') {
       if (currentEvent && currentEvent.title) {
         // 处理提醒信息
-        if (importReminders && currentAlarm) {
-          currentEvent.reminderBrowser = true;
-          if (currentAlarm.action === 'EMAIL') {
-            currentEvent.reminderEmail = true;
-          }
+        if (importReminders && currentEvent.alarms && currentEvent.alarms.length > 0) {
+          currentEvent.reminderBrowser = currentEvent.alarms.some(alarm => alarm.action !== 'EMAIL');
+          currentEvent.reminderEmail = currentEvent.alarms.some(alarm => alarm.action === 'EMAIL');
+          currentEvent.reminderCaldav = currentEvent.reminderBrowser ? 1 : 0;
+          const displayAlarm = currentEvent.alarms.find(alarm => alarm.action !== 'EMAIL') || currentEvent.alarms[0];
+          currentEvent.reminderPreset = inferReminderPreset(currentEvent, displayAlarm?.trigger);
+        } else if (importReminders) {
+          currentEvent.reminderBrowser = false;
+          currentEvent.reminderEmail = false;
+          currentEvent.reminderCaldav = 0;
+          currentEvent.reminderPreset = 'none';
         }
 
         // 根据来源应用调整属性
@@ -192,6 +265,11 @@ function importFromICS(icsContent, options = {}) {
 
     if (line === 'END:VALARM') {
       inAlarm = false;
+      if (currentEvent && currentAlarm) {
+        if (!currentEvent.alarms) currentEvent.alarms = [];
+        currentEvent.alarms.push(currentAlarm);
+      }
+      currentAlarm = null;
       continue;
     }
 
@@ -207,7 +285,7 @@ function importFromICS(icsContent, options = {}) {
     if (inAlarm) {
       switch (mainKey) {
         case 'TRIGGER':
-          currentAlarm.trigger = value;
+          currentAlarm.trigger = key === 'TRIGGER' ? value : `${key.slice('TRIGGER'.length)}:${value}`;
           break;
         case 'ACTION':
           currentAlarm.action = value;
@@ -315,6 +393,7 @@ function adjustForGoogle(event) {
   // 确保提醒设置
   if (!event.reminderBrowser && !event.reminderEmail) {
     event.reminderBrowser = true;
+    event.reminderPreset = event.allDay ? 'same_day_9am' : '15m';
   }
 
   return event;
@@ -332,6 +411,10 @@ function adjustForOutlook(event) {
   // Outlook 对提醒的支持有限
   if (event.reminderBrowser) {
     event.reminderCaldav = true; // 使用VALARM
+  }
+
+  if (!event.reminderPreset) {
+    event.reminderPreset = event.allDay ? 'same_day_9am' : '15m';
   }
 
   return event;
@@ -488,16 +571,19 @@ function parseICSDate(icsDate) {
   let isUTC = false;
   let tzId = '';
 
-  // 检查是否有参数，如 VALUE=DATE 或 TZID
-  const paramMatch = icsDate.match(/^([^;]+;)?(TZID=([^:]+):)?(VALUE=DATE:)?(.*)$/i);
-  if (paramMatch) {
-    if (paramMatch[4]) { // VALUE=DATE:
+  const colonIndex = String(icsDate).indexOf(':');
+  if (colonIndex >= 0) {
+    const keyPart = String(icsDate).slice(0, colonIndex);
+    value = String(icsDate).slice(colonIndex + 1);
+
+    if (/VALUE=DATE/i.test(keyPart)) {
       isAllDay = true;
     }
-    if (paramMatch[3]) { // TZID=
-      tzId = paramMatch[3];
+
+    const tzidMatch = keyPart.match(/TZID=([^;:]+)/i);
+    if (tzidMatch) {
+      tzId = tzidMatch[1];
     }
-    value = paramMatch[5]; // 实际日期时间值
   }
 
   if (value.endsWith('Z')) {

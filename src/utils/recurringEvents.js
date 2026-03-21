@@ -35,6 +35,7 @@ function generateRecurringEvents(masterEvent, startDate, endDate) {
   masterStartDate.setUTCHours(0, 0, 0, 0);
   const masterDayOfMonth = masterStartDate.getUTCDate();
   const masterMonthOfYear = masterStartDate.getUTCMonth() + 1;
+  const excludedDates = parseExcludedDates(masterEvent.excludedDates);
 
   // 重复结束日期
   const endRecurrenceDate = recurrenceEnd ? new Date(recurrenceEnd * 1000) : new Date(endDate * 1000);
@@ -52,7 +53,7 @@ function generateRecurringEvents(masterEvent, startDate, endDate) {
 
     // 检查当前日期是否在查询范围内
     const currentTimestamp = Math.floor(currentDate.getTime() / 1000);
-    if (currentTimestamp >= startDate && currentTimestamp <= endDate) {
+    if (currentTimestamp >= startDate && currentTimestamp <= endDate && !excludedDates.has(currentTimestamp)) {
       const event = {
         ...masterEvent,
         id: `${masterEvent.id}_${currentTimestamp}`,
@@ -118,6 +119,45 @@ function generateRecurringEvents(masterEvent, startDate, endDate) {
   }
 
   return events;
+}
+
+function getNextRecurringOccurrenceStart(masterEvent, afterTimestamp) {
+  if (!masterEvent || !masterEvent.recurrence || !afterTimestamp) {
+    return null;
+  }
+
+  const fallbackEnd = Math.floor(afterTimestamp) + (366 * 24 * 60 * 60 * 20);
+  const searchEnd = masterEvent.recurrenceEnd
+    ? Math.max(masterEvent.recurrenceEnd, Math.floor(afterTimestamp) + 1)
+    : fallbackEnd;
+
+  const instances = generateRecurringEvents(
+    masterEvent,
+    Math.floor(afterTimestamp) + 1,
+    searchEnd
+  );
+
+  return instances.length > 0 ? instances[0].startTime : null;
+}
+
+function parseExcludedDates(excludedDates) {
+  if (!excludedDates) return new Set();
+
+  let values = excludedDates;
+  if (typeof values === 'string') {
+    try {
+      values = JSON.parse(values);
+    } catch (error) {
+      return new Set();
+    }
+  }
+
+  if (!Array.isArray(values)) return new Set();
+  return new Set(
+    values
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+  );
 }
 
 /**
@@ -194,5 +234,7 @@ module.exports = {
   generateRecurringEvents,
   parseRecurrenceRule,
   createRecurrenceRule,
-  matchesRecurrenceRule
+  matchesRecurrenceRule,
+  parseExcludedDates,
+  getNextRecurringOccurrenceStart
 };

@@ -3,9 +3,57 @@
  */
 
 const log = require('./logger');
-const ICalGenerator = require('./icalGenerator');
+const TimeHelper = require('./timeHelper');
 
 class ICalParser {
+  static parseAbsoluteTrigger(trigger) {
+    const match = String(trigger || '').trim().toUpperCase().match(/(?:;VALUE=DATE-TIME:)?(\d{8}T\d{6}Z)$/);
+    if (!match) return null;
+
+    const value = match[1];
+    const year = Number(value.slice(0, 4));
+    const month = Number(value.slice(4, 6));
+    const day = Number(value.slice(6, 8));
+    const hour = Number(value.slice(9, 11));
+    const minute = Number(value.slice(11, 13));
+    const second = Number(value.slice(13, 15));
+    return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000);
+  }
+
+  static inferReminderPreset(item, alarms) {
+    if (!Array.isArray(alarms) || alarms.length === 0) {
+      return 'none';
+    }
+
+    const displayAlarm = alarms.find(alarm => alarm && alarm.action !== 'EMAIL') || alarms[0];
+    const trigger = String(displayAlarm?.trigger || '').trim().toUpperCase();
+
+    if (trigger === '-PT15M') {
+      return '15m';
+    }
+
+    if (item.allDay) {
+      const timeZone = item.timezone || TimeHelper.getAppTimeZone();
+      const triggerTs = this.parseAbsoluteTrigger(trigger);
+      const sameDayTs = TimeHelper.getReminderPresetTs(item.startTime, 'same_day_9am', timeZone, { allDay: true });
+      const oneDayTs = TimeHelper.getReminderPresetTs(item.startTime, 'one_day_9am', timeZone, { allDay: true });
+      const fifteenMinuteTs = TimeHelper.getReminderPresetTs(item.startTime, '15m', timeZone, { allDay: true });
+
+      if (triggerTs && fifteenMinuteTs && Math.abs(triggerTs - fifteenMinuteTs) <= 60) {
+        return '15m';
+      }
+
+      if (triggerTs && sameDayTs && Math.abs(triggerTs - sameDayTs) <= 60) {
+        return 'same_day_9am';
+      }
+      if (triggerTs && oneDayTs && Math.abs(triggerTs - oneDayTs) <= 60) {
+        return 'one_day_9am';
+      }
+    }
+
+    return item.allDay ? 'same_day_9am' : '15m';
+  }
+
   /**
    * 解析 iCal 内容，提取事件和待办事项
    */
@@ -74,6 +122,7 @@ class ICalParser {
             currentItem = {};
           } else if (componentName === 'VALARM') {
             inAlarm = true;
+            currentItem.currentAlarm = {};
           }
           componentStack.push(componentName);
           continue;
@@ -93,8 +142,9 @@ class ICalParser {
           } else if (componentName === 'VALARM') {
             inAlarm = false;
             if (currentComponent === 'event') {
-              currentItem.alarms.push(true);
+              currentItem.alarms.push(currentItem.currentAlarm || {});
             }
+            delete currentItem.currentAlarm;
           }
           
           if (componentStack.length === 0) {
@@ -112,6 +162,14 @@ class ICalParser {
           } else {
             currentItem[key] = unescapedValue;
           }
+        } else if (currentComponent === 'event' && currentItem && inAlarm) {
+          const unescapedValue = this.unescapeText(value);
+          if (!currentItem.currentAlarm) {
+            currentItem.currentAlarm = {};
+          }
+          currentItem.currentAlarm[key] = key === 'TRIGGER' && params.VALUE
+            ? `;VALUE=${params.VALUE}:${unescapedValue}`
+            : unescapedValue;
         }
       }
 
@@ -152,6 +210,21 @@ class ICalParser {
       createdAt: Math.floor(Date.now() / 1000),
       updatedAt: Math.floor(Date.now() / 1000)
     };
+
+    if (item.alarms && item.alarms.length > 0) {
+      const hasDisplayAlarm = item.alarms.some(alarm => String(alarm?.ACTION || '').toUpperCase() === 'DISPLAY');
+      const hasEmailAlarm = item.alarms.some(alarm => String(alarm?.ACTION || '').toUpperCase() === 'EMAIL');
+      event.reminderBrowser = hasDisplayAlarm ? 1 : 0;
+      event.reminderEmail = hasEmailAlarm ? 1 : 0;
+      event.reminderPreset = this.inferReminderPreset(event, item.alarms.map(alarm => ({
+        action: alarm.ACTION,
+        trigger: alarm.TRIGGER
+      })));
+    } else {
+      event.reminderBrowser = 0;
+      event.reminderEmail = 0;
+      event.reminderPreset = 'none';
+    }
 
     // 时区漂移容错：如果时间恰好是 16:00 (UTC 00:00)，且客户端未明确指定时区，尝试将其视为本地 00:00 的全天事件
     if (!event.allDay && event.startTime % 86400 === 57600) { // 57600 是 16:00 的秒数

@@ -8,6 +8,40 @@ const TimeHelper = require('./timeHelper');
 const lunarHelper = require('./lunarHelper');
 
 class ICalGenerator {
+  static getReminderTrigger(event) {
+    const preset = event.reminderPreset || (event.allDay ? 'same_day_9am' : '15m');
+    const timeZone = event.timezone || TimeHelper.getAppTimeZone();
+
+    switch (preset) {
+      case '15m':
+        if (event.allDay) {
+          const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
+            allDay: true
+          });
+          return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
+        }
+        return ':-PT15M';
+      case 'same_day_9am':
+        if (event.allDay) {
+          const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
+            allDay: true
+          });
+          return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
+        }
+        return ':-PT15M';
+      case 'one_day_9am':
+        if (event.allDay) {
+          const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
+            allDay: true
+          });
+          return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
+        }
+        return ':-P1D';
+      default:
+        return null;
+    }
+  }
+
   static eventToICal(event) {
     const lines = [];
     lines.push('BEGIN:VEVENT');
@@ -65,12 +99,13 @@ class ICalGenerator {
     lines.push(`SEQUENCE:${Math.floor(event.updatedAt || 0)}`);
 
     // 提醒 (VALARM)
-    if (event.reminderEmail || event.reminderBrowser || event.reminderCaldav) {
+    const reminderTrigger = this.getReminderTrigger(event);
+    if (reminderTrigger && (event.reminderEmail || event.reminderBrowser || event.reminderCaldav)) {
       lines.push('BEGIN:VALARM');
       lines.push(`X-WR-ALARMUID:ALARM-${event.id}`);
       lines.push('ACTION:DISPLAY');
       lines.push(`DESCRIPTION:Reminder: ${this.escapeText(event.title || 'Event')}`);
-      lines.push('TRIGGER:-PT15M');
+      lines.push(`TRIGGER${reminderTrigger}`);
       lines.push('END:VALARM');
     }
 

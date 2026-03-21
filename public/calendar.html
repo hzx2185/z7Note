@@ -72,6 +72,10 @@
     .sidebar-tab { flex: 1; padding: 8px; text-align: center; font-size: 12px; cursor: pointer; color: var(--gray); position: relative; }
     .sidebar-tab:hover { background: rgba(128,128,128,0.05); }
     .sidebar-tab.active { color: var(--accent); font-weight: bold; border-bottom: 2px solid var(--accent); }
+    .sidebar-subfilters { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--gray); }
+    .sidebar-subfilters.hidden { display: none !important; }
+    .sidebar-subfilters label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+    .sidebar-subfilters input[type="checkbox"] { width: 13px; height: 13px; accent-color: var(--accent); }
     
     .sidebar-content { flex: 1; min-height: 0; overflow-y: auto; padding: 0; }
     .date-group-header { padding: 6px 12px; background: var(--side); font-size: 11px; color: var(--gray); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
@@ -153,6 +157,13 @@
     .modal-actions .btn-primary { background: var(--accent) !important; color: white !important; border: none !important; }
     .modal-actions .btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .modal-actions .btn:active { transform: translateY(0); }
+    .confirm-choice-list { display: block !important; margin-bottom: 16px !important; }
+    .confirm-choice-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; text-align: left; background: var(--bg); font-family: inherit; font-size: 14px; font-weight: 400; line-height: 1.4; color: var(--text); }
+    .confirm-choice-item input[type="radio"],
+    .confirm-choice-item input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+    .confirm-choice-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font: inherit; line-height: inherit; color: inherit; }
+    .confirm-choice-title { font: inherit; line-height: inherit; color: inherit; }
+    .confirm-choice-meta { font-family: inherit; font-size: 12px; font-weight: 400; color: var(--gray); line-height: 1.4; }
 
     /* 未登录提示 */
     #login-required { display: none; position: fixed; inset: 0; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
@@ -286,6 +297,12 @@
         </div>
         <div class="sidebar-tab" data-tab="note">笔记</div>
       </div>
+      <div class="sidebar-subfilters hidden" id="event-subfilters">
+        <label>
+          <input type="checkbox" id="sidebar-recurring-only">
+          <span>只看重复</span>
+        </label>
+      </div>
       <!-- 批量操作工具栏 -->
       <div class="batch-actions-bar" id="batch-actions-bar">
         <input type="checkbox" id="select-all-checkbox" style="accent-color: var(--accent); width: 13px; height: 13px;">
@@ -327,7 +344,7 @@
           <div class="form-group"><label>截止日期</label><input type="date" name="dueDateDate"></div>
         </div>
         <div class="form-group reminder-group"><label>提醒方式</label>
-          <select name="reminderTime"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
+          <select name="reminderPreset" id="todo-reminderPreset"><option value="none">无提醒</option><option value="15m">提前15分钟</option><option value="same_day_9am" selected>当天09:00</option><option value="one_day_9am">提前1天09:00</option></select>
           <div class="checkbox-row compact">
             <label><input type="checkbox" name="reminderEmail" value="1" checked style="width:auto"> 邮件</label>
             <label><input type="checkbox" name="reminderBrowser" value="1" checked style="width:auto"> 浏览器</label>
@@ -375,7 +392,7 @@
           <div class="field-hint">包含当天，留空则持续重复</div>
         </div>
         <div class="form-group reminder-group"><label>提醒</label>
-          <select name="reminderTime" style="margin-bottom:4px"><option value="0,0,15">提前15分钟</option><option value="1,0,0" selected>提前1天</option></select>
+          <select name="reminderPreset" id="event-reminderPreset" style="margin-bottom:4px"><option value="none">无提醒</option><option value="15m">提前15分钟</option><option value="same_day_9am" selected>当天09:00</option><option value="one_day_9am">提前1天09:00</option></select>
           <div class="checkbox-row compact">
             <label><input type="checkbox" name="reminderEmail" value="1" checked style="width:auto"> 邮件</label>
             <label><input type="checkbox" name="reminderBrowser" value="1" checked style="width:auto"> 浏览器</label>
@@ -461,7 +478,7 @@
             <span id="confirm-checkbox-label"></span>
           </label>
         </div>
-        <div class="modal-actions" style="padding: 0; border: none; background: transparent; gap: 8px; margin-top: 0;">
+        <div class="modal-actions" id="confirm-actions" style="padding: 0; border: none; background: transparent; gap: 8px; margin-top: 0;">
           <button type="button" class="btn" id="confirm-cancel">取消</button>
           <button type="button" class="btn btn-primary" id="confirm-ok" style="background: var(--red) !important;">确定</button>
         </div>
@@ -477,7 +494,7 @@
     window.wsManager = wsManager;
     wsManager.connect().catch(console.error);
   </script>
-  <script src="/js/notification-handler.js?v=20250312-FINAL-FIX"></script>
-  <script src="/js/calendar.js?v=20250312-FINAL-FIX"></script>
+  <script src="/js/notification-handler.js?v=20260320-CALENDAR-FILTERS"></script>
+  <script src="/js/calendar.js?v=20260320-CALENDAR-FILTERS"></script>
 </body>
 </html>
