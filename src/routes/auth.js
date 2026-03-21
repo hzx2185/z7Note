@@ -260,7 +260,7 @@ router.post('/api/verify-bind-email', emailVerifyRateLimit, async (req, res) => 
     });
     
     if (!record) {
-      log('WARN', '验证码错误', { username: req.user, email, token });
+      log('WARN', '验证码错误', { username: req.user, email: normalizedEmail });
       return res.status(400).json({ error: "验证码错误" });
     }
 

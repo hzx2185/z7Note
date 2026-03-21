@@ -81,6 +81,7 @@ router.propfind('/', basicAuthMiddleware, async (req, res) => {
 router.propfind('/principals/:username/', basicAuthMiddleware, async (req, res) => {
   try {
     const { username } = req.params;
+    if (username !== req.user) return res.status(403).send();
     const xml = `<?xml version="1.0" encoding="utf-8" ?>
 <D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
   <D:response>

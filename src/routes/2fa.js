@@ -28,22 +28,13 @@ function generateBackupCodes(count = 8) {
  */
 router.get('/status', async (req, res) => {
     try {
-        const user = await db.queryOne('SELECT tfa_enabled, tfa_secret, tfa_backup_codes FROM users WHERE username = ?', [req.user]);
+        const user = await db.queryOne('SELECT tfa_enabled FROM users WHERE username = ?', [req.user]);
 
         if (!user) {
             return res.status(404).json({ message: '用户不存在' });
         }
-        
-        let backupCodes = null;
-        if (user.tfa_backup_codes) {
-            try {
-                backupCodes = JSON.parse(user.tfa_backup_codes);
-            } catch (e) {
-                console.error('[2FA Status] 解析备用代码失败:', e);
-            }
-        }
-        
-        res.json({ enabled: !!user.tfa_enabled, backupCodes });
+
+        res.json({ enabled: !!user.tfa_enabled });
     } catch (e) {
         console.error('[2FA Status] 获取2FA状态失败:', e.message);
         res.status(500).json({ message: '服务器内部错误' });
