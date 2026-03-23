@@ -363,6 +363,20 @@ async function sendReminder(username, type, item, settings) {
   return results;
 }
 
+function getEventReminderCutoff(event) {
+  if (event && event.allDay && event.endTime) {
+    return event.endTime;
+  }
+  return event ? event.startTime : null;
+}
+
+function getTodoReminderCutoff(todo) {
+  if (todo && todo.allDay && todo.dueDate) {
+    return todo.dueDate + 24 * 60 * 60;
+  }
+  return todo ? todo.dueDate : null;
+}
+
 /**
  * 检查并发送待处理的提醒
  */
@@ -389,7 +403,10 @@ async function checkAndSendPendingReminders() {
         const events = await db.queryAll(
           `SELECT * FROM events
            WHERE username = ?
-           AND startTime > ?
+           AND CASE
+             WHEN allDay = 1 AND endTime IS NOT NULL THEN endTime
+             ELSE startTime
+           END > ?
            AND (reminderEmail = 1 OR reminderBrowser = 1 OR reminderCaldav = 1)
            AND id NOT IN (
              SELECT target_id FROM reminder_history
@@ -400,11 +417,12 @@ async function checkAndSendPendingReminders() {
 
         for (const event of events) {
           const reminderTime = calculateReminderTime(event.startTime, settings, event);
+          const reminderCutoff = getEventReminderCutoff(event);
           if (reminderTime === null) {
             continue;
           }
-          // 只有在提醒时间点到事件开始前的窗口内才发送
-          if (reminderTime <= now && event.startTime > now) {
+          // 全天事件允许在事件结束前补发，避免“当天 09:00”或免打扰错过后被永久跳过。
+          if (reminderCutoff && reminderTime <= now && reminderCutoff > now) {
             await sendReminder(username, 'event', event, settings);
           }
         }
@@ -427,10 +445,11 @@ async function checkAndSendPendingReminders() {
 
         for (const todo of todos) {
           const reminderTime = calculateReminderTime(todo.dueDate, settings, todo);
+          const reminderCutoff = getTodoReminderCutoff(todo);
           if (reminderTime === null) {
             continue;
           }
-          if (reminderTime <= now && todo.dueDate > now) {
+          if (reminderCutoff && reminderTime <= now && reminderCutoff > now) {
             await sendReminder(username, 'todo', todo, settings);
           }
         }
