@@ -372,7 +372,7 @@ router.post('/api/notes', async (req, res) => {
       broadcastNoteUpdate(req.user, id, note);
       wsBroadcastNoteUpdate(req.user, note);
     } catch (e) {
-      console.error('[Broadcast] 广播笔记更新失败:', e);
+      log('ERROR', '广播笔记更新失败', { username: req.user, noteId: id, error: e.message });
     }
   } catch (e) {
     log('ERROR', '创建笔记失败', { username: req.user, error: e.message });
@@ -404,7 +404,7 @@ router.put('/api/notes/:id', async (req, res) => {
         try {
           wsBroadcastNoteDelete(req.user, req.params.id);
         } catch (e) {
-          console.error('[Broadcast] 广播笔记删除失败:', e);
+          log('ERROR', '广播笔记删除失败', { username: req.user, noteId: req.params.id, error: e.message });
         }
         return res.json({ status: 'deleted', message: '内容为空，已自动删除笔记' });
       }
@@ -428,11 +428,10 @@ router.put('/api/notes/:id', async (req, res) => {
     // 广播笔记更新通知（SSE + WebSocket）
     if (note) {
       try {
-        console.log('[Broadcast] 广播笔记更新:', req.user, req.params.id);
         broadcastNoteUpdate(req.user, req.params.id, note);
         wsBroadcastNoteUpdate(req.user, note);
       } catch (e) {
-        console.error('[Broadcast] 广播笔记更新失败:', e);
+        log('ERROR', '广播笔记更新失败', { username: req.user, noteId: req.params.id, error: e.message });
       }
     }
   } catch (e) {
@@ -459,7 +458,7 @@ router.delete('/api/notes/:id', async (req, res) => {
     try {
       wsBroadcastNoteDelete(req.user, req.params.id);
     } catch (e) {
-      console.error('[Broadcast] 广播笔记删除失败:', e);
+      log('ERROR', '广播笔记删除失败', { username: req.user, noteId: req.params.id, error: e.message });
     }
   } catch (e) {
     log('ERROR', '删除笔记失败', { username: req.user, noteId: req.params.id, error: e.message });
@@ -508,7 +507,7 @@ router.post('/api/notes/batch-delete', async (req, res) => {
           wsBroadcastNoteDelete(req.user, noteId);
         });
       } catch (e) {
-        console.error('[Broadcast] 广播批量笔记删除失败:', e);
+        log('ERROR', '广播批量笔记删除失败', { username: req.user, count: ids.length, error: e.message });
       }
     });
   } catch (e) {
@@ -597,7 +596,7 @@ router.post('/api/notes/batch-replace', async (req, res) => {
       count: result
     });
   } catch (e) {
-    log('ERROR', '批量替换笔记失败', { username: req.user, error: e.message, stack: e.stack });
+    log('ERROR', '批量替换笔记失败', { username: req.user, error: e.message });
     res.status(500).json({ error: "批量替换失败，请稍后重试" });
   }
 });
@@ -694,7 +693,7 @@ router.post('/api/notes/batch-move', async (req, res) => {
       count: movedCount
     });
   } catch (e) {
-    log('ERROR', '批量移动笔记失败', { username: req.user, error: e.message, stack: e.stack });
+    log('ERROR', '批量移动笔记失败', { username: req.user, error: e.message });
     res.status(500).json({ error: "批量移动失败，请稍后重试" });
   }
 });
@@ -720,6 +719,7 @@ router.post('/api/files', async (req, res) => {
     let newTotalSize = currentUsedBytes;
     const validItems = [];
     const deletedItems = [];
+    const existingNotesById = new Map();
 
     // 数据过滤和容量检查
     const cutoff = (await db.queryOne(
@@ -755,6 +755,7 @@ router.post('/api/files', async (req, res) => {
         'SELECT LENGTH(content) as size, createdAt FROM notes WHERE id = ? AND username = ?',
         [item.id, req.user]
       );
+      existingNotesById.set(item.id, existingNote || null);
 
       if (existingNote) {
         // 已有笔记，计算增量
@@ -784,6 +785,7 @@ router.post('/api/files', async (req, res) => {
         // 处理时间戳：确保不为空或 0
         const now = Math.floor(Date.now() / 1000);
         const updatedAt = normalizeNoteTimestamp(item.updatedAt, now);
+        const existingNote = existingNotesById.get(item.id);
         const createdAt = normalizeNoteTimestamp(
           item.createdAt,
           existingNote?.createdAt || updatedAt || now
@@ -804,24 +806,14 @@ router.post('/api/files', async (req, res) => {
           'deleted'
         ], ['id']);
 
-        console.log('[Sync] 处理笔记:', item.id, 'deleted:', item.deleted, 'title:', item.title);
-
         // 如果笔记被删除，同步清理分享链接
         if (item.deleted) {
           await tx.execute(
             'DELETE FROM shares WHERE targetType = ? AND target = ? AND owner = ?',
             ['note', item.id, req.user]
           );
-          console.log('[Sync] 清理分享链接:', item.id);
         }
       }
-    });
-
-    console.log('[Sync] 批量同步完成:', {
-      username: req.user,
-      total: validItems.length,
-      deleted: deletedItems.length,
-      updated: validItems.length - deletedItems.length
     });
 
     // 为更新的笔记批量广播通知（优化：一次性获取所有更新后的笔记）
@@ -840,11 +832,10 @@ router.post('/api/files', async (req, res) => {
             broadcastNoteUpdate(req.user, note.id, note);
             wsBroadcastNoteUpdate(req.user, note);
           }
-          console.log(`[Broadcast] 批量广播了 ${updatedNotes.length} 个笔记更新`);
         }
       }
     } catch (e) {
-      console.error('[Broadcast] 批量广播笔记更新失败:', e);
+      log('ERROR', '批量广播笔记更新失败', { username: req.user, count: validItems.length, error: e.message });
     }
 
     // 计算实际使用的容量
