@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const config = require('../config');
+const log = require('../utils/logger');
 const { getSystemConfig } = require('../services/systemConfig');
 const {
   getUserBackupConfig,
@@ -18,7 +19,7 @@ router.get('/config', async (req, res) => {
     const config = await getUserBackupConfig(req.user);
     res.json(config);
   } catch (e) {
-    console.error('获取用户备份配置失败:', e);
+    log('ERROR', '获取用户备份配置失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '获取配置失败' });
   }
 });
@@ -62,7 +63,7 @@ router.post('/config', async (req, res) => {
 
     res.json({ success: true });
   } catch (e) {
-    console.error('更新用户备份配置失败:', e);
+    log('ERROR', '更新用户备份配置失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '保存配置失败' });
   }
 });
@@ -76,8 +77,6 @@ router.post('/test', async (req, res) => {
       return res.status(400).json({ error: '请填写完整的 WebDAV 配置信息' });
     }
 
-    console.log('[WebDAV 测试] 开始测试连接...', { url: webdavUrl, username: webdavUsername });
-
     const { createClient } = require('webdav');
     const client = createClient(webdavUrl, {
       username: webdavUsername,
@@ -87,11 +86,9 @@ router.post('/test', async (req, res) => {
     // 测试连接：尝试获取根目录内容
     try {
       const contents = await client.getDirectoryContents('/');
-      console.log('[WebDAV 测试] 连接成功，根目录内容:', contents);
 
       // 检查是否包含 z7note-backups 目录
       const hasBackupDir = contents.some(item => item.basename === 'z7note-backups' && item.type === 'directory');
-      console.log('[WebDAV 测试] z7note-backups 目录存在:', hasBackupDir);
 
       // 尝试在 z7note-backups 目录下创建测试目录
       let canCreateDirectory = false;
@@ -102,9 +99,8 @@ router.post('/test', async (req, res) => {
           // 删除测试目录 - 使用 deleteFile 而不是 deleteDirectory
           await client.deleteFile(testDir);
           canCreateDirectory = true;
-          console.log('[WebDAV 测试] 可以在 z7note-backups 目录下创建子目录');
         } catch (e) {
-          console.log('[WebDAV 测试] 无法在 z7note-backups 目录下创建子目录:', e.message);
+          log('WARN', 'WebDAV 目录写入测试失败', { username: req.user, error: e.message });
         }
       }
 
@@ -119,14 +115,14 @@ router.post('/test', async (req, res) => {
         }
       });
     } catch (e) {
-      console.error('[WebDAV 测试] 连接失败:', e.message);
+      log('ERROR', 'WebDAV 连接测试失败', { username: req.user, error: e.message });
       res.status(500).json({
         error: 'WebDAV 连接失败，请检查 URL、用户名和密码',
         details: e.message
       });
     }
   } catch (e) {
-    console.error('[WebDAV 测试] 测试失败:', e);
+    log('ERROR', 'WebDAV 测试失败', { username: req.user, error: e.message });
     res.status(500).json({ error: e.message || '测试失败' });
   }
 });
@@ -134,12 +130,8 @@ router.post('/test', async (req, res) => {
 // 立即备份
 router.post('/now', async (req, res) => {
   try {
-    console.log('[立即备份] 开始处理备份请求');
-
     // 检查每日备份限制（直接使用环境变量）
     const limit = dailyBackupLimit;
-
-    console.log(`[立即备份] 备份限制配置: ${limit} (0=不限制)`);
 
     if (limit > 0) {
       const savedConfig = await getUserBackupConfig(req.user);
@@ -151,12 +143,9 @@ router.post('/now', async (req, res) => {
                          lastBackupDate.getDate() === today.getDate();
 
         if (isSameDay) {
-          console.log(`[立即备份] 用户 ${req.user} 今日已备份过，拒绝请求`);
           return res.status(429).json({ error: '今日已备份过，每天只能备份一次' });
         }
       }
-    } else {
-      console.log(`[立即备份] 备份限制已禁用，允许无限次备份`);
     }
 
     // 优先使用请求体中的配置（允许一次性覆盖）
@@ -168,7 +157,7 @@ router.post('/now', async (req, res) => {
     }
 
     if (!config.webdavUrl || !config.webdavUsername || !config.webdavPassword) {
-      console.error('[立即备份] WebDAV 配置缺失');
+      log('WARN', '立即备份缺少 WebDAV 配置', { username: req.user });
       return res.status(400).json({ error: '请先配置 WebDAV 信息' });
     }
 
@@ -186,15 +175,11 @@ router.post('/now', async (req, res) => {
       emailAddress: config.emailAddress || null
     };
 
-    console.log(`[立即备份] 用户 ${req.user} 开始备份，包含附件: ${backupConfig.includeAttachments}`);
-
     const result = await performUserBackup(req.user, backupConfig);
 
-    console.log(`[立即备份] 用户 ${req.user} 备份成功，文件数: ${result.fileCount}`);
     res.json({ success: true, ...result });
   } catch (e) {
-    console.error('[立即备份] 失败:', e);
-    console.error('[立即备份] 错误堆栈:', e.stack);
+    log('ERROR', '立即备份失败', { username: req.user, error: e.message });
 
     // 提供更详细的错误信息
     let errorMessage = '备份失败';

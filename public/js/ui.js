@@ -2966,21 +2966,16 @@ const UIManager = {
 
             // 如果用户选择清除缓存
             if (clearCache) {
-                console.log('[Logout] 清除浏览器缓存...');
-
                 // 清除本地存储数据
                 localStorage.clear();
-                console.log('[Logout] localStorage 已清除');
 
                 // 清除会话存储数据
                 sessionStorage.clear();
-                console.log('[Logout] sessionStorage 已清除');
 
                 // 清除可能的 IndexedDB 数据
                 if (window.indexedDB) {
                     const databases = await indexedDB.databases();
                     if (databases.length > 0) {
-                        console.log('[Logout] 清除 IndexedDB 数据库:', databases.map(d => d.name).filter(Boolean));
                         for (const db of databases) {
                             if (db.name) {
                                 indexedDB.deleteDatabase(db.name);
@@ -2993,7 +2988,6 @@ const UIManager = {
                 if ('serviceWorker' in navigator) {
                     const registrations = await navigator.serviceWorker.getRegistrations();
                     if (registrations.length > 0) {
-                        console.log('[Logout] 清除 Service Worker，数量:', registrations.length);
                         for (const registration of registrations) {
                             await registration.unregister();
                         }
@@ -3004,17 +2998,13 @@ const UIManager = {
                 if ('caches' in window) {
                     const cacheNames = await caches.keys();
                     if (cacheNames.length > 0) {
-                        console.log('[Logout] 清除 Cache API，缓存列表:', cacheNames);
                         for (const cacheName of cacheNames) {
                             await caches.delete(cacheName);
                         }
                     }
                 }
-
-                console.log('[Logout] 浏览器缓存清除完成');
             } else {
                 // 即使用户不选择清除缓存，也要清除关键的敏感数据
-                console.log('[Logout] 清除敏感数据');
                 localStorage.removeItem('z7note_username');
                 localStorage.removeItem('username');
                 localStorage.removeItem('p-theme');
@@ -3041,7 +3031,6 @@ const UIManager = {
 
             // 如果用户选择清除缓存
             if (clearCache) {
-                console.log('[Logout] 清除全部缓存（错误处理）');
                 localStorage.clear();
                 sessionStorage.clear();
             }

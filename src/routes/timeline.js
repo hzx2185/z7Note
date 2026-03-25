@@ -1,16 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/client');
-const { auth } = require('../middleware/auth');
+const log = require('../utils/logger');
 const { toClientCalendarId } = require('../utils/calendarIds');
 
 // 获取序时数据
 router.get('/', async (req, res) => {
-  console.log('[timeline API] 请求开始');
   try {
     // 检查用户是否已登录
     if (!req.user) {
-      console.log('[timeline API] 用户未登录');
       return res.status(401).json({ 
         success: false, 
         message: '请先登录',
@@ -20,8 +18,6 @@ router.get('/', async (req, res) => {
     
     // req.user 可能是字符串（用户名）或对象
     const username = typeof req.user === 'string' ? req.user : req.user.username;
-    console.log('[timeline API] 用户:', username);
-    console.log('[timeline API] 查询参数:', req.query);
     const { page = 1, limit = 20, search = '', type = 'all', startDate, endDate } = req.query;
     
     const offset = (page - 1) * limit;
@@ -145,15 +141,12 @@ router.get('/', async (req, res) => {
       }
     };
     
-    console.log('[timeline API] 返回数据:', {
-      success: true,
-      itemCount: formattedItems.length,
-      total: total
-    });
-    
     res.json(responseData);
   } catch (err) {
-    console.error('[timeline API] 获取序时数据失败:', err);
+    log('ERROR', '获取序时数据失败', {
+      username: req.user,
+      error: err.message
+    });
     res.status(500).json({ success: false, message: '获取数据失败', error: err.message });
   }
 });

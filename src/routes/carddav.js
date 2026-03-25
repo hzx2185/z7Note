@@ -23,21 +23,12 @@ function urlEsc(str) {
   return encodeURIComponent(str).replace(/%2F/g, '/');
 }
 
-// 全局中间件，用于日志记录和 CORS
+// 全局中间件，用于 CORS
 router.use((req, res, next) => {
-  const userAgent = req.headers['user-agent'] || '';
-  console.log(`[CardDAV] ${req.method} ${req.path} - User-Agent: ${userAgent}`);
-  
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, PROPPATCH');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Depth, If-Match, If-None-Match, X-Requested-With');
   res.setHeader('Access-Control-Expose-Headers', 'ETag, DAV, Allow');
-  
-  const originalSend = res.send;
-  res.send = function(data) {
-    console.log(`[CardDAV] Response: ${res.statusCode} for ${req.method} ${req.path}`);
-    return originalSend.call(this, data);
-  };
   next();
 });
 

@@ -21,8 +21,6 @@ function setupSSE(app) {
             return;
         }
 
-        console.log(`[SSE] 用户 ${username} 连接成功`);
-
         // 保存连接
         if (!sseConnections.has(username)) {
             sseConnections.set(username, []);
@@ -41,7 +39,6 @@ function setupSSE(app) {
         // 清理断开的连接
         res.on('close', () => {
             clearInterval(heartbeat);
-            console.log(`[SSE] 用户 ${username} 断开连接`);
             const userConnections = sseConnections.get(username);
             if (userConnections) {
                 const index = userConnections.indexOf(res);
@@ -56,11 +53,11 @@ function setupSSE(app) {
 
         res.on('error', (err) => {
             clearInterval(heartbeat);
-            console.error(`[SSE] 用户 ${username} 连接错误:`, err.message);
+            log('ERROR', 'SSE 连接错误', { error: err.message });
         });
     });
 
-    console.log('[SSE] SSE 路由已注册');
+    log('INFO', 'SSE 路由已注册');
 }
 
 // 广播笔记更新通知
@@ -85,13 +82,11 @@ function broadcastNoteUpdate(username, noteId, noteData) {
             res.write(`event: note_update\ndata: ${data}\n\n`);
             successCount++;
         } catch (err) {
-            console.error(`[SSE] 发送消息失败:`, err.message);
+            log('ERROR', 'SSE 发送消息失败', { error: err.message });
             // 移除失败的连接
             connections.splice(index, 1);
         }
     });
-
-    console.log(`[SSE] 向用户 ${username} 广播笔记更新 ${noteId}，成功 ${successCount}/${connections.length}`);
 }
 
 // 广播笔记删除通知
@@ -115,12 +110,10 @@ function broadcastNoteDelete(username, noteId) {
             res.write(`event: note_delete\ndata: ${data}\n\n`);
             successCount++;
         } catch (err) {
-            console.error(`[SSE] 发送消息失败:`, err.message);
+            log('ERROR', 'SSE 发送消息失败', { error: err.message });
             connections.splice(index, 1);
         }
     });
-
-    console.log(`[SSE] 向用户 ${username} 广播笔记删除 ${noteId}，成功 ${successCount}/${connections.length}`);
 }
 
 // 广播笔记列表更新通知
@@ -143,12 +136,10 @@ function broadcastNotesUpdate(username) {
             res.write(`event: notes_update\ndata: ${data}\n\n`);
             successCount++;
         } catch (err) {
-            console.error(`[SSE] 发送消息失败:`, err.message);
+            log('ERROR', 'SSE 发送消息失败', { error: err.message });
             connections.splice(index, 1);
         }
     });
-
-    console.log(`[SSE] 向用户 ${username} 广播笔记列表更新，成功 ${successCount}/${connections.length}`);
 }
 
 module.exports = {

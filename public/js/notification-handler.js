@@ -10,7 +10,6 @@ class NotificationManager {
 
   async init() {
     if (!("Notification" in window)) {
-      console.log("此浏览器不支持桌面通知");
       return;
     }
 
@@ -58,7 +57,6 @@ class NotificationManager {
     });
 
     // 同时在页面内显示一个简单的 Alert 或 Toast 作为备选
-    console.log('[Notification] 收到提醒:', item);
   }
 }
 
