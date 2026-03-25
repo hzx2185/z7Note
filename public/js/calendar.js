@@ -2888,6 +2888,57 @@ const CalendarApp = (function() {
       });
     },
 
+    buildCompletedTodoEventData(todo) {
+      const eventData = {
+        title: todo.title,
+        description: todo.description || '',
+        allDay: todo.allDay === 1,
+        reminderEmail: todo.reminderEmail || 0,
+        reminderBrowser: todo.reminderBrowser || 0,
+        reminderCaldav: 0
+      };
+
+      const now = new Date();
+      const sourceStart = todo.startTime || todo.dueDate || null;
+      const sourceEnd = todo.dueDate || todo.startTime || null;
+
+      if (eventData.allDay) {
+        eventData.startTime = Math.floor(Date.UTC(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        ) / 1000);
+        eventData.endTime = Math.floor(Date.UTC(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() + 1
+        ) / 1000);
+        return eventData;
+      }
+
+      if (sourceStart) {
+        const startDate = new Date(sourceStart * 1000);
+        const duration = sourceEnd ? Math.max(0, sourceEnd - sourceStart) : 0;
+        const completedStart = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          startDate.getHours(),
+          startDate.getMinutes(),
+          startDate.getSeconds(),
+          0
+        );
+
+        eventData.startTime = Math.floor(completedStart.getTime() / 1000);
+        eventData.endTime = eventData.startTime + duration;
+        return eventData;
+      }
+
+      eventData.startTime = Math.floor(now.getTime() / 1000);
+      eventData.endTime = eventData.startTime;
+      return eventData;
+    },
+
     async toggleTodo(id, completed) {
       try {
         // 如果是完成操作，检查是否需要自动转换为事件
@@ -2900,35 +2951,7 @@ const CalendarApp = (function() {
             const todo = state.allTodos.find(t => t.id === id);
             
             if (todo) {
-              // 准备事件数据
-              const eventData = {
-                title: todo.title,
-                description: todo.description || '',
-                allDay: todo.allDay === 1,
-                reminderEmail: todo.reminderEmail || 0,
-                reminderBrowser: todo.reminderBrowser || 0,
-                reminderCaldav: 0
-              };
-
-              // 处理时间
-              let startTime = todo.startTime || todo.dueDate;
-              let endTime = todo.dueDate || todo.startTime;
-
-              if (!startTime) {
-                const now = new Date();
-                startTime = Math.floor(now.getTime() / 1000);
-                endTime = startTime;
-              }
-
-              if (eventData.allDay) {
-                // 全天事件: 使用 UTC 00:00:00 存储，确保标准一致
-                const d = new Date(startTime * 1000);
-                eventData.startTime = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 1000);
-                eventData.endTime = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1) / 1000);
-              } else {
-                eventData.startTime = startTime;
-                eventData.endTime = endTime || startTime;
-              }
+              const eventData = this.buildCompletedTodoEventData(todo);
 
               // 创建事件
               await api.createEvent(eventData);
@@ -2993,37 +3016,7 @@ const CalendarApp = (function() {
       if (!result || !result.confirmed) return;
 
       try {
-        // 准备事件数据
-        const eventData = {
-          title: todo.title,
-          description: todo.description || '',
-          allDay: todo.allDay === 1,
-          reminderEmail: todo.reminderEmail || 0,
-          reminderBrowser: todo.reminderBrowser || 0,
-          reminderCaldav: 0
-        };
-
-        // 处理时间 - 确保有有效的时间戳
-        let startTime = todo.startTime || todo.dueDate;
-        let endTime = todo.dueDate || todo.startTime;
-
-        // 如果没有时间，使用当前日期
-        if (!startTime) {
-          const now = new Date();
-          startTime = Math.floor(now.getTime() / 1000);
-          endTime = startTime;
-        }
-
-        // 对于全天事件，确保结束时间正确
-        if (eventData.allDay) {
-          // 全天事件: 使用 UTC 00:00:00 存储，确保标准一致
-          const d = new Date(startTime * 1000);
-          eventData.startTime = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 1000);
-          eventData.endTime = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 1) / 1000);
-        } else {
-          eventData.startTime = startTime;
-          eventData.endTime = endTime || startTime;
-        }
+        const eventData = this.buildCompletedTodoEventData(todo);
 
         // 创建事件
         await api.createEvent(eventData);
