@@ -12,6 +12,7 @@ const {
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 const { normalizeReminderPreset } = require('../utils/reminderPresets');
 const { mapTodoForClient, mapEventForClient } = require('../utils/calendarClientMapper');
+const { insertDeletedItem } = require('../utils/deletedItems');
 
 const router = express.Router();
 
@@ -35,10 +36,6 @@ function expandRecurringInstancesForRange(event, startDate, endDate) {
     ...instance,
     _originalId: instance.parentEventId || event.id
   }));
-}
-
-function createDeleteMarkerId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 function normalizeOccurrenceStartTime(value) {
@@ -127,10 +124,12 @@ router.delete('/batch', async (req, res) => {
       await db.withTransaction(async (tx) => {
         const items = await tx.queryAll('SELECT id FROM events WHERE username = ?', [req.user]);
         for (const item of items) {
-          await tx.execute(
-            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-            [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]
-          );
+          await insertDeletedItem(tx, {
+            username: req.user,
+            itemId: item.id,
+            type: 'event',
+            deletedAt: now
+          });
         }
         await tx.execute('DELETE FROM events WHERE username = ?', [req.user]);
       });
@@ -141,10 +140,12 @@ router.delete('/batch', async (req, res) => {
           [req.user, startTime, endTime]
         );
         for (const item of items) {
-          await tx.execute(
-            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-            [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]
-          );
+          await insertDeletedItem(tx, {
+            username: req.user,
+            itemId: item.id,
+            type: 'event',
+            deletedAt: now
+          });
         }
         await tx.execute(
           'DELETE FROM events WHERE username = ? AND startTime >= ? AND startTime <= ?',
@@ -160,10 +161,12 @@ router.delete('/batch', async (req, res) => {
           [req.user, ...candidateIds]
         );
         for (const item of items) {
-          await tx.execute(
-            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-            [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, item.id), 'event', now]
-          );
+          await insertDeletedItem(tx, {
+            username: req.user,
+            itemId: item.id,
+            type: 'event',
+            deletedAt: now
+          });
         }
         await tx.execute(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [req.user, ...candidateIds]);
       });
@@ -460,10 +463,12 @@ router.post('/cleanup-duplicates', async (req, res) => {
         const idsToDelete = items.slice(1).map(item => item.id);
         if (idsToDelete.length > 0) {
           for (const id of idsToDelete) {
-            await tx.execute(
-              'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-              [Date.now().toString(36) + Math.random().toString(36).slice(2), username, toClientCalendarId(username, id), 'event', now]
-            );
+            await insertDeletedItem(tx, {
+              username,
+              itemId: id,
+              type: 'event',
+              deletedAt: now
+            });
           }
           const placeholders = idsToDelete.map(() => '?').join(',');
           await tx.execute(`DELETE FROM events WHERE username = ? AND id IN (${placeholders})`, [username, ...idsToDelete]);
@@ -648,10 +653,12 @@ router.post('/:id/delete-scope', async (req, res) => {
       const excludedDates = parseExcludedDates(event.excludedDates);
 
       if (deleteAll) {
-        await tx.execute(
-          'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-          [createDeleteMarkerId(), req.user, toClientCalendarId(req.user, event.id), 'event', now]
-        );
+        await insertDeletedItem(tx, {
+          username: req.user,
+          itemId: event.id,
+          type: 'event',
+          deletedAt: now
+        });
         await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
         return;
       }
@@ -709,10 +716,12 @@ router.post('/:id/delete-scope', async (req, res) => {
       if (effectiveDeletePrevious && effectiveDeleteCurrent && !effectiveDeleteFuture) {
         const nextOccurrenceStart = getNextRecurringOccurrenceStart(event, normalizedOccurrenceStartTime);
         if (!nextOccurrenceStart) {
-          await tx.execute(
-            'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-            [createDeleteMarkerId(), req.user, toClientCalendarId(req.user, event.id), 'event', now]
-          );
+          await insertDeletedItem(tx, {
+            username: req.user,
+            itemId: event.id,
+            type: 'event',
+            deletedAt: now
+          });
           await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
           return;
         }
@@ -768,10 +777,12 @@ router.delete('/:id', async (req, res) => {
 
   // 记录删除记录供 CalDAV 同步
   await db.withTransaction(async (tx) => {
-    await tx.execute(
-      'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-      [createDeleteMarkerId(), req.user, toClientCalendarId(req.user, event.id), 'event', now]
-    );
+    await insertDeletedItem(tx, {
+      username: req.user,
+      itemId: event.id,
+      type: 'event',
+      deletedAt: now
+    });
     await tx.execute('DELETE FROM events WHERE id = ? AND username = ?', [event.id, req.user]);
   });
   

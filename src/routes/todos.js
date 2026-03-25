@@ -3,9 +3,10 @@ const db = require('../db/client');
 const log = require('../utils/logger');
 const { broadcast } = require('./ws');
 const TimeHelper = require('../utils/timeHelper');
-const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
+const { getCalendarIdCandidates, scopeExternalCalendarId } = require('../utils/calendarIds');
 const { normalizeReminderPreset } = require('../utils/reminderPresets');
 const { mapTodoForClient } = require('../utils/calendarClientMapper');
+const { insertDeletedItem } = require('../utils/deletedItems');
 
 const router = express.Router();
 
@@ -205,10 +206,12 @@ router.delete('/api/todos/:id', async (req, res) => {
       return res.status(404).json({ error: '待办事项不存在' });
     }
 
-    await db.execute(
-      'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
-      [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, todo.id), 'todo', now]
-    );
+    await insertDeletedItem(db, {
+      username: req.user,
+      itemId: todo.id,
+      type: 'todo',
+      deletedAt: now
+    });
 
     await db.execute('DELETE FROM todos WHERE id = ? AND username = ?', [todo.id, req.user]);
 
