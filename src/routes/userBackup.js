@@ -1,8 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const config = require('../config');
 const log = require('../utils/logger');
-const { getSystemConfig } = require('../services/systemConfig');
 const {
   getUserBackupConfig,
   updateUserBackupConfig,

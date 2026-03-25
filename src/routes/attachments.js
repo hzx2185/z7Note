@@ -5,7 +5,6 @@ const fs = require('fs').promises;
 const db = require('../db/client');
 const { getUserFileSize, formatSize } = require('../utils/helpers');
 const config = require('../config');
-const { uploadRateLimit } = require('../middleware/rateLimit');
 const { dynamicUploadRateLimit, createFileBasedUploadLimitMiddleware, createChunkUploadLimitMiddleware } = require('../utils/dynamicRateLimiter');
 const { getSystemConfig, getAllowedFileTypes, getMaxFileSize } = require('../services/systemConfig');
 const { compressImage } = require('../services/imageCompression');
