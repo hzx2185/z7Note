@@ -11,6 +11,7 @@ const {
 } = require('../utils/recurringEvents');
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 const { normalizeReminderPreset } = require('../utils/reminderPresets');
+const { mapTodoForClient, mapEventForClient } = require('../utils/calendarClientMapper');
 
 const router = express.Router();
 
@@ -112,7 +113,7 @@ router.get('/', async (req, res) => {
       params.push(parseInt(endDate), parseInt(startDate));
     }
     const events = await db.queryAll(query, params);
-    res.json(events.map(event => ({ ...event, id: toClientCalendarId(req.user, event.id) })));
+    res.json(events.map(event => mapEventForClient(req.user, event)));
   } catch (e) { res.status(500).json({ error: '获取失败' }); }
 });
 
@@ -197,7 +198,7 @@ router.get('/expand-lunar', async (req, res) => {
       allExpanded.push(...instances);
     }
 
-    res.json(allExpanded.map(event => ({ ...event, id: toClientCalendarId(req.user, event.id), _originalId: event._originalId ? toClientCalendarId(req.user, event._originalId) : event._originalId })));
+    res.json(allExpanded.map(event => mapEventForClient(req.user, event)));
   } catch (e) {
     log('ERROR', '批量展开农历事件失败', { error: e.message });
     res.status(500).json({ error: '展开失败' });
@@ -226,12 +227,7 @@ router.get('/expand-recurring', async (req, res) => {
       }
     }
 
-    res.json(expanded.map(event => ({
-      ...event,
-      id: toClientCalendarId(req.user, event.id),
-      _originalId: event._originalId ? toClientCalendarId(req.user, event._originalId) : event._originalId,
-      parentEventId: event.parentEventId ? toClientCalendarId(req.user, event.parentEventId) : event.parentEventId
-    })));
+    res.json(expanded.map(event => mapEventForClient(req.user, event)));
   } catch (e) {
     log('ERROR', '批量展开重复事件失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '展开失败' });
@@ -311,8 +307,8 @@ router.get('/export', async (req, res) => {
       db.queryAll('SELECT * FROM todos WHERE username = ?', [username])
     ]);
 
-    const exportedEvents = events.map(event => ({ ...event, id: toClientCalendarId(username, event.id) }));
-    const exportedTodos = todos.map(todo => ({ ...todo, id: toClientCalendarId(username, todo.id) }));
+    const exportedEvents = events.map(event => mapEventForClient(username, event));
+    const exportedTodos = todos.map(todo => mapTodoForClient(username, todo));
 
     const icsContent = ICalGenerator.generateCalendar(exportedEvents, exportedTodos, username, []);
 
@@ -858,8 +854,8 @@ router.get('/calendar/day/:date', async (req, res) => {
     });
 
     res.json({
-      todos: todos.map(todo => ({ ...todo, id: toClientCalendarId(req.user, todo.id) })),
-      events: expandedEvents.map(event => ({ ...event, id: toClientCalendarId(req.user, event.id), _originalId: event._originalId ? toClientCalendarId(req.user, event._originalId) : event._originalId })),
+      todos: todos.map(todo => mapTodoForClient(req.user, todo)),
+      events: expandedEvents.map(event => mapEventForClient(req.user, event)),
       notes: dayNotes
     });
   } catch (e) { res.status(500).json({ error: '查询失败' }); }
@@ -882,8 +878,8 @@ router.get('/search', async (req, res) => {
     ]);
 
     res.json({
-      todos: todos.map(todo => ({ ...todo, id: toClientCalendarId(username, todo.id) })),
-      events: events.map(event => ({ ...event, id: toClientCalendarId(username, event.id) })),
+      todos: todos.map(todo => mapTodoForClient(username, todo)),
+      events: events.map(event => mapEventForClient(username, event)),
       notes: notes.map(note => ({ ...note, id: note.id }))
     });
   } catch (e) {
@@ -899,7 +895,7 @@ router.get('/:id', async (req, res) => {
     const placeholders = candidates.map(() => '?').join(',');
     const event = await db.queryOne(`SELECT * FROM events WHERE username = ? AND id IN (${placeholders}) LIMIT 1`, [req.user, ...candidates]);
     if (!event) return res.status(404).json({ error: '事件不存在' });
-    res.json({ ...event, id: toClientCalendarId(req.user, event.id) });
+    res.json(mapEventForClient(req.user, event));
   } catch (e) { res.status(500).json({ error: '获取详情失败' }); }
 });
 

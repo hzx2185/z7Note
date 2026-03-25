@@ -5,13 +5,9 @@ const { broadcast } = require('./ws');
 const TimeHelper = require('../utils/timeHelper');
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 const { normalizeReminderPreset } = require('../utils/reminderPresets');
+const { mapTodoForClient } = require('../utils/calendarClientMapper');
 
 const router = express.Router();
-
-function mapTodoForClient(username, todo) {
-  if (!todo) return todo;
-  return { ...todo, id: toClientCalendarId(username, todo.id) };
-}
 
 // 获取待办事项列表
 router.get('/api/todos', async (req, res) => {
