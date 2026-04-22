@@ -5,7 +5,7 @@ module.exports = {
   version: 20,
   description: '将 SMTP 配置从环境变量迁移到数据库系统配置表',
   async migrate(db) {
-    console.log('开始迁移: 添加 SMTP 配置到系统配置表...');
+    db.log('开始迁移: 添加 SMTP 配置到系统配置表...');
 
     try {
       const now = Math.floor(Date.now() / 1000);
@@ -49,15 +49,15 @@ module.exports = {
             'INSERT INTO system_config (key, value, description, updatedAt) VALUES (?, ?, ?, ?)',
             [config.key, config.value, config.description, now]
           );
-          console.log(`已添加配置项: ${config.key}`);
+          db.log(`已添加配置项: ${config.key}`);
         } else {
-          console.log(`配置项已存在，跳过: ${config.key}`);
+          db.log(`配置项已存在，跳过: ${config.key}`);
         }
       }
 
-      console.log('迁移完成: SMTP 配置已添加到系统配置表');
+      db.log('迁移完成: SMTP 配置已添加到系统配置表');
     } catch (e) {
-      console.error('迁移失败:', e.message);
+      db.error('迁移失败', { error: e.message });
       throw e;
     }
   }

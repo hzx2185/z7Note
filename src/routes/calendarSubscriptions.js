@@ -3,7 +3,10 @@ const db = require('../db/client');
 const log = require('../utils/logger');
 const { importFromICS } = require('../utils/icsExport');
 const { toClientCalendarId } = require('../utils/calendarIds');
+const { requirePlanCapability } = require('../middleware/memberAccess');
 const router = express.Router();
+
+router.use(requirePlanCapability('calendarSubscriptionsEnabled', { message: '当前套餐未开启日历订阅功能' }));
 
 function createFetchOptions(timeoutMs = 30000) {
   return {
@@ -324,7 +327,6 @@ router.post('/:id/sync', async (req, res) => {
       imported: importedCount
     });
   } catch (e) {
-    console.error('[Sync Error]', e);
     log('ERROR', '手动同步订阅失败', { username: req.user, subscriptionId: req.params.id, error: e.message });
     res.status(500).json({ error: '同步失败: ' + e.message });
   }

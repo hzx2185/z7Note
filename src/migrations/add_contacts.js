@@ -7,7 +7,7 @@ module.exports = {
     version: 9,
     description: '添加联系人表支持 CardDAV 同步',
     migrate: async (db) => {
-        console.log('开始迁移: 添加联系人表...');
+        db.log('开始迁移: 添加联系人表...');
 
         // 创建联系人表
         await db.exec(`CREATE TABLE IF NOT EXISTS contacts (
@@ -40,6 +40,6 @@ module.exports = {
         await db.exec(`CREATE INDEX IF NOT EXISTS idx_contacts_uid ON contacts(uid)`);
         await db.exec(`CREATE INDEX IF NOT EXISTS idx_contacts_fn ON contacts(fn)`);
 
-        console.log('迁移完成: 联系人表已创建');
+        db.log('迁移完成: 联系人表已创建');
     }
 };

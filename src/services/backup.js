@@ -75,7 +75,7 @@ async function performBackup(backupConfig) {
     const useWebDAV = backupConfig.useWebDAV === true || backupConfig.useWebDAV === 1 || backupConfig.useWebDAV === 'true' || backupConfig.useWebDAV === '1';
 
     const { fileName, filePath, size } = await createBackupArchive(isIncremental, includeAttachments);
-    console.log(`[备份] 创建备份文件: ${fileName}, 大小: ${(size / 1024).toFixed(2)} KB`);
+    log('INFO', '备份文件已创建', { fileName, filePath, sizeKB: Number((size / 1024).toFixed(2)) });
 
     // 发送邮件（不发送附件，避免超时）
     if (sendEmail && backupConfig.emailAddress) {
@@ -95,9 +95,9 @@ async function performBackup(backupConfig) {
           subject: `[${isIncremental?'增量':'全量'}备份完成] ${fileName}`,
           text: emailText
         });
-        console.log('[备份] 邮件发送成功');
+        log('INFO', '备份邮件发送成功', { fileName, to: backupConfig.emailAddress });
       } catch (e) {
-        console.error('[备份] 邮件发送失败:', e.message);
+        log('ERROR', '备份邮件发送失败', { fileName, to: backupConfig.emailAddress, error: e.message });
       }
     }
 
@@ -109,17 +109,17 @@ async function performBackup(backupConfig) {
         // 使用流式上传，避免大文件内存溢出
         const fileStream = nodeFs.createReadStream(filePath);
         await WebDAVHelper.uploadFile(client, `/${fileName}`, fileStream);
-        console.log('[备份] WebDAV 上传成功');
+        log('INFO', '备份 WebDAV 上传成功', { fileName, webdavUrl: backupConfig.webdavUrl });
 
         // 清理 WebDAV 上的旧备份
         if (backupConfig.keepCount && backupConfig.keepCount > 0) {
           setTimeout(() => {
             WebDAVHelper.cleanupOldFiles(client, '/', 'z7note-', backupConfig.keepCount)
-              .catch(err => console.error('[备份清理] WebDAV 清理失败:', err.message));
+              .catch(err => log('ERROR', '备份 WebDAV 清理失败', { error: err.message }));
           }, 5000);
         }
       } catch (e) {
-        console.error('[备份] WebDAV 上传失败:', e.message);
+        log('ERROR', '备份 WebDAV 上传失败', { fileName, webdavUrl: backupConfig.webdavUrl, error: e.message });
       }
     }
 
@@ -130,7 +130,6 @@ async function performBackup(backupConfig) {
 
     log('INFO', '定时备份成功', { fileName, size });
   } catch (e) {
-    console.error('定时备份失败:', e);
     log('ERROR', '定时备份失败', { error: e.message });
   }
 }
@@ -157,14 +156,14 @@ async function cleanupOldLocalBackups(keepCount) {
       for (const file of filesToDelete) {
         try {
           await fs.unlink(path.join(config.paths.backups, file.name));
-          console.log(`[备份清理] 删除本地备份: ${file.name}`);
+          log('INFO', '删除本地旧备份成功', { fileName: file.name });
         } catch (e) {
-          console.error(`[备份清理] 删除失败 ${file.name}:`, e.message);
+          log('ERROR', '删除本地旧备份失败', { fileName: file.name, error: e.message });
         }
       }
     }
   } catch (e) {
-    console.error('[备份清理] 本地清理失败:', e.message);
+    log('ERROR', '本地备份清理失败', { error: e.message });
   }
 }
 
@@ -175,15 +174,15 @@ function setupCron(configObj) {
   }
 
   if (configObj && configObj.schedule && configObj.schedule !== 'none') {
-    console.log('[备份] 正在设置定时任务，cron 表达式:', configObj.schedule);
+    log('INFO', '正在设置备份定时任务', { schedule: configObj.schedule });
     scheduledTask = cron.schedule(configObj.schedule, async () => {
-      console.log('[备份] 定时任务触发，开始执行备份...');
+      log('INFO', '备份定时任务触发', { schedule: configObj.schedule });
       await performBackup(configObj);
     }, { scheduled: true, timezone: 'Asia/Shanghai' });
-    console.log('[备份] 定时任务已启动');
+    log('INFO', '备份定时任务已启动', { schedule: configObj.schedule });
     log('INFO', '定时备份任务已设置', { schedule: configObj.schedule });
   } else {
-    console.log('[备份] 定时任务未设置或已关闭');
+    log('INFO', '备份定时任务未设置或已关闭');
   }
 }
 

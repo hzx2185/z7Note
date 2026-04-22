@@ -5,195 +5,84 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>联系人 - z7Note</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>?v=20250312-FINAL-FIX">
+  <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
   <link rel="stylesheet" href="/css/app.css">
-  <style>
-    :root { --row-h: 32px; }
-    html, body { min-height: 100dvh; height: auto; overflow: auto; }
-    body { background: var(--bg); color: var(--text); display: flex; flex-direction: column; font-size: 13px; margin: 0; }
-    .main { flex: 1; min-height: calc(100dvh - 40px); overflow: visible; display: flex; flex-direction: column; padding: 12px; gap: 12px; margin-top: 40px; }
-    .toolbar { display: flex; gap: 8px; align-items: center; background: var(--side); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); }
-    .header-actions { display: flex; gap: 3px; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; align-items: center; }
-    .header-actions::-webkit-scrollbar { display: none; }
-    .header-actions .tool-btn { white-space: nowrap; }
-    .search-wrap { flex: 1 1 260px; min-width: 0; }
-    .search-input { width: 100%; min-width: 0; height: 32px; padding: 0 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); outline: none; font-size: 13px; transition: border-color 0.2s; }
-    .search-input:focus { border-color: var(--accent); }
-    #pagination { display: none; gap: 6px; align-items: center; min-width: 0; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
-    #pagination::-webkit-scrollbar { display: none; }
-    #pagination.show { display: flex; }
-    .page-size-select { height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 12px; }
-    .page-jump-btn { min-width: 26px; padding: 2px 5px; }
-    .page-input { width: 46px; height: 26px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 12px; text-align: center; }
-
-    .table-container { flex: 1; min-height: 0; background: var(--side); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; overflow-y: visible; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { position: sticky; top: 0; background: var(--side); z-index: 10; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--gray); font-size: 12px; font-weight: 600; }
-    td { padding: 4px 10px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; height: var(--row-h); }
-    tr { background: var(--bg); }
-    tr:hover { background: rgba(128,128,128,0.05); cursor: pointer; }
-    tr.selected { background: rgba(37,99,235,0.1); }
-
-    .col-cb { width: 46px; min-width: 46px; text-align: center; padding-left: 6px; padding-right: 6px; overflow: visible; text-overflow: clip; white-space: nowrap; }
-    .col-cb input[type="checkbox"] { width: 16px; height: 16px; margin: 0; vertical-align: middle; }
-    .col-name { width: 100px; color: var(--accent); font-weight: 500; }
-    .col-family { width: 88px; }
-    .col-given { width: 96px; }
-    .col-tel { width: 120px; }
-    .col-email { width: 150px; }
-    .col-org { width: 120px; }
-    .col-title { width: 110px; }
-    .col-nickname { width: 100px; }
-    .col-bday { width: 110px; }
-    .col-url { width: 180px; }
-    .col-note { width: 220px; }
-    .col-created { width: 150px; }
-    .col-updated { width: 150px; }
-
-    @media (max-width: 600px) {
-      html, body { min-height: 100dvh; overflow-y: auto; }
-      .col-tel { width: auto; }
-      .header b span { display: none; }
-      .main { overflow: visible; min-height: calc(100dvh - 40px); padding: 4px 4px calc(12px + env(safe-area-inset-bottom)); }
-      .toolbar { flex-wrap: wrap; align-items: stretch; }
-      .search-wrap { flex: 1 1 100%; }
-      .header-actions { gap: 2px; max-width: calc(100vw - 118px); }
-      .header-actions .tool-btn { padding: 2px 4px; font-size: 12px; min-width: 20px; }
-      #pagination { gap: 4px; width: 100%; }
-      .page-size-select { height: 24px; padding: 0 4px; font-size: 11px; }
-      .page-jump-btn { min-width: 22px; padding: 2px 3px; }
-      .page-input { width: 38px; height: 24px; padding: 0 4px; font-size: 11px; }
-      .col-cb { width: 50px; min-width: 50px; padding-left: 4px; padding-right: 4px; }
-      .table-container { flex: 1 1 auto; min-height: 240px; overflow-x: auto; overflow-y: visible; }
-      .modal-content { width: min(100vw - 16px, 440px) !important; max-height: calc(100dvh - 16px); }
-      .modal-body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-    }
-
-    /* 表单与通用模态框样式 */
-    .form-group { margin-bottom: 12px; }
-    .form-group label { font-size: 12px; color: var(--gray); display: block; margin-bottom: 4px; font-weight: 500; }
-    .form-group input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 13px; }
-    .form-group input:focus { border-color: var(--accent); outline: none; }
-    .multi-item { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
-    .multi-item select { width: 80px; flex-shrink: 0; height: 30px; font-size: 12px; padding: 0 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
-    .multi-item input { flex: 1; height: 30px; font-size: 13px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
-    .btn-xs { padding: 2px 8px; font-size: 12px; height: 26px; min-width: auto; border-radius: 4px; }
-    .contact-name-row { display: flex; gap: 6px; align-items: flex-end; }
-    .contact-name-row .form-group { margin-bottom: 0; }
-    .contact-name-row .name-family { flex: 1; }
-    .contact-name-row .name-given { flex: 1; }
-    .contact-name-row .name-full { flex: 1.4; }
-    .contact-advanced { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); margin-bottom: 10px; }
-    .contact-advanced summary { list-style: none; cursor: pointer; padding: 10px 12px; font-size: 12px; color: var(--gray); font-weight: 600; display: flex; align-items: center; justify-content: space-between; user-select: none; }
-    .contact-advanced summary::-webkit-details-marker { display: none; }
-    .contact-advanced summary::after { content: '展开'; color: var(--accent); font-weight: 500; }
-    .contact-advanced[open] summary::after { content: '收起'; }
-    .contact-advanced-body { padding: 0 12px 12px; border-top: 1px solid var(--border); }
-    .compact-row { display: flex; gap: 6px; }
-    .compact-row .form-group { flex: 1; }
-    .compact-textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 13px; outline: none; resize: vertical; }
-    .contact-actions { display: flex; gap: 8px; padding: 10px 0 0; border: none; flex-wrap: nowrap; }
-    .contact-actions .btn { flex: 1; min-width: 0; }
-    
-    /* 查重和历史记录通用样式 */
-    .item-card { padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; background: var(--bg); font-size: 13px; }
-    .dup-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
-    .hl { color: var(--accent); font-weight: bold; }
-    .col-sel { width: 28px; flex-shrink: 0; text-align: center; }
-    #import-modal .modal-content { max-width: 340px; }
-    #import-modal .modal-body { display: flex; flex-direction: column; gap: 10px; }
-    #import-modal .form-hint { font-size: 12px; color: var(--gray); margin: 0; }
-    #vcard-text { width: 100%; min-height: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font-family: monospace; font-size: 12px; line-height: 1.5; resize: vertical; outline: none; box-sizing: border-box; }
-    #vcard-text:focus { border-color: var(--accent); }
-    #import-file { width: 100%; font-size: 12px; color: var(--gray); }
-    #confirm-modal { z-index: 10020 !important; }
-    #confirm-modal .modal-content { position: relative; z-index: 10021; }
-    #confirm-modal .modal-actions { display: flex; justify-content: center; align-items: center; width: 100%; }
-    #confirm-modal .modal-actions .btn { flex: 1; min-width: 0; }
-    .batch-edit-table { display: flex; flex-direction: column; gap: 10px; }
-    .batch-edit-table-wrap { overflow-x: auto; padding-bottom: 4px; }
-    .batch-edit-head,
-    .batch-edit-row { min-width: 540px; display: grid; grid-template-columns: 32px 76px 76px minmax(138px, 1fr) minmax(138px, 1fr) 36px; gap: 5px; align-items: center; }
-    .batch-edit-head { color: var(--gray); font-size: 12px; font-weight: 600; }
-    .batch-edit-row { padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
-    .batch-edit-row input[type="text"],
-    .batch-edit-row select { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 13px; min-width: 0; }
-    .batch-edit-row .tool-btn { width: 36px; min-width: 36px; height: 32px; padding: 0; }
-    .batch-edit-checkbox { display: flex; align-items: center; justify-content: center; }
-    #batch-edit-modal .modal-content { width: min(760px, calc(100vw - 16px)) !important; max-width: 760px !important; }
-    @media (max-width: 720px) {
-      #batch-edit-modal .modal-content { width: calc(100vw - 16px) !important; max-width: calc(100vw - 16px) !important; }
-    }
-    .column-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .column-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 13px; }
-    .column-item input { margin: 0; }
-    #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(15,23,42,0.92); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 12px; z-index: 1200; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; max-width: min(90vw, 420px); text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
-    #toast.show { opacity: 1; }
-    #toast.error { background: rgba(185,28,28,0.96); }
-  </style>
 </head>
-<body>
-  <div class="header">
-    <div style="display:flex;align-items:center;gap:6px">
-      <button onclick="location.href='/'" class="tool-btn">☰</button>
-      <b style="font-size:14px">联系人 <span id="count-info" style="font-weight:normal;color:var(--gray);font-size:11px"></span></b>
+<body data-ui-surface="app" data-theme="default" class="workspace-shell contacts-page">
+  <div class="header workspace-header workspace-brand-header">
+    <div class="workspace-header-group">
+      <b class="workspace-title workspace-brand-title">联系人 <span id="count-info" class="workspace-title-meta workspace-brand-meta"></span></b>
     </div>
-    <div class="header-actions">
-      <button class="tool-btn" style="color:var(--red)" onclick="batchDelete()">删</button>
-      <button class="tool-btn" style="color:var(--accent)" onclick="batchMerge()">并</button>
-      <button class="tool-btn" onclick="openModal()">加</button>
-      <button class="tool-btn" onclick="$('import-modal').classList.add('show')">导入</button>
-      <button class="tool-btn" onclick="location.href='/api/contacts/export'">导出</button>
-      <button class="tool-btn" onclick="smartFindDuplicates()">查重</button>
-      <button class="tool-btn" onclick="formatContacts()">格式</button>
-      <button class="tool-btn" onclick="openBatchEditModal()">批改</button>
-      <button class="tool-btn" onclick="openColumnsModal()">列</button>
+    <div class="header-actions workspace-header-group workspace-actions workspace-actions-scroll">
+      <div class="workspace-top-nav" aria-label="页面切换">
+        <a id="nav-home-btn" class="tool-btn workspace-nav-btn" href="/" title="首页">⌂</a>
+        <a id="nav-notes-btn" class="tool-btn workspace-nav-btn" href="/app" title="笔记">✎</a>
+        <a id="nav-calendar-btn" class="tool-btn workspace-nav-btn" href="/calendar.html" title="日历">◷</a>
+        <a id="nav-contacts-btn" class="tool-btn workspace-nav-btn workspace-nav-btn-active" href="/contacts.html" title="通讯录">☏</a>
+        <a id="nav-member-btn" class="tool-btn workspace-nav-btn" href="/member" title="会员中心">★</a>
+      </div>
+      <div data-theme-slot data-theme-mode="compact" data-theme-button-class="tool-btn"></div>
     </div>
   </div>
 
-    <div class="main">
-      <div class="toolbar">
-      <div class="search-wrap">
-        <input type="text" class="search-input" id="search-input" placeholder="搜索姓名、电话、邮箱..." oninput="onSearch()">
+    <div class="main workspace-main workspace-main-offset workspace-main-stack workspace-main-padded workspace-list-shell">
+      <div class="workspace-panel workspace-brand-panel contacts-toolbar-shell">
+        <div class="toolbar workspace-panel-row workspace-toolbar contacts-toolbar-primary">
+          <div class="search-wrap workspace-search contacts-search-wrap">
+            <input type="text" class="search-input workspace-search-input" id="search-input" placeholder="搜索姓名/电话/邮箱/公司/职位/昵称/网址/备注..." oninput="onSearch()">
+          </div>
+          <div id="pagination" class="workspace-pagination contacts-pagination">
+            <select id="page-size" class="page-size-select workspace-page-select" onchange="setPageSize(this.value)">
+              <option value="20">20/页</option>
+              <option value="50">50/页</option>
+              <option value="100">100/页</option>
+              <option value="200">200/页</option>
+            </select>
+            <button class="tool-btn btn-xs page-jump-btn workspace-page-btn" onclick="goToPage(1)" title="第一页">|‹</button>
+            <button class="tool-btn btn-xs page-jump-btn workspace-page-btn" onclick="changePage(-1)" title="上一页">‹</button>
+            <input id="page-input" class="page-input workspace-page-input" type="number" min="1" inputmode="numeric" onkeydown="onPageInputKeydown(event)" aria-label="页码">
+            <button class="tool-btn btn-xs page-jump-btn workspace-page-btn" onclick="jumpToPageInput()" title="跳转">↵</button>
+            <button class="tool-btn btn-xs page-jump-btn workspace-page-btn" onclick="changePage(1)" title="下一页">›</button>
+            <button class="tool-btn btn-xs page-jump-btn workspace-page-btn" onclick="goToPage(getTotalPages())" title="最后一页">›|</button>
+            <span id="page-info" class="workspace-title-meta"></span>
+          </div>
+        </div>
+        <div class="workspace-action-strip contacts-action-strip">
+          <button id="contacts-add-btn" class="tool-btn workspace-btn-accent" onclick="openModal()" title="新增联系人" aria-label="新增联系人">+</button>
+          <button id="contacts-import-btn" class="tool-btn" onclick="$('import-modal').classList.add('show')" title="导入联系人" aria-label="导入联系人">↓</button>
+          <button id="contacts-export-btn" class="tool-btn" onclick="location.href='/api/contacts/export'" title="导出联系人" aria-label="导出联系人">↑</button>
+          <button id="contacts-dedupe-btn" class="tool-btn" onclick="smartFindDuplicates()" title="查找重复联系人" aria-label="查找重复联系人">◎</button>
+          <button id="contacts-format-btn" class="tool-btn" onclick="formatContacts()" title="格式化联系人" aria-label="格式化联系人">≡</button>
+          <button id="contacts-batch-edit-btn" class="tool-btn" onclick="openBatchEditModal()" title="批量修改" aria-label="批量修改">✎</button>
+          <button id="contacts-columns-btn" class="tool-btn" onclick="openColumnsModal()" title="显示列设置" aria-label="显示列设置">☷</button>
+          <button id="contacts-batch-merge-btn" class="tool-btn workspace-text-accent" onclick="batchMerge()" title="合并选中联系人" aria-label="合并选中联系人">⇄</button>
+          <button id="contacts-batch-delete-btn" class="tool-btn workspace-text-danger" onclick="batchDelete()" title="删除选中联系人" aria-label="删除选中联系人">×</button>
+          <a class="tool-btn" href="/help" title="帮助" aria-label="帮助">?</a>
+        </div>
       </div>
-      <div id="pagination">
-        <select id="page-size" class="page-size-select" onchange="setPageSize(this.value)">
-          <option value="20">20/页</option>
-          <option value="50">50/页</option>
-          <option value="100">100/页</option>
-          <option value="200">200/页</option>
-        </select>
-        <button class="tool-btn btn-xs page-jump-btn" onclick="goToPage(1)">首页</button>
-        <button class="tool-btn btn-xs page-jump-btn" onclick="changePage(-1)">上页</button>
-        <input id="page-input" class="page-input" type="number" min="1" inputmode="numeric" onkeydown="onPageInputKeydown(event)" aria-label="页码">
-        <button class="tool-btn btn-xs page-jump-btn" onclick="jumpToPageInput()">跳转</button>
-        <button class="tool-btn btn-xs page-jump-btn" onclick="changePage(1)">下页</button>
-        <button class="tool-btn btn-xs page-jump-btn" onclick="goToPage(getTotalPages())">末页</button>
-        <span id="page-info" style="font-size:11px;color:var(--gray)"></span>
+      <div class="table-container workspace-panel workspace-brand-panel workspace-brand-table workspace-table-shell">
+        <table class="workspace-table">
+          <thead id="contacts-head"></thead>
+          <tbody id="list"></tbody>
+        </table>
       </div>
     </div>
-    <div class="table-container">
-      <table>
-        <thead id="contacts-head"></thead>
-        <tbody id="list"></tbody>
-      </table>
-    </div>
-  </div>
 
   <!-- 编辑 -->
-  <div class="modal" id="edit-modal">
-    <div class="modal-content" style="max-width:440px">
+  <div class="modal workspace-brand-modal" id="edit-modal">
+    <div class="modal-content workspace-modal-card-lg">
       <div class="modal-header"><h3 id="modal-title">联系人</h3><button onclick="closeModal()">×</button></div>
-      <form id="contact-form" onsubmit="saveContact(event)" class="modal-body">
+      <form id="contact-form" onsubmit="saveContact(event)" class="modal-body workspace-form">
         <div class="contact-name-row">
           <div class="form-group name-family"><label>姓</label><input name="n_family"></div>
           <div class="form-group name-given"><label>名</label><input name="n_given"></div>
           <div class="form-group name-full"><label>全名*</label><input name="fn" required></div>
         </div>
-        <div class="form-group"><label>电话</label><div id="tel-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('tel')">+ 添加号码</button></div>
-        <div class="form-group"><label>邮箱</label><div id="email-list"></div><button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('email')">+ 添加邮箱</button></div>
-        <div style="display:flex;gap:6px">
-          <div class="form-group" style="flex:1"><label>公司</label><input name="org"></div>
-          <div class="form-group" style="flex:1"><label>职位</label><input name="title"></div>
+        <div class="form-group"><label>电话</label><div id="tel-list"></div><button type="button" class="btn btn-xs workspace-dashed-btn" onclick="addItem('tel')">+ 添加号码</button></div>
+        <div class="form-group"><label>邮箱</label><div id="email-list"></div><button type="button" class="btn btn-xs workspace-dashed-btn" onclick="addItem('email')">+ 添加邮箱</button></div>
+        <div class="workspace-field-split">
+          <div class="form-group workspace-field-fill"><label>公司</label><input name="org"></div>
+          <div class="form-group workspace-field-fill"><label>职位</label><input name="title"></div>
         </div>
         <div class="form-group"><label>备注</label><textarea name="note" rows="2" class="compact-textarea"></textarea></div>
         <details class="contact-advanced" id="contact-advanced">
@@ -212,78 +101,78 @@
             <div class="form-group">
               <label>地址</label>
               <div id="adr-list"></div>
-              <button type="button" class="btn btn-xs" style="width:100%;margin-top:2px;background:none;border:1px dashed var(--border);color:var(--gray)" onclick="addItem('adr')">+ 添加地址</button>
+              <button type="button" class="btn btn-xs workspace-dashed-btn" onclick="addItem('adr')">+ 添加地址</button>
             </div>
             <div class="form-group"><label>照片</label><textarea name="photo" rows="2" class="compact-textarea" placeholder="可填写 URL 或原始数据"></textarea></div>
           </div>
         </details>
         <div class="modal-actions contact-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
-          <button type="button" class="btn btn-secondary" id="history-btn" onclick="showHistory()" style="display:none">历史</button>
+          <button type="button" class="btn btn-secondary hidden" id="history-btn" onclick="showHistory()">历史</button>
           <button type="submit" class="btn btn-primary">保存</button>
         </div>
-        <button type="button" class="btn btn-xs" style="width:100%;margin-top:10px;color:var(--red);background:none;border:none" id="del-contact-btn" onclick="deleteSingle()">删除此联系人</button>
+        <button type="button" class="btn btn-xs workspace-full-btn workspace-text-danger workspace-muted-plain-btn" id="del-contact-btn" onclick="deleteSingle()">删除此联系人</button>
       </form>
     </div>
   </div>
 
   <!-- 导入 -->
-  <div class="modal" id="import-modal">
+  <div class="modal workspace-brand-modal" id="import-modal">
     <div class="modal-content">
       <div class="modal-header"><h3>导入</h3><button onclick="$('import-modal').classList.remove('show')">×</button></div>
-      <div class="modal-body">
+      <div class="modal-body workspace-form">
         <p class="form-hint">粘贴 vCard 文本，或直接选择 `.vcf` 文件。</p>
         <textarea id="vcard-text" placeholder="粘贴 vCard 内容..."></textarea>
         <input id="import-file" type="file" accept=".vcf" onchange="readVcf(this)">
-        <button class="btn btn-primary" style="width:100%" onclick="doImport()">开始导入</button>
+        <button class="btn btn-primary workspace-full-btn" onclick="doImport()">开始导入</button>
       </div>
     </div>
   </div>
 
   <!-- 查重 -->
-  <div class="modal" id="dup-modal">
-    <div class="modal-content" style="max-width:440px">
+  <div class="modal workspace-brand-modal" id="dup-modal">
+    <div class="modal-content workspace-modal-card-lg">
       <div class="modal-header"><h3>清理重复</h3><button onclick="$('dup-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <div id="dup-list" style="max-height:60vh;overflow-y:auto"></div>
-        <div class="modal-actions" style="padding:10px 0 0;border:none">
+        <div id="dup-list" class="workspace-scroll-panel"></div>
+        <div class="modal-actions workspace-modal-actions-inline">
           <button class="btn btn-secondary" onclick="$('dup-modal').classList.remove('show')">取消</button>
-          <button class="btn btn-primary" style="flex:1" onclick="batchMergeGroups()">合并选中组</button>
+          <button class="btn btn-primary workspace-field-fill" onclick="batchMergeGroups()">合并选中组</button>
         </div>
       </div>
     </div>
   </div>
 
   <!-- 历史 -->
-  <div class="modal" id="history-modal">
-    <div class="modal-content" style="max-width:440px">
+  <div class="modal workspace-brand-modal" id="history-modal">
+    <div class="modal-content workspace-modal-card-lg">
       <div class="modal-header"><h3>修改历史</h3><button onclick="$('history-modal').classList.remove('show')">×</button></div>
       <div class="modal-body">
-        <div id="history-list" style="max-height:60vh;overflow-y:auto"></div>
-        <div class="modal-actions" style="padding:10px 0 0;border:none"><button class="btn btn-secondary" style="width:100%" onclick="$('history-modal').classList.remove('show')">关闭</button></div>
+        <div id="history-list" class="workspace-scroll-panel"></div>
+        <div class="modal-actions workspace-modal-actions-inline"><button class="btn btn-secondary workspace-full-btn" onclick="$('history-modal').classList.remove('show')">关闭</button></div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="confirm-modal">
-    <div class="modal-content" style="max-width:320px">
-      <div class="modal-body" style="padding:20px 16px">
-        <p id="confirm-message" style="margin:0 0 18px;text-align:center;font-weight:500;line-height:1.5"></p>
-        <div class="modal-actions" style="padding:0;border:none;background:transparent;gap:8px;margin-top:0">
+  <div class="modal workspace-brand-modal" id="confirm-modal">
+    <div class="modal-content workspace-modal-card-sm">
+      <div class="modal-body workspace-modal-body-tight">
+        <p id="confirm-message" class="confirm-message"></p>
+        <div class="modal-actions workspace-modal-actions-inline">
           <button type="button" class="btn btn-secondary" id="confirm-cancel">取消</button>
-          <button type="button" class="btn btn-primary" id="confirm-ok" style="background:var(--red)">确定</button>
+          <button type="button" class="btn btn-primary workspace-danger-fill" id="confirm-ok">确定</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="columns-modal">
-    <div class="modal-content" style="max-width:360px">
+  <div class="modal workspace-brand-modal" id="columns-modal">
+    <div class="modal-content workspace-modal-card-md">
       <div class="modal-header"><h3>显示列</h3><button onclick="closeColumnsModal()">×</button></div>
       <div class="modal-body">
-        <p class="form-hint" style="margin:0 0 10px">勾选需要显示的列，适合检查姓名、姓、名是否规范。</p>
+        <p class="form-hint workspace-form-hint">勾选需要显示的列，适合检查姓名、姓、名是否规范。</p>
         <div id="column-options" class="column-grid"></div>
-        <div class="modal-actions" style="padding:10px 0 0;border:none">
+        <div class="modal-actions workspace-modal-actions-inline">
           <button class="btn btn-secondary" onclick="resetColumns()">恢复默认</button>
           <button class="btn btn-primary" onclick="closeColumnsModal()">完成</button>
         </div>
@@ -291,11 +180,11 @@
     </div>
   </div>
 
-  <div class="modal" id="batch-edit-modal">
+  <div class="modal workspace-brand-modal" id="batch-edit-modal">
     <div class="modal-content">
       <div class="modal-header"><h3>批量修改</h3><button onclick="closeBatchEditModal()">×</button></div>
-      <form id="batch-edit-form" class="modal-body" onsubmit="submitBatchEdit(event)">
-        <p id="batch-edit-scope" class="form-hint" style="margin:0 0 10px"></p>
+      <form id="batch-edit-form" class="modal-body workspace-form" onsubmit="submitBatchEdit(event)">
+        <p id="batch-edit-scope" class="form-hint workspace-form-hint"></p>
         <div class="batch-edit-table">
           <div class="batch-edit-table-wrap">
             <div class="batch-edit-head">
@@ -308,9 +197,9 @@
             </div>
             <div id="batch-edit-rows"></div>
           </div>
-          <button type="button" class="btn btn-secondary btn-xs" style="width:100%" onclick="addBatchEditRow()">+ 添加一条规则</button>
+          <button type="button" class="btn btn-secondary btn-xs workspace-full-btn" onclick="addBatchEditRow()">+ 添加一条规则</button>
         </div>
-        <div class="modal-actions" style="padding:10px 0 0;border:none">
+        <div class="modal-actions workspace-modal-actions-inline">
           <button type="button" class="btn btn-secondary" onclick="closeBatchEditModal()">取消</button>
           <button type="submit" class="btn btn-primary">应用修改</button>
         </div>
@@ -320,738 +209,7 @@
 
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <script>
-    const $ = id => document.getElementById(id);
-    const esc = t => (t||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-    let contacts = [], selected = new Set(), curId = null, page = 1, pageSize = Number(localStorage.getItem('contacts-page-size') || 100), total = 0, query = '';
-    let toastTimer = null;
-    let fullNameTouched = false;
-    let namePartsTouched = false;
-    const CONTACT_COLUMNS_KEY = 'contacts-visible-columns';
-    const DEFAULT_VISIBLE_COLUMNS = ['fn', 'tel', 'email', 'org', 'note'];
-    const CONTACT_COLUMNS = [
-      { key: 'fn', label: '全名', className: 'col-name' },
-      { key: 'n_family', label: '姓', className: 'col-family' },
-      { key: 'n_given', label: '名', className: 'col-given' },
-      { key: 'tel', label: '电话', className: 'col-tel' },
-      { key: 'email', label: '邮箱', className: 'col-email' },
-      { key: 'org', label: '公司', className: 'col-org' },
-      { key: 'title', label: '职位', className: 'col-title' },
-      { key: 'nickname', label: '昵称', className: 'col-nickname' },
-      { key: 'bday', label: '生日', className: 'col-bday' },
-      { key: 'url', label: '网址', className: 'col-url' },
-      { key: 'note', label: '备注', className: 'col-note' },
-      { key: 'createdAt', label: '创建时间', className: 'col-created' },
-      { key: 'updatedAt', label: '更新时间', className: 'col-updated' }
-    ];
-
-    if (localStorage.getItem('p-theme') === 'dark') document.documentElement.classList.add('dark-mode');
-
-    function toast(message, ok = true) {
-      const el = $('toast');
-      if (!el) return;
-      el.textContent = message;
-      el.className = ok ? 'show' : 'show error';
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => { el.className = ''; }, 2600);
-    }
-
-    async function requestJSON(url, options = {}, fallbackMessage = '请求失败') {
-      const { retryOnGateway = false, retryDelay = 800, ...fetchOptions } = options;
-      let res;
-      try {
-        res = await fetch(url, { credentials: 'include', ...fetchOptions });
-      } catch (error) {
-        throw new Error('网络连接失败，请稍后重试');
-      }
-
-      if (retryOnGateway && (res.status === 502 || res.status === 504)) {
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        try {
-          res = await fetch(url, { credentials: 'include', ...fetchOptions });
-        } catch (error) {
-          throw new Error('网络连接失败，请稍后重试');
-        }
-      }
-
-      let data = null;
-      const text = await res.text();
-      if (!res.ok && text && text.trim().startsWith('<')) {
-        throw new Error(`服务器返回 ${res.status} ${res.statusText || '错误'}，请稍后重试`);
-      }
-      if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch (error) {
-          throw new Error(`${fallbackMessage}，服务器返回了无效响应`);
-        }
-      }
-
-      if (!res.ok) {
-        throw new Error(data?.error || data?.message || fallbackMessage);
-      }
-
-      return data;
-    }
-
-    async function load() {
-      try {
-        const data = await requestJSON(`/api/contacts?limit=${pageSize}&offset=${(page-1)*pageSize}${query?`&search=${encodeURIComponent(query)}`:''}`, {}, '加载联系人失败');
-        contacts = data.contacts || [];
-        total = data.total || 0;
-        const totalPages = getTotalPages();
-        if (page > totalPages && total > 0) {
-          page = totalPages;
-          return load();
-        }
-        render();
-      } catch (error) {
-        contacts = [];
-        total = 0;
-        render();
-        toast(error.message, false);
-      }
-    }
-
-    function getVisibleColumns() {
-      try {
-        const saved = JSON.parse(localStorage.getItem(CONTACT_COLUMNS_KEY) || '[]');
-        const valid = Array.isArray(saved)
-          ? saved.filter(key => CONTACT_COLUMNS.some(column => column.key === key))
-          : [];
-        return valid.length ? valid : [...DEFAULT_VISIBLE_COLUMNS];
-      } catch (error) {
-        return [...DEFAULT_VISIBLE_COLUMNS];
-      }
-    }
-
-    function setVisibleColumns(columns) {
-      localStorage.setItem(CONTACT_COLUMNS_KEY, JSON.stringify(columns));
-    }
-
-    function formatTimestamp(value) {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric) || numeric <= 0) return '-';
-      const ms = numeric < 1e12 ? numeric * 1000 : numeric;
-      const date = new Date(ms);
-      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString();
-    }
-
-    function getTotalPages() {
-      return Math.max(1, Math.ceil(total / pageSize) || 1);
-    }
-
-    function renderPagination() {
-      const totalPages = getTotalPages();
-      $('pagination').classList.toggle('show', total > 0);
-      $('page-size').value = String(pageSize);
-      $('page-input').value = String(page);
-      $('page-input').max = String(totalPages);
-      $('page-info').textContent = `${page}/${totalPages}`;
-    }
-
-    function getColumnValue(contact, key, tels, emails) {
-      if (key === 'fn') return contact.fn || '未命名';
-      if (key === 'n_family') return contact.n_family || '-';
-      if (key === 'n_given') return contact.n_given || '-';
-      if (key === 'tel') return (tels[0]?.value || '').replace(/[^\d+]/g, '') || '-';
-      if (key === 'email') return emails[0]?.value || '-';
-      if (key === 'org') return contact.org || '-';
-      if (key === 'title') return contact.title || '-';
-      if (key === 'nickname') return contact.nickname || '-';
-      if (key === 'bday') return contact.bday || '-';
-      if (key === 'url') return contact.url || '-';
-      if (key === 'note') return contact.note || '-';
-      if (key === 'createdAt') return formatTimestamp(contact.createdAt);
-      if (key === 'updatedAt') return formatTimestamp(contact.updatedAt);
-      return '-';
-    }
-
-    function renderTableHead() {
-      const visibleColumns = getVisibleColumns();
-      $('contacts-head').innerHTML = `
-        <tr>
-          <th class="col-cb"><input type="checkbox" id="sel-all" ${contacts.length && contacts.every(c => selected.has(c.id)) ? 'checked' : ''} onclick="toggleAll(this.checked)"></th>
-          ${visibleColumns.map(key => {
-            const column = CONTACT_COLUMNS.find(item => item.key === key);
-            return `<th class="${column.className}">${column.label}</th>`;
-          }).join('')}
-        </tr>
-      `;
-    }
-
-    function render() {
-      const visibleColumns = getVisibleColumns();
-      renderTableHead();
-      $('list').innerHTML = contacts.map(c => {
-        let tels = [], emails = []; try { tels = JSON.parse(c.tel||'[]'); emails = JSON.parse(c.email||'[]'); } catch(e){}
-        return `<tr class="${selected.has(c.id)?'selected':''}" onclick="onRowClick('${c.id}', event)">
-          <td class="col-cb" onclick="event.stopPropagation()"><input type="checkbox" ${selected.has(c.id)?'checked':''} onchange="toggleSel('${c.id}', this.checked)"></td>
-          ${visibleColumns.map(key => {
-            const column = CONTACT_COLUMNS.find(item => item.key === key);
-            const value = getColumnValue(c, key, tels, emails);
-            return `<td class="${column.className}">${esc(value)}</td>`;
-          }).join('')}
-        </tr>`;
-      }).join('') || `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:20px;color:var(--gray)">无数据</td></tr>`;
-      $('count-info').textContent = `(${total}${selected.size?`/选${selected.size}`:''})`;
-      renderPagination();
-    }
-
-    function renderColumnOptions() {
-      const visibleColumns = new Set(getVisibleColumns());
-      $('column-options').innerHTML = CONTACT_COLUMNS.map(column => `
-        <label class="column-item">
-          <input type="checkbox" ${visibleColumns.has(column.key) ? 'checked' : ''} onchange="toggleColumn('${column.key}', this.checked)">
-          <span>${column.label}</span>
-        </label>
-      `).join('');
-    }
-
-    function openColumnsModal() {
-      renderColumnOptions();
-      $('columns-modal').classList.add('show');
-    }
-
-    function closeColumnsModal() {
-      $('columns-modal').classList.remove('show');
-    }
-
-    function openBatchEditModal() {
-      if (!selected.size) {
-        toast('请先选择要批量修改的联系人', false);
-        return;
-      }
-      $('batch-edit-form').reset();
-      $('batch-edit-rows').innerHTML = '';
-      addBatchEditRow();
-      $('batch-edit-scope').textContent = `将修改选中的 ${selected.size} 个联系人`;
-      $('batch-edit-modal').classList.add('show');
-    }
-
-    function closeBatchEditModal() {
-      $('batch-edit-modal').classList.remove('show');
-    }
-
-    function addBatchEditRow(field = 'org', mode = 'set', from = '', to = '') {
-      const row = document.createElement('div');
-      row.className = 'batch-edit-row';
-      row.innerHTML = `
-        <div class="batch-edit-cell batch-edit-checkbox"><input type="checkbox" class="batch-op-enabled" checked></div>
-        <div class="batch-edit-cell">
-          <select class="batch-op-field">
-            <option value="fn" ${field==='fn'?'selected':''}>全名</option>
-            <option value="n_family" ${field==='n_family'?'selected':''}>姓</option>
-            <option value="n_given" ${field==='n_given'?'selected':''}>名</option>
-            <option value="org" ${field==='org'?'selected':''}>公司</option>
-            <option value="title" ${field==='title'?'selected':''}>职位</option>
-            <option value="note" ${field==='note'?'selected':''}>备注</option>
-            <option value="nickname" ${field==='nickname'?'selected':''}>昵称</option>
-            <option value="url" ${field==='url'?'selected':''}>网址</option>
-            <option value="bday" ${field==='bday'?'selected':''}>生日</option>
-          </select>
-        </div>
-        <div class="batch-edit-cell">
-          <select class="batch-op-mode" onchange="updateBatchEditRowState(this.closest('.batch-edit-row'))">
-            <option value="set" ${mode==='set'?'selected':''}>覆盖</option>
-            <option value="replace" ${mode==='replace'?'selected':''}>替换</option>
-            <option value="append" ${mode==='append'?'selected':''}>追加</option>
-            <option value="prepend" ${mode==='prepend'?'selected':''}>前置</option>
-            <option value="clear" ${mode==='clear'?'selected':''}>清空</option>
-          </select>
-        </div>
-        <div class="batch-edit-cell"><input type="text" class="batch-op-from" placeholder="原内容" value="${esc(from)}"></div>
-        <div class="batch-edit-cell"><input type="text" class="batch-op-to" placeholder="新内容" value="${esc(to)}"></div>
-        <div class="batch-edit-cell"><button type="button" class="tool-btn" onclick="this.closest('.batch-edit-row').remove()">×</button></div>
-      `;
-      $('batch-edit-rows').appendChild(row);
-      updateBatchEditRowState(row);
-    }
-
-    function updateBatchEditRowState(row) {
-      if (!row) return;
-      const mode = row.querySelector('.batch-op-mode').value;
-      const fromInput = row.querySelector('.batch-op-from');
-      const toInput = row.querySelector('.batch-op-to');
-      if (mode === 'replace') {
-        fromInput.disabled = false;
-        toInput.disabled = false;
-        fromInput.placeholder = '原内容';
-        toInput.placeholder = '新内容';
-      } else if (mode === 'clear') {
-        fromInput.disabled = true;
-        toInput.disabled = true;
-        fromInput.value = '';
-        toInput.value = '';
-        fromInput.placeholder = '无需填写';
-        toInput.placeholder = '无需填写';
-      } else {
-        fromInput.disabled = true;
-        fromInput.value = '';
-        fromInput.placeholder = '此模式不使用';
-        toInput.disabled = false;
-        toInput.placeholder = mode === 'prepend' ? '要加到前面的内容' : mode === 'append' ? '要追加的内容' : '覆盖后的内容';
-      }
-    }
-
-    function toggleColumn(key, checked) {
-      const visibleColumns = getVisibleColumns();
-      const nextColumns = checked
-        ? [...new Set([...visibleColumns, key])]
-        : visibleColumns.filter(item => item !== key);
-
-      if (!nextColumns.length) {
-        toast('至少保留一列', false);
-        renderColumnOptions();
-        return;
-      }
-
-      const orderedColumns = CONTACT_COLUMNS
-        .map(column => column.key)
-        .filter(columnKey => nextColumns.includes(columnKey));
-      setVisibleColumns(orderedColumns);
-      renderColumnOptions();
-      render();
-    }
-
-    function resetColumns() {
-      setVisibleColumns([...DEFAULT_VISIBLE_COLUMNS]);
-      renderColumnOptions();
-      render();
-      toast('已恢复默认显示列');
-    }
-
-    function showConfirm(message) {
-      return new Promise(resolve => {
-        const modal = $('confirm-modal');
-        const messageEl = $('confirm-message');
-        const okBtn = $('confirm-ok');
-        const cancelBtn = $('confirm-cancel');
-
-        messageEl.textContent = message;
-        modal.classList.add('show');
-
-        const cleanup = result => {
-          modal.classList.remove('show');
-          okBtn.onclick = null;
-          cancelBtn.onclick = null;
-          modal.onclick = null;
-          resolve(result);
-        };
-
-        okBtn.onclick = () => cleanup(true);
-        cancelBtn.onclick = () => cleanup(false);
-        modal.onclick = event => {
-          if (event.target === modal) cleanup(false);
-        };
-      });
-    }
-
-    function onSearch() { clearTimeout(this.t); this.t = setTimeout(() => { query = $('search-input').value; page = 1; load(); }, 300); }
-    function goToPage(nextPage) {
-      const targetPage = Number(nextPage);
-      const totalPages = getTotalPages();
-      if (!Number.isFinite(targetPage) || targetPage < 1 || targetPage > totalPages || targetPage === page) return;
-      page = targetPage;
-      load();
-    }
-    function jumpToPageInput() {
-      goToPage(Number($('page-input').value));
-    }
-    function onPageInputKeydown(event) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        jumpToPageInput();
-      }
-    }
-    function changePage(d) { goToPage(page + d); }
-    function setPageSize(value) {
-      const nextSize = Number(value);
-      if (!Number.isFinite(nextSize) || nextSize <= 0 || nextSize === pageSize) return;
-      pageSize = nextSize;
-      localStorage.setItem('contacts-page-size', String(pageSize));
-      page = 1;
-      load();
-    }
-    function toggleSel(id, checked) { checked ? selected.add(id) : selected.delete(id); render(); }
-    function toggleAll(checked) { contacts.forEach(c => checked ? selected.add(c.id) : selected.delete(c.id)); render(); }
-    function onRowClick(id, e) { if (e.target.tagName !== 'INPUT') openModal(id); }
-
-    function normalizeWhitespace(text) {
-      return String(text || '').replace(/\s+/g, ' ').trim();
-    }
-
-    function containsCJK(text) {
-      return /[\u3400-\u9fff\uf900-\ufaff]/.test(text || '');
-    }
-
-    function splitFormattedName(fn) {
-      const formatted = normalizeWhitespace(fn);
-      if (!formatted) return { family: '', given: '' };
-      const compoundSurnames = new Set(['欧阳','太史','端木','上官','司马','东方','独孤','南宫','万俟','闻人','夏侯','诸葛','尉迟','公羊','赫连','澹台','皇甫','宗政','濮阳','公冶','太叔','申屠','公孙','慕容','仲孙','钟离','长孙','宇文','司徒','鲜于','司空','闾丘','子车','亓官','司寇','巫马','公西','颛孙','壤驷','公良','漆雕','乐正','宰父','谷梁','拓跋','夹谷','轩辕','令狐','段干','百里','呼延','东郭','南门','羊舌','微生','梁丘','左丘','东门','西门','南荣']);
-
-      if (containsCJK(formatted) && !formatted.includes(' ')) {
-        if (formatted.length < 2) return { family: formatted, given: '' };
-        const family = compoundSurnames.has(formatted.slice(0, 2)) ? formatted.slice(0, 2) : formatted.slice(0, 1);
-        return { family, given: formatted.slice(family.length) };
-      }
-
-      const parts = formatted.split(/\s+/).filter(Boolean);
-      if (parts.length >= 2) {
-        return { family: parts[parts.length - 1], given: parts.slice(0, -1).join(' ') };
-      }
-      return { family: '', given: formatted };
-    }
-
-    function buildFormattedName(family, given) {
-      const cleanFamily = normalizeWhitespace(family);
-      const cleanGiven = normalizeWhitespace(given);
-      if (!cleanFamily && !cleanGiven) return '';
-      if (containsCJK(`${cleanFamily}${cleanGiven}`)) {
-        return `${cleanFamily}${cleanGiven}`.trim();
-      }
-      return normalizeWhitespace([cleanGiven, cleanFamily].filter(Boolean).join(' '));
-    }
-
-    function bindNameFields(form) {
-      const familyInput = form.elements.n_family;
-      const givenInput = form.elements.n_given;
-      const fullInput = form.elements.fn;
-
-      const syncFullName = () => {
-        const generated = buildFormattedName(familyInput.value, givenInput.value);
-        if (!fullNameTouched || !normalizeWhitespace(fullInput.value)) {
-          fullInput.value = generated;
-        }
-      };
-
-      const syncStructuredName = () => {
-        if (namePartsTouched) return;
-        const split = splitFormattedName(fullInput.value);
-        if (!familyInput.value.trim() || !givenInput.value.trim()) {
-          if (!familyInput.value.trim()) familyInput.value = split.family;
-          if (!givenInput.value.trim()) givenInput.value = split.given;
-        }
-      };
-
-      familyInput.oninput = () => {
-        namePartsTouched = true;
-        syncFullName();
-      };
-      givenInput.oninput = () => {
-        namePartsTouched = true;
-        syncFullName();
-      };
-      fullInput.oninput = () => {
-        fullNameTouched = true;
-        syncStructuredName();
-      };
-      fullInput.onblur = syncStructuredName;
-    }
-
-    function hasArrayContent(value) {
-      try {
-        const parsed = JSON.parse(value || '[]');
-        return Array.isArray(parsed) && parsed.some(item => normalizeWhitespace(item?.value));
-      } catch (error) {
-        return false;
-      }
-    }
-
-    async function openModal(id = null) {
-      curId = id; const f = $('contact-form'); f.reset(); $('tel-list').innerHTML = ''; $('email-list').innerHTML = ''; $('adr-list').innerHTML = '';
-      fullNameTouched = false;
-      namePartsTouched = false;
-      $('contact-advanced').open = false;
-      $('modal-title').textContent = id ? '编辑联系人' : '添加联系人';
-      $('del-contact-btn').style.display = id ? 'block' : 'none';
-      $('history-btn').style.display = id ? 'block' : 'none';
-      if (id) {
-        try {
-          const c = await requestJSON(`/api/contacts/${id}`, {}, '获取联系人失败');
-          if (c) {
-            ['n_family','n_given','fn','org','title','note','n_prefix','n_middle','n_suffix','nickname','bday','url','photo'].forEach(k => {
-              if (f[k]) f[k].value = c[k]||'';
-            });
-            try { JSON.parse(c.tel||'[]').forEach(t => addItem('tel', t.type, t.value)); } catch(e){}
-            try { JSON.parse(c.email||'[]').forEach(m => addItem('email', m.type, m.value)); } catch(e){}
-            try { JSON.parse(c.adr||'[]').forEach(a => addItem('adr', a.type, a.value)); } catch(e){}
-            if (c.n_prefix || c.n_middle || c.n_suffix || c.nickname || c.bday || c.url || c.photo || hasArrayContent(c.adr)) {
-              $('contact-advanced').open = true;
-            }
-          }
-        } catch (error) {
-          toast(error.message, false);
-          return;
-        }
-      } else addItem('tel', 'CELL');
-      bindNameFields(f);
-      $('edit-modal').classList.add('show');
-    }
-    function closeModal() { $('edit-modal').classList.remove('show'); }
-
-    function addItem(k, type = '', val = '') {
-      const d = document.createElement('div'); d.className = 'multi-item';
-      const os = k === 'tel'
-        ? [['CELL','手机'],['WORK','工作'],['HOME','住宅']]
-        : k === 'email'
-          ? [['INTERNET','邮箱'],['WORK','工作'],['HOME','个人']]
-          : [['HOME','家庭'],['WORK','工作'],['OTHER','其他']];
-      const inputType = k === 'tel' ? 'tel' : k === 'email' ? 'email' : 'text';
-      const placeholder = k === 'tel' ? '号码' : k === 'email' ? '邮箱' : '地址';
-      d.innerHTML = `<select>${os.map(o => `<option value="${o[0]}" ${type===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
-        <input type="${inputType}" value="${esc(val)}" placeholder="${placeholder}">
-        <button type="button" class="tool-btn" onclick="this.parentElement.remove()">×</button>`;
-      $(k + '-list').appendChild(d);
-    }
-
-    async function saveContact(e) {
-      e.preventDefault(); const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
-      data.tel = [...$('tel-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
-      data.email = [...$('email-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
-      data.adr = [...$('adr-list').children].map(d => ({type: d.querySelector('select').value, value: d.querySelector('input').value})).filter(x => x.value);
-      
-      // 前端也做一次清洗，提升即时感
-      if (Array.isArray(data.tel)) {
-        data.tel = data.tel.map(t => ({...t, value: t.value.replace(/[^\d+]/g, '')}));
-      }
-
-      try {
-        await requestJSON(curId?`/api/contacts/${curId}`:`/api/contacts`, {
-          method: curId ? 'PUT' : 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify(data)
-        }, curId ? '保存联系人失败' : '创建联系人失败');
-        closeModal();
-        await load();
-        toast(curId ? '联系人已保存' : '联系人已创建');
-      } catch (error) {
-        toast(error.message, false);
-      }
-    }
-
-    async function deleteSingle() {
-      if (!(await showConfirm('确定删除此联系人?'))) return;
-      try {
-        await requestJSON(`/api/contacts/${curId}`, { method:'DELETE' }, '删除联系人失败');
-        closeModal();
-        selected.delete(curId);
-        await load();
-        toast('联系人已删除');
-      } catch (error) {
-        toast(error.message, false);
-      }
-    }
-    async function batchDelete() { 
-      if (!selected.size) return toast('请先选择要删除的联系人', false);
-      if (await showConfirm(`确定删除选中的 ${selected.size} 个联系人?`)) {
-        try {
-          const result = await requestJSON('/api/contacts/batch', {
-            method:'DELETE',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({ids:[...selected]})
-          }, '批量删除失败');
-          selected.clear();
-          await load();
-          toast(result?.message || '联系人已删除');
-        } catch (error) {
-          toast(error.message, false);
-        }
-      } 
-    }
-    async function batchMerge() { 
-      if (selected.size < 2) return toast('请至少选择两个联系人进行合并', false);
-      if (await showConfirm(`确定合并选中的 ${selected.size} 个联系人?`)) {
-        const ids=[...selected];
-        try {
-          const result = await requestJSON('/api/contacts/merge', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({keepId:ids[0],mergeIds:ids.slice(1)})
-          }, '合并联系人失败');
-          selected.clear();
-          await load();
-          toast(result?.message || '联系人已合并');
-        } catch (error) {
-          toast(error.message, false);
-        }
-      }
-    }
-
-    function readVcf(i) { const f = i.files[0]; if (f) { const r = new FileReader(); r.onload = e => $('vcard-text').value = e.target.result; r.readAsText(f); } }
-    async function doImport() {
-      const v = $('vcard-text').value;
-      if (!v.trim()) {
-        toast('请先粘贴 vCard 内容', false);
-        return;
-      }
-      try {
-        const result = await requestJSON('/api/contacts/import', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({vcard:v})
-        }, '导入联系人失败');
-        $('import-modal').classList.remove('show');
-        $('vcard-text').value='';
-        await load();
-        toast(result?.message || '联系人导入成功');
-      } catch (error) {
-        toast(error.message, false);
-      }
-    }
-
-    async function smartFindDuplicates() {
-      let data;
-      try {
-        data = await requestJSON('/api/contacts/smart-duplicates', {}, '查重失败');
-      } catch (error) {
-        toast(error.message, false);
-        return;
-      }
-      const allDups = [
-        ...data.duplicates.byName.map(g => ({...g, field: '姓名'})),
-        ...data.duplicates.byPhone.map(g => ({...g, field: '电话'})),
-        ...data.duplicates.byEmail.map(g => ({...g, field: '邮箱'}))
-      ];
-      $('dup-list').innerHTML = allDups.map((g, i) => `
-        <div class="item-card" style="margin-bottom:12px;padding:10px;border:1px solid var(--border);border-radius:6px">
-          <div class="dup-row" style="color:var(--accent);font-weight:bold;margin-bottom:4px;display:flex;align-items:center;gap:6px">
-            <input type="checkbox" class="dup-group-cb" checked> ${g.field}重复: ${esc(g.value)}
-          </div>
-          ${g.contacts.map((c, ci) => `
-            <div class="dup-row" style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:13px">
-              <div style="width:20px"></div>
-              <div class="col-sel"><input type="radio" name="keep_${i}" value="${c.id}" ${ci===0?'checked':''}></div>
-              <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.fn || '未命名')}</div>
-            </div>
-          `).join('')}
-        </div>
-      `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">未发现明显重复</div>';
-      $('dup-modal').classList.add('show');
-    }
-
-    async function batchMergeGroups() {
-      const mergeList = [];
-      document.querySelectorAll('#dup-list .item-card').forEach(card => {
-        const cb = card.querySelector('.dup-group-cb');
-        if (cb && cb.checked) {
-          const checkedRadio = card.querySelector('input[type="radio"]:checked');
-          if (checkedRadio) {
-            const keepId = checkedRadio.value;
-            const allIds = [...card.querySelectorAll('input[type="radio"]')].map(r => r.value);
-            const mergeIds = allIds.filter(id => id !== keepId);
-            if (mergeIds.length) mergeList.push({ keepId, mergeIds });
-          }
-        }
-      });
-      if (!mergeList.length) return toast('未选中任何组或无需合并', false);
-      if (await showConfirm(`确定合并 ${mergeList.length} 组联系人?`)) {
-        try {
-          const result = await requestJSON('/api/contacts/merge-batch', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mergeList }) }, '批量合并失败');
-          $('dup-modal').classList.remove('show');
-          selected.clear();
-          await load();
-          toast(result?.message || '重复联系人已合并');
-        } catch (error) {
-          toast(error.message, false);
-        }
-      }
-    }
-
-    async function showHistory() {
-      try {
-        const { history = [] } = await requestJSON(`/api/contacts/${curId}/history`, {}, '获取历史记录失败');
-        $('history-list').innerHTML = history.map(h => `
-        <div class="item-card">
-          <div style="color:var(--gray);font-size:11px">${formatTimestamp(h.created_at)}</div>
-          <div style="margin-top:2px">${esc(h.action === 'update' ? '更新' : '创建')} - ${esc(h.details || '')}</div>
-        </div>
-        `).join('') || '<div style="text-align:center;padding:20px;color:var(--gray)">无历史记录</div>';
-        $('history-modal').classList.add('show');
-      } catch (error) {
-        toast(error.message, false);
-      }
-    }
-
-    async function formatContacts() {
-      const ids = [...selected];
-      const scopeLabel = ids.length > 0 ? `选中的 ${ids.length} 个联系人` : '全部联系人';
-      if (!(await showConfirm(`确定格式化${scopeLabel}吗？会清理多余空格，并在全名缺失时尽量从现有姓名字段补全，不会再自动拆分补全姓和名。`))) return;
-      try {
-        const result = await requestJSON('/api/contacts/format', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ ids })
-        }, '批量格式化失败');
-        await load();
-        toast(result?.message || '联系人已格式化');
-      } catch (error) {
-        toast(error.message, false);
-      }
-    }
-
-    async function submitBatchEdit(event) {
-      event.preventDefault();
-      const submitButton = event.submitter || document.querySelector('#batch-edit-form button[type="submit"]');
-      const requestId = `batch_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-      const ids = [...selected];
-      if (!ids.length) {
-        closeBatchEditModal();
-        return toast('请先选择要批量修改的联系人', false);
-      }
-      const operations = [...document.querySelectorAll('#batch-edit-rows .batch-edit-row')].map(row => ({
-        enabled: row.querySelector('.batch-op-enabled').checked,
-        field: row.querySelector('.batch-op-field').value,
-        mode: row.querySelector('.batch-op-mode').value,
-        from: row.querySelector('.batch-op-from').value,
-        to: row.querySelector('.batch-op-to').value
-      })).filter(item => item.enabled);
-
-      if (!operations.length) {
-        return toast('请至少勾选一条批量修改规则', false);
-      }
-
-      for (const operation of operations) {
-        if (operation.mode === 'replace' && !operation.from.trim()) {
-          return toast('替换模式需要填写原内容', false);
-        }
-        if (!['replace', 'clear'].includes(operation.mode) && !operation.to.trim()) {
-          return toast('请填写批量修改的新内容', false);
-        }
-      }
-
-      if (!(await showConfirm(`确定对选中的 ${ids.length} 个联系人应用 ${operations.length} 条修改规则吗？`))) return;
-      try {
-        if (submitButton) {
-          submitButton.disabled = true;
-          submitButton.textContent = '处理中...';
-        }
-        const result = await requestJSON('/api/contacts/batch-update', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ ids, operations, requestId }),
-          retryOnGateway: true
-        }, '批量修改失败');
-        closeBatchEditModal();
-        await load();
-        toast(result?.message || '联系人已批量修改');
-      } catch (error) {
-        if (/502|504|网关/.test(error.message)) {
-          closeBatchEditModal();
-          await load();
-          toast('网关异常，但修改很可能已生效，列表已刷新');
-        } else {
-          toast(error.message, false);
-        }
-      } finally {
-        if (submitButton) {
-          submitButton.disabled = false;
-          submitButton.textContent = '应用修改';
-        }
-      }
-    }
-
-    load();
-  </script>
+  <script src="/js/contacts-page.js"></script>
+  <script src="/js/contacts-entry.js"></script>
 </body>
 </html>

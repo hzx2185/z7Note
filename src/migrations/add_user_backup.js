@@ -31,13 +31,13 @@ async function up(executor) {
     )
   `);
   
-  console.log('[迁移] 用户备份配置表已创建');
+  db.log('[迁移] 用户备份配置表已创建');
 }
 
 async function down(executor) {
   const db = executor || getConnection();
   await db.exec('DROP TABLE IF EXISTS user_backup_config');
-  console.log('[迁移] 用户备份配置表已删除');
+  db.log('[迁移] 用户备份配置表已删除');
 }
 
 module.exports = {

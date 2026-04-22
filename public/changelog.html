@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="z7Note 更新日志 - 最新版本功能和改进">
+  <title>更新日志 - z7Note</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20250312-FINAL-FIX">
+  <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
+  <link rel="stylesheet" href="/css/site.css?v=20260419-style-system">
+</head>
+<body data-ui-surface="site" data-theme="default">
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="topbar-left">
+        <a class="brand" href="/">
+          <div class="brand-mark">Z</div>
+          <div>
+            <div>z7Note</div>
+            <div class="brand-meta">全栈自托管 · 开源免费</div>
+          </div>
+        </a>
+        <nav class="topnav">
+          <a class="btn btn-secondary" href="/">首页</a>
+          <a class="btn btn-secondary" href="/#features">功能介绍</a>
+          <a class="btn btn-secondary" href="/pricing">会员套餐</a>
+          <a class="btn btn-secondary" href="/member">会员中心</a>
+          <a class="btn btn-secondary" href="/help">帮助中心</a>
+          <a class="btn btn-secondary" href="/changelog">更新日志</a>
+        </nav>
+      </div>
+      <div class="topbar-right">
+        <div class="topnav-actions">
+          <a class="btn btn-secondary" href="/login.html" data-site-auth-link>登录</a>
+          <a class="btn btn-secondary site-hidden" href="/login.html?tab=register" data-site-register-link>注册</a>
+          <a class="btn btn-secondary site-hidden" href="#" data-site-logout-link>退出</a>
+          <div class="app-dropdown">
+            <a class="btn btn-primary" href="/app">打开应用 ⌄</a>
+            <div class="app-dropdown-menu">
+              <a class="app-dropdown-item" href="/app" data-site-module="notes">
+                <span class="app-dropdown-item-icon">📝</span>
+                笔记
+              </a>
+              <a class="app-dropdown-item" href="/calendar.html" data-site-module="calendar">
+                <span class="app-dropdown-item-icon">📅</span>
+                日历
+              </a>
+              <a class="app-dropdown-item" href="/contacts.html" data-site-module="contacts">
+                <span class="app-dropdown-item-icon">👥</span>
+                通讯录
+              </a>
+            </div>
+          </div>
+        </div>
+        <div data-theme-slot data-theme-mode="compact" data-theme-button-class="btn btn-secondary theme-toggle-compact"></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="shell">
+        <h1>更新日志</h1>
+        <p>持续迭代，不断优化。了解 z7Note 的最新功能和改进</p>
+        <div class="stats-row">
+          <div class="stat-item">
+            <span class="stat-value" id="total-versions">—</span>
+            <span class="stat-label">版本更新</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="total-features">—</span>
+            <span class="stat-label">新功能</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value" id="latest-date">—</span>
+            <span class="stat-label">最新更新</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="shell timeline" id="timeline"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <strong>z7Note</strong>
+          <span>全栈自托管 · 开源免费</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/site-nav.js"></script>
+  <script type="module" src="/js/changelog-page.js"></script>
+</body>
+</html>

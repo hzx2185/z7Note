@@ -4,71 +4,27 @@
  */
 
 const { parseRecurrenceRule, createRecurrenceRule } = require('./recurringEvents');
-const TimeHelper = require('./timeHelper');
+const {
+  getReminderTrigger,
+  inferReminderPreset,
+  formatICSDate,
+  formatICSDateTime,
+  parseICSDate,
+  escapeICS,
+  unescapeICS
+} = require('./icalShared');
 
-function getReminderTrigger(event) {
-  const preset = event.reminderPreset || (event.allDay ? 'same_day_9am' : '15m');
-  const timeZone = event.timezone || TimeHelper.getAppTimeZone();
-
-  switch (preset) {
-    case '15m':
-      if (event.allDay) {
-        const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
-          allDay: true
-        });
-        return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
-      }
-      return ':-PT15M';
-    case 'same_day_9am':
-      if (event.allDay) {
-        const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
-          allDay: true
-        });
-        return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
-      }
-      return ':-PT15M';
-    case 'one_day_9am':
-      if (event.allDay) {
-        const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
-          allDay: true
-        });
-        return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
-      }
-      return ':-P1D';
-    default:
-      return null;
-  }
-}
-
-function parseAbsoluteTrigger(trigger) {
-  const match = String(trigger || '').trim().toUpperCase().match(/(?:;VALUE=DATE-TIME:)?(\d{8}T\d{6}Z)$/);
-  if (!match) return null;
-
-  const value = match[1];
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(4, 6));
-  const day = Number(value.slice(6, 8));
-  const hour = Number(value.slice(9, 11));
-  const minute = Number(value.slice(11, 13));
-  const second = Number(value.slice(13, 15));
-  return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000);
-}
-
-function inferReminderPreset(event, trigger) {
-  const normalized = String(trigger || '').trim().toUpperCase();
-  if (normalized === '-PT15M') return '15m';
-  if (event.allDay) {
-    const timeZone = event.timezone || TimeHelper.getAppTimeZone();
-    const triggerTs = parseAbsoluteTrigger(normalized);
-    const sameDayTs = TimeHelper.getReminderPresetTs(event.startTime, 'same_day_9am', timeZone, { allDay: true });
-    const oneDayTs = TimeHelper.getReminderPresetTs(event.startTime, 'one_day_9am', timeZone, { allDay: true });
-    const fifteenMinuteTs = TimeHelper.getReminderPresetTs(event.startTime, '15m', timeZone, { allDay: true });
-
-    if (triggerTs && fifteenMinuteTs && Math.abs(triggerTs - fifteenMinuteTs) <= 60) return '15m';
-    if (triggerTs && sameDayTs && Math.abs(triggerTs - sameDayTs) <= 60) return 'same_day_9am';
-    if (triggerTs && oneDayTs && Math.abs(triggerTs - oneDayTs) <= 60) return 'one_day_9am';
-  }
-  return event.allDay ? 'same_day_9am' : '15m';
+function mapGoogleColor(color) {
+  const reverseMap = {
+    '#4285f4': '#2563eb',
+    '#34a853': '#10b981',
+    '#fbbc04': '#f59e0b',
+    '#ea4335': '#ef4444',
+    '#a142f4': '#8b5cf6',
+    '#e91e63': '#ec4899',
+    '#673ab7': '#6366f1'
+  };
+  return reverseMap[color] || color;
 }
 
 /**
@@ -439,19 +395,6 @@ function mapColorToGoogle(color) {
 /**
  * 将Google颜色映射到本地颜色
  */
-function mapGoogleColor(color) {
-  const reverseMap = {
-    '#4285f4': '#2563eb',
-    '#34a853': '#10b981',
-    '#fbbc04': '#f59e0b',
-    '#ea4335': '#ef4444',
-    '#a142f4': '#8b5cf6',
-    '#e91e63': '#ec4899',
-    '#673ab7': '#6366f1'
-  };
-  return reverseMap[color] || color;
-}
-
 /**
  * 将颜色映射到Outlook颜色
  */
@@ -466,190 +409,6 @@ function mapOutlookColor(color) {
     '#6366f1': '#008272'  // 青色
   };
   return colorMap[color] || color;
-}
-
-/**
- * 格式化日期为ICS格式（仅日期部分）
- */
-function formatICSDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}${month}${day}`;
-}
-
-/**
- * 格式化日期时间为ICS格式（支持全天、UTC、TZID）
- * @param {Date} date - Date对象
- * @param {Object} options - 选项 { allDay: boolean, utc: boolean, timezone: string }
- * @returns {string} ICS格式日期时间字符串
- */
-function formatICSDateTime(date, options = {}) {
-  const { allDay = false, utc = false, timezone = 'Asia/Shanghai' } = options;
-
-  if (allDay) {
-    return formatICSDate(date);
-  }
-
-  // 如果是 UTC，则使用 getUTCHours 等方法，并添加 'Z'
-  if (utc) {
-    const utcYear = date.getUTCFullYear();
-    const utcMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const utcDay = String(date.getUTCDate()).padStart(2, '0');
-    const utcHours = String(date.getUTCHours()).padStart(2, '0');
-    const utcMinutes = String(date.getUTCMinutes()).padStart(2, '0');
-    const utcSeconds = String(date.getUTCSeconds()).padStart(2, '0');
-    return `${utcYear}${utcMonth}${utcDay}T${utcHours}${utcMinutes}${utcSeconds}Z`;
-  }
-
-  // 对于带TZID的时间，需要将UTC时间转换为指定时区的本地时间
-  const offset = getTimezoneOffset(timezone);
-  if (offset !== null) {
-    // 将UTC时间转换为本地时间
-    const localTime = new Date(date.getTime() + (offset * 60 * 60 * 1000));
-    
-    const year = localTime.getUTCFullYear();
-    const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(localTime.getUTCDate()).padStart(2, '0');
-    const hours = String(localTime.getUTCHours()).padStart(2, '0');
-    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
-    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
-  }
-
-  // 如果无法识别时区，使用本地时间
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
-}
-
-/**
- * 获取时区偏移（小时）
- * @param {string} timezone - 时区ID，如 'Asia/Shanghai'
- * @returns {number|null} - 相对于UTC的偏移小时数，东时区为正
- */
-function getTimezoneOffset(timezone) {
-  // 常见时区映射表
-  const timezoneMap = {
-    'Asia/Shanghai': 8,
-    'Asia/Chongqing': 8,
-    'Asia/Hong_Kong': 8,
-    'Asia/Taipei': 8,
-    'Asia/Singapore': 8,
-    'Asia/Tokyo': 9,
-    'Asia/Seoul': 9,
-    'Asia/Dubai': 4,
-    'Asia/Kolkata': 5.5,
-    'Europe/London': 0,
-    'Europe/Paris': 1,
-    'Europe/Berlin': 1,
-    'Europe/Moscow': 3,
-    'America/New_York': -5,
-    'America/Chicago': -6,
-    'America/Denver': -7,
-    'America/Los_Angeles': -8,
-    'America/Sao_Paulo': -3,
-    'Australia/Sydney': 10,
-    'Pacific/Auckland': 12
-  };
-  
-  return timezoneMap[timezone] !== undefined ? timezoneMap[timezone] : null;
-}
-
-/**
- * 解析ICS格式日期时间
- * @param {string} icsDate - ICS日期时间字符串
- * @returns {number} Unix时间戳 (秒)
- */
-function parseICSDate(icsDate) {
-  let value = icsDate;
-  let isAllDay = false;
-  let isUTC = false;
-  let tzId = '';
-
-  const colonIndex = String(icsDate).indexOf(':');
-  if (colonIndex >= 0) {
-    const keyPart = String(icsDate).slice(0, colonIndex);
-    value = String(icsDate).slice(colonIndex + 1);
-
-    if (/VALUE=DATE/i.test(keyPart)) {
-      isAllDay = true;
-    }
-
-    const tzidMatch = keyPart.match(/TZID=([^;:]+)/i);
-    if (tzidMatch) {
-      tzId = tzidMatch[1];
-    }
-  }
-
-  if (value.endsWith('Z')) {
-    isUTC = true;
-    value = value.slice(0, -1);
-  }
-
-  const year = parseInt(value.substring(0, 4));
-  const month = parseInt(value.substring(4, 6)) - 1;
-  const day = parseInt(value.substring(6, 8));
-  
-    if (isAllDay) {
-      // 全天事件，使用UTC时间避免时区偏差
-      const date = new Date(Date.UTC(year, month, day));
-      return Math.floor(date.getTime() / 1000);
-    }
-
-  const hours = parseInt(value.substring(9, 11)); // THHMMSS
-  const minutes = parseInt(value.substring(11, 13));
-  const seconds = parseInt(value.substring(13, 15));
-
-  let date;
-  if (isUTC) {
-    date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
-  } else if (tzId) {
-    // 对于带TZID的时间，需要将本地时间转换为UTC时间
-    const offset = getTimezoneOffset(tzId);
-    if (offset !== null) {
-      // 先构造本地时间的时间戳（当作UTC处理）
-      const localTimestamp = Date.UTC(year, month, day, hours, minutes, seconds);
-      // 减去时区偏移得到UTC时间
-      const utcTimestamp = localTimestamp - (offset * 60 * 60 * 1000);
-      date = new Date(utcTimestamp);
-    } else {
-      // 如果无法识别时区，按本地时间处理
-      date = new Date(year, month, day, hours, minutes, seconds);
-    }
-  } else {
-      // 浮动时间，使用UTC时间避免时区偏差
-      date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
-    }
-  return Math.floor(date.getTime() / 1000);
-}
-
-/**
- * 转义ICS特殊字符
- */
-function escapeICS(text) {
-  if (!text) return '';
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/;/g, '\\;')
-    .replace(/,/g, '\\,')
-    .replace(/\n/g, '\\n');
-}
-
-/**
- * 反转义ICS特殊字符
- */
-function unescapeICS(text) {
-  if (!text) return '';
-  return text
-    .replace(/\\n/g, '\n')
-    .replace(/\\,/g, ',')
-    .replace(/\\;/g, ';')
-    .replace(/\\\\/g, '\\');
 }
 
 /**

@@ -7,8 +7,17 @@ const { getCalendarIdCandidates, scopeExternalCalendarId } = require('../utils/c
 const { normalizeReminderPreset } = require('../utils/reminderPresets');
 const { mapTodoForClient } = require('../utils/calendarClientMapper');
 const { insertDeletedItem } = require('../utils/deletedItems');
+const { requirePlanCapability } = require('../middleware/memberAccess');
+const { ensureItemQuotaAvailable, getItemQuotaState } = require('../services/itemQuotaService');
 
 const router = express.Router();
+
+router.use('/api/todos', requirePlanCapability('todosEnabled', { message: '当前套餐未开启待办功能' }));
+
+function getItemQuotaErrorMessage(error) {
+  if (error?.message !== 'ITEM_QUOTA_EXCEEDED') return '';
+  return `${error.label || '内容'}数量已达套餐上限 (${error.current || 0} / ${error.limit || 0})`;
+}
 
 // 获取待办事项列表
 router.get('/api/todos', async (req, res) => {
@@ -88,6 +97,7 @@ router.post('/api/todos', async (req, res) => {
 
     const normalizedAllDay = allDay !== undefined ? !!allDay : true;
     const normalizedReminderPreset = normalizeReminderPreset(reminderPreset, normalizedAllDay);
+    await ensureItemQuotaAvailable(req.user, 'todo');
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
     await db.execute(
       `INSERT INTO todos (id, username, title, description, completed, priority, dueDate, startTime, allDay, noteId, reminderEmail, reminderBrowser, reminderPreset, createdAt, updatedAt)
@@ -118,6 +128,9 @@ router.post('/api/todos', async (req, res) => {
 
     res.json(mapTodoForClient(req.user, todo));
   } catch (e) {
+    if (e.message === 'ITEM_QUOTA_EXCEEDED') {
+      return res.status(403).json({ error: getItemQuotaErrorMessage(e) });
+    }
     log('ERROR', '创建待办事项失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '创建失败' });
   }
@@ -272,6 +285,8 @@ router.post('/api/todos/import', async (req, res) => {
     let imported = 0;
     let skipped = 0;
     let updated = 0;
+    const todoQuota = await getItemQuotaState(username, 'todo');
+    let nextTodoCount = todoQuota.current;
 
     for (const todo of todosData.todos) {
       if (!todo.title) continue;
@@ -299,12 +314,20 @@ router.post('/api/todos/import', async (req, res) => {
         updated++;
         skipped++;
       } else {
+        if (todoQuota.limit > 0 && nextTodoCount + 1 > todoQuota.limit) {
+          const quotaError = new Error('ITEM_QUOTA_EXCEEDED');
+          quotaError.label = todoQuota.label;
+          quotaError.limit = todoQuota.limit;
+          quotaError.current = nextTodoCount;
+          throw quotaError;
+        }
         const todoId = todo.id ? scopedTodoId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         await db.execute(
           'INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)',
           [todoId, username, todo.title, todo.description || '', todo.priority || 5, dueDateTs, todo.completed ? 1 : 0, now, now]
         );
         imported++;
+        nextTodoCount += 1;
       }
     }
 
@@ -312,6 +335,9 @@ router.post('/api/todos/import', async (req, res) => {
     log('INFO', '导入待办事项', { username, imported, skipped, updated });
     res.json({ success: true, imported, skipped, updated });
   } catch (e) {
+    if (e.message === 'ITEM_QUOTA_EXCEEDED') {
+      return res.status(403).json({ error: getItemQuotaErrorMessage(e) });
+    }
     log('ERROR', '导入待办事项失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '导入失败: ' + e.message });
   }

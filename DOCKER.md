@@ -89,6 +89,8 @@ open http://localhost:3000
 | `TZ` | `Asia/Shanghai` | 时区设置 |
 | `PORT` | `80` | 容器内端口（通常不需要修改） |
 | `ADMIN_USER` | `admin` | 管理员用户名（多个用逗号分隔） |
+| `ADMIN_REGISTRATION_TOKEN` | - | 管理员初始化令牌，生产环境必填，注册 `ADMIN_USER` 时需要提供 |
+| `JWT_SECRET` | - | JWT 签名密钥，生产环境必填 |
 | `DB_DIALECT` | `sqlite` | 数据库方言，当前仅支持 `sqlite` |
 
 ### 数据卷
@@ -110,11 +112,13 @@ open http://localhost:3000
 部署前请先确认管理员用户名配置：
 - 默认值为 `admin`
 - 可通过 `ADMIN_USER` 修改（支持多个用户名，逗号分隔）
+- 生产环境必须同时设置 `ADMIN_REGISTRATION_TOKEN`
 
-首次注册时，与 `ADMIN_USER` 中某个用户名完全匹配的账户会拥有管理员权限：
+首次注册时，与 `ADMIN_USER` 中某个用户名完全匹配的账户会拥有管理员权限；生产环境还必须提供管理员初始化令牌：
 - 访问 `http://localhost:3000`
 - 点击"注册"按钮
 - 使用预先配置好的管理员用户名完成注册
+- 在“管理员初始化令牌”输入框中填写 `ADMIN_REGISTRATION_TOKEN`
 
 ### 2. 配置 SMTP 邮件服务
 

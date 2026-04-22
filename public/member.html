@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="z7Note 会员中心 - 管理你的套餐、配额和工作区">
+  <title>会员中心 - z7Note</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20250312-FINAL-FIX">
+  <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
+  <link rel="stylesheet" href="/css/site.css?v=20260419-style-system">
+</head>
+<body data-ui-surface="site" data-theme="default">
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="topbar-left">
+        <a class="brand" href="/">
+          <div class="brand-mark">Z</div>
+          <div>
+            <div>z7Note</div>
+            <div class="brand-meta">全栈自托管 · 开源免费</div>
+          </div>
+        </a>
+        <nav class="topnav">
+          <a class="btn btn-secondary" href="/">首页</a>
+          <a class="btn btn-secondary" href="/#features">功能介绍</a>
+          <a class="btn btn-secondary" href="/pricing">会员套餐</a>
+          <a class="btn btn-secondary" href="/member">会员中心</a>
+          <a class="btn btn-secondary" href="/help">帮助中心</a>
+          <a class="btn btn-secondary" href="/changelog">更新日志</a>
+        </nav>
+      </div>
+      <div class="topbar-right">
+        <div class="topnav-actions">
+          <a class="btn btn-secondary" href="/login.html" data-site-auth-link>登录</a>
+          <a class="btn btn-secondary site-hidden" href="/login.html?tab=register" data-site-register-link>注册</a>
+          <a class="btn btn-secondary site-hidden" href="#" data-site-logout-link>退出</a>
+          <div class="app-dropdown">
+            <a class="btn btn-primary" href="/app">打开应用 ⌄</a>
+            <div class="app-dropdown-menu">
+              <a class="app-dropdown-item" href="/app">
+                <span class="app-dropdown-item-icon">📝</span>
+                笔记
+              </a>
+              <a class="app-dropdown-item" href="/calendar.html">
+                <span class="app-dropdown-item-icon">📅</span>
+                日历
+              </a>
+              <a class="app-dropdown-item" href="/contacts.html">
+                <span class="app-dropdown-item-icon">👥</span>
+                通讯录
+              </a>
+            </div>
+          </div>
+        </div>
+        <div data-theme-slot data-theme-mode="compact" data-theme-button-class="btn btn-secondary theme-toggle-compact"></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="shell">
+        <h1>会员中心</h1>
+        <p>管理你的套餐、配额和工作区资源</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="dashboard site-hidden" id="dashboard-logged-in">
+          <div class="user-welcome-card">
+            <div class="user-avatar" id="user-avatar">U</div>
+            <div class="user-info">
+              <h2 id="user-welcome-name">欢迎回来</h2>
+              <div class="user-meta">
+                <span class="plan-tag" id="user-plan-badge">
+                  <span id="user-plan-icon">⭐</span>
+                  <span id="user-plan-tag-text">Free</span>
+                </span>
+                <span class="join-date" id="user-join-date"></span>
+                <span class="join-date" id="user-plan-expiry"></span>
+              </div>
+            </div>
+            <div class="user-welcome-actions">
+              <button class="btn btn-primary" type="button" id="upgrade-btn">立即兑换 / 升级</button>
+              <a class="btn btn-secondary" href="/app">进入应用</a>
+            </div>
+          </div>
+
+          <div class="member-account-grid">
+            <article class="quota-overview">
+              <h3>👤 账户中心</h3>
+              <div class="member-account-list">
+                <div class="member-account-row">
+                  <span>账号</span>
+                  <strong id="member-account-username">-</strong>
+                </div>
+                <div class="member-account-row">
+                  <span>邮箱</span>
+                  <strong id="member-account-email">未绑定</strong>
+                </div>
+                <div class="member-account-row">
+                  <span>安全</span>
+                  <strong>邮箱 / 密码 / 2FA 已归并到会员中心</strong>
+                </div>
+              </div>
+              <div class="public-actions">
+                <button class="btn btn-secondary" type="button" id="member-email-btn">邮箱</button>
+                <button class="btn btn-secondary" type="button" id="member-password-btn">密码</button>
+                <button class="btn btn-secondary" type="button" id="member-2fa-btn">2FA</button>
+                <button class="btn btn-secondary" type="button" id="member-logout-btn">退出登录</button>
+              </div>
+            </article>
+
+            <article class="quota-overview" id="billing">
+              <h3>🎟 立即兑换或升级</h3>
+              <p class="member-section-copy">支持输入兑换码，或直接查看 Pro / Team 套餐差异后升级。</p>
+              <div class="public-actions member-redeem-actions">
+                <button class="btn btn-primary" type="button" id="member-open-redeem-btn">打开兑换窗口</button>
+                <input id="redeem-code-input" class="member-redeem-input" type="text" placeholder="输入兑换码" autocomplete="off">
+                <button class="btn btn-secondary" id="redeem-code-btn" type="button">立即兑换</button>
+                <a class="btn btn-secondary" href="/pricing">查看套餐分类</a>
+              </div>
+              <p id="redeem-code-message" class="brand-meta member-redeem-hint">兑换后会立即刷新当前套餐与统一配额。</p>
+            </article>
+          </div>
+
+          <div class="quota-overview">
+            <h3>📊 配额使用情况</h3>
+            <div class="quota-progress-grid" id="quota-progress-grid"></div>
+          </div>
+
+          <div class="quota-overview">
+            <h3>🧩 当前套餐能力</h3>
+            <div class="activity-list" id="plan-capability-list">
+              <div class="activity-empty">正在加载套餐能力...</div>
+            </div>
+          </div>
+
+          <div class="modules-entry" id="modules-entry"></div>
+
+          <div class="quick-actions" id="quick-actions"></div>
+
+          <div class="recent-activity">
+            <h3>📝 最近动态</h3>
+            <div class="activity-list" id="activity-list">
+              <div class="activity-empty">暂无最近动态</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="login-prompt" id="dashboard-logged-out">
+          <div class="member-public">
+            <article class="public-hero-card">
+              <div class="public-copy">
+                <h2>未登录也可以先看清会员体系</h2>
+                <p>会员中心对外公开套餐说明、升级方向和能力边界。先了解 Free / Pro / Team 的差异，再决定是否登录进入个人工作台。</p>
+                <div class="public-actions">
+                  <a class="btn btn-primary" href="/login.html">登录查看我的套餐</a>
+                  <a class="btn btn-secondary" href="/pricing">先看套餐对比</a>
+                </div>
+              </div>
+              <div class="public-summary">
+                <div class="summary-card">
+                  <strong>未登录可看什么</strong>
+                  <span>套餐差异、权益说明、适用场景、升级入口。</span>
+                </div>
+                <div class="summary-card">
+                  <strong>登录后可看什么</strong>
+                  <span>当前套餐、统一配额、模块使用情况和快捷操作。</span>
+                </div>
+                <div class="summary-card">
+                  <strong>为什么放在导航里</strong>
+                  <span>它既是公开的会员说明页，也是已登录用户的账户工作台。</span>
+                </div>
+              </div>
+            </article>
+
+            <div class="public-sections" id="member-public-sections"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-header">
+          <h2>套餐对比</h2>
+          <p>按分类查看差异，避免整页纵向过长</p>
+        </div>
+        <div class="pricing-category-tabs" id="member-tier-categories"></div>
+        <div class="tiers" id="tiers-grid"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <strong>z7Note</strong>
+          <span>全栈自托管 · 开源免费</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="modal-shell site-hidden" id="member-redeem-modal">
+    <div class="modal-card">
+      <div class="modal-card-head">
+        <h3>兑换或升级套餐</h3>
+        <button class="close-btn" type="button" id="member-redeem-close-btn">×</button>
+      </div>
+      <div class="modal-card-body">
+        <p class="member-section-copy">输入兑换码立即生效；如果还没有兑换码，可先查看套餐页或联系管理员发放。</p>
+        <div class="public-actions member-redeem-actions">
+          <input id="member-redeem-modal-input" class="member-redeem-input" type="text" placeholder="输入兑换码" autocomplete="off">
+          <button class="btn btn-primary" id="member-redeem-modal-btn" type="button">立即兑换</button>
+        </div>
+        <p id="member-redeem-modal-message" class="brand-meta member-redeem-hint">支持 Pro / Team 套餐兑换与统一配额升级。</p>
+        <div class="public-actions">
+          <a class="btn btn-secondary" href="/pricing">查看套餐分类</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-shell site-hidden" id="member-email-modal">
+    <div class="modal-card">
+      <div class="modal-card-head">
+        <h3>绑定或修改邮箱</h3>
+        <button class="close-btn" type="button" data-close-modal="member-email-modal">×</button>
+      </div>
+      <div class="modal-card-body">
+        <div class="public-actions member-redeem-actions">
+          <input id="member-email-input" class="member-redeem-input" type="email" placeholder="输入邮箱地址" autocomplete="email">
+          <button class="btn btn-secondary" id="member-email-send-btn" type="button">发送验证码</button>
+        </div>
+        <div class="public-actions member-redeem-actions">
+          <input id="member-email-code-input" class="member-redeem-input" type="text" placeholder="输入验证码" autocomplete="one-time-code">
+          <button class="btn btn-primary" id="member-email-verify-btn" type="button">确认绑定</button>
+        </div>
+        <p id="member-email-message" class="brand-meta member-redeem-hint">验证码发送后 10 分钟内有效。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-shell site-hidden" id="member-password-modal">
+    <div class="modal-card">
+      <div class="modal-card-head">
+        <h3>修改密码</h3>
+        <button class="close-btn" type="button" data-close-modal="member-password-modal">×</button>
+      </div>
+      <div class="modal-card-body">
+        <div class="member-form-stack">
+          <input id="member-old-password" class="member-form-input" type="password" placeholder="当前密码" autocomplete="current-password">
+          <input id="member-new-password" class="member-form-input" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">
+          <input id="member-confirm-password" class="member-form-input" type="password" placeholder="确认新密码" autocomplete="new-password">
+          <button class="btn btn-primary" id="member-password-submit-btn" type="button">确认修改</button>
+        </div>
+        <p id="member-password-message" class="brand-meta member-redeem-hint">修改后立即生效。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-shell site-hidden" id="member-2fa-modal">
+    <div class="modal-card">
+      <div class="modal-card-head">
+        <h3>两步验证</h3>
+        <button class="close-btn" type="button" data-close-modal="member-2fa-modal">×</button>
+      </div>
+      <div class="modal-card-body">
+        <div id="member-2fa-content" class="member-2fa-content">
+          <p class="brand-meta member-redeem-hint">正在加载 2FA 状态...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/site-nav.js"></script>
+  <script type="module" src="/js/member-page.js"></script>
+</body>
+</html>

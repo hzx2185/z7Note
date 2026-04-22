@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>z7Note - 分享中心</title>
-    <link rel="stylesheet" href="/css/app.css">
+    <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
+    <link rel="stylesheet" href="/css/app.css?v=20260421-shares-unify">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -15,7 +16,6 @@
             width: 100%;
         }
 
-        /* 强制重置 header 样式 */
         body > .header {
             position: static !important;
             top: auto !important;
@@ -24,15 +24,16 @@
             width: 100% !important;
             height: auto !important;
             max-width: none !important;
-            padding: 16px 20px !important;
+            padding: 14px 20px !important;
             display: flex !important;
             justify-content: space-between !important;
             align-items: center !important;
             border-bottom: 1px solid var(--border);
             z-index: auto !important;
+            background: color-mix(in srgb, var(--panel, var(--bg)) 88%, transparent);
+            backdrop-filter: blur(14px);
         }
 
-        /* 强制重置 container 样式 */
         body > .container {
             position: static !important;
             overflow: visible !important;
@@ -46,30 +47,19 @@
             display: block !important;
         }
 
-        :root {
-            --bg: #ffffff;
-            --side: #f6f8fa;
-            --text: #24292f;
-            --border: #d0d7de;
-            --accent: #0969da;
-            --red: #cf222e;
-            --gray: #8b949e;
-            --green: #2da44e;
-        }
-        body.dark-mode {
-            --bg: #0d1117;
-            --side: #161b22;
-            --text: #c9d1d9;
-            --border: #30363d;
-            --accent: #58a6ff;
-            --gray: #8b949e;
-        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
+            font-family: var(--font-site);
+            background:
+                radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 12%, transparent), transparent 26%),
+                linear-gradient(180deg, color-mix(in srgb, var(--bg) 90%, #fff 10%) 0%, var(--bg) 100%);
             color: var(--text);
         }
-        .header { background: var(--side); }
+        .header-actions {
+            display:flex;
+            align-items:center;
+            gap:10px;
+        }
+        .header { background: transparent; }
         .header h1 { font-size: 18px; font-weight: 600; }
         .header a { color: var(--accent); text-decoration: none; font-size: 14px; }
         .toolbar {
@@ -82,33 +72,40 @@
         .toolbar input {
             flex: 1;
             min-width: 200px;
-            padding: 10px 14px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text);
-            font-size: 14px;
+            min-height: var(--control-height-md);
+            padding: 0 var(--control-padding-x-md);
         }
         .toolbar button {
-            padding: 10px 20px;
+            min-height: var(--control-height-md);
+            padding: 0 20px;
             background: var(--accent);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 999px;
             cursor: pointer;
             font-size: 14px;
+            font-weight: 600;
+            box-shadow: var(--shadow-sm);
         }
-        .share-list { display: flex; flex-direction: column; }
+        .share-list {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            overflow: hidden;
+            background: color-mix(in srgb, var(--panel, var(--bg)) 92%, transparent);
+            box-shadow: var(--shadow);
+        }
         .share-header {
             display: flex;
             align-items: center;
             gap: 0;
-            padding: 8px 0;
+            padding: 10px 0;
             font-size: 12px;
-            color: var(--gray);
+            color: var(--muted, var(--gray));
             font-weight: 500;
             border-bottom: 1px solid var(--border);
-            background: var(--side);
+            background: color-mix(in srgb, var(--panel-strong, var(--bg)) 90%, transparent);
             justify-content: center;
         }
         .share-header span {
@@ -126,7 +123,7 @@
             display: flex;
             align-items: center;
             gap: 0;
-            padding: 8px 0;
+            padding: 10px 0;
             border-bottom: 1px solid var(--border);
             font-size: 13px;
             cursor: pointer;
@@ -159,7 +156,7 @@
         .copy-btn {
             background: none;
             border: none;
-            color: var(--gray);
+            color: var(--muted, var(--gray));
             font-size: 16px;
             cursor: pointer;
             padding: 0;
@@ -171,6 +168,11 @@
             color: var(--accent);
         }
 
+        .copy-btn.is-copied {
+            opacity: 1;
+            color: var(--green);
+        }
+
         .pagination {
             display: flex;
             justify-content: center;
@@ -178,13 +180,13 @@
             gap: 12px;
             padding: 16px 0;
             margin-top: 16px;
-            border-top: 1px solid var(--border);
         }
         .pagination button {
-            padding: 8px 16px;
-            background: var(--bg);
+            min-height: var(--control-height-md);
+            padding: 0 16px;
+            background: color-mix(in srgb, var(--panel, var(--bg)) 92%, transparent);
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: 999px;
             color: var(--text);
             cursor: pointer;
             font-size: 14px;
@@ -211,7 +213,6 @@
         }
         .error { color: var(--red); }
 
-        /* 用户页面的用户信息样式 */
         .user-header {
             display: flex;
             align-items: center;
@@ -241,14 +242,14 @@
             margin-bottom: 24px;
         }
         .category-card {
-            background: var(--side);
+            background: color-mix(in srgb, var(--panel, var(--bg)) 92%, transparent);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 18px;
             padding: 16px;
             cursor: pointer;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
         }
-        .category-card:hover { border-color: var(--accent); }
+        .category-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
         .category-card h3 {
             font-size: 15px;
             margin-bottom: 8px;
@@ -260,13 +261,14 @@
         .category-card p { font-size: 13px; color: var(--gray); }
         .note-list { display: flex; flex-direction: column; gap: 8px; }
         .note-item {
-            background: var(--side);
+            background: color-mix(in srgb, var(--panel, var(--bg)) 92%, transparent);
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: 14px;
             padding: 12px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
         }
         .note-item a {
             color: var(--accent);
@@ -291,7 +293,6 @@
             margin-bottom: 16px;
         }
 
-        /* 响应式 */
         @media (max-width: 768px) {
             .share-header span {
                 padding: 8px 6px !important;
@@ -308,521 +309,19 @@
         }
     </style>
 </head>
-<body>
+<body data-ui-surface="app" data-theme="default">
     <div class="header">
         <h1 id="page-title">分享中心</h1>
-        <a href="/">← 返回首页</a>
+        <div class="header-actions">
+            <div data-theme-slot data-theme-mode="compact" data-theme-button-class="tool-btn"></div>
+            <a href="/app">← 返回应用</a>
+        </div>
     </div>
 
     <div class="container" id="main-container">
         <!-- 动态内容区域 -->
     </div>
 
-    <script>
-        // 初始化主题
-        const savedTheme = localStorage.getItem('theme');
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-            document.body.classList.add('dark-mode');
-        }
-
-        const params = new URLSearchParams(location.search);
-        const userParam = params.get('user');
-        const categoryParam = params.get('category');
-
-        // 全局变量存储原始数据，避免重复请求
-        let allShares = [];
-        let currentPage = 1;
-        let pageSize = 50;
-
-        // 格式化时间
-        function formatTime(timestamp) {
-            if (!timestamp) return '-';
-            const raw = parseInt(timestamp, 10);
-            const date = new Date(raw > 10000000000 ? raw : raw * 1000);
-            const now = new Date();
-            const diff = now - date;
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            if (days === 0) return '今天';
-            if (days === 1) return '昨天';
-            if (days < 7) return `${days}天前`;
-            return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-        }
-
-        // 格式化有效期
-        function formatExpiry(expiresAt) {
-            if (!expiresAt || expiresAt === '0') return '永久';
-            const exp = parseInt(expiresAt);
-            const now = Date.now();
-            const diff = exp - now;
-            if (diff <= 0) return '过期';
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            if (days > 0) return `${days}天`;
-            const hours = Math.floor(diff / (1000 * 60 * 60));
-            return `${hours}时`;
-        }
-
-        // 获取分享类型标签
-        function getTypeLabel(type) {
-            const labels = { category: '分类', note: '笔记', file: '附件' };
-            return labels[type] || type;
-        }
-
-        // 渲染分享项（单行显示，包含所有信息）
-        function renderShareItem(s) {
-            const shareUrl = `${location.protocol}//${location.host}/s/${s.token}`;
-            const expiryClass = s.expiresAt && parseInt(s.expiresAt) > 0 && parseInt(s.expiresAt) - Date.now() < 86400000 ? 'expiry-soon' : '';
-
-            return `
-                <div class="share-item">
-                    <span class="share-type ${s.type}">${getTypeLabel(s.type)}</span>
-                    <span>${s.category ? escapeHtml(s.category) : '-'}</span>
-                    <a href="${shareUrl}" class="share-title" target="_blank" title="${escapeHtml(s.title || '无标题')}">${escapeHtml(s.title || '无标题')}</a>
-                    <span class="${expiryClass}">${formatExpiry(s.expiresAt)}</span>
-                    <span>${formatTime(s.createdAt)}</span>
-                    <button class="copy-btn" onclick="copyShareLink('${shareUrl}')">🔗</button>
-                </div>
-            `;
-        }
-
-        // 复制分享链接
-        function copyShareLink(url) {
-            // 尝试多种复制方法
-            let copied = false;
-
-            // 方法1: Clipboard API (现代浏览器)
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(url).then(() => {
-                    copied = true;
-                }).catch(err => {
-                    console.warn('Clipboard API 失败:', err);
-                });
-            }
-
-            // 方法2: document.execCommand (传统方法，降级方案)
-            if (!copied) {
-                try {
-                    const textArea = document.createElement('textarea');
-                    textArea.value = url;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-9999px';
-                    textArea.style.top = '0';
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    const successful = document.execCommand('copy');
-                    document.body.removeChild(textArea);
-                    if (successful) {
-                        copied = true;
-                    }
-                } catch (err) {
-                    console.warn('execCommand 复制失败:', err);
-                }
-            }
-
-            // 更新按钮状态
-            if (copied) {
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = '✓ 已复制';
-                btn.style.borderColor = 'var(--green)';
-                btn.style.color = 'var(--green)';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.borderColor = '';
-                    btn.style.color = '';
-                }, 1500);
-            } else {
-                // 如果都失败，显示提示框让用户手动复制
-                prompt('按 Ctrl+C 复制链接:', url);
-            }
-        }
-
-        // 加载总分享列表
-        async function loadAllShares() {
-            const container = document.getElementById('main-container');
-            const searchInput = document.getElementById('search-input');
-            const searchValue = searchInput ? searchInput.value : '';
-
-            container.innerHTML = `
-                <div class="toolbar">
-                    <input type="text" id="search-input" placeholder="搜索分享标题、用户名或分类..." value="${escapeHtml(searchValue)}">
-                    <button onclick="loadAllShares()">刷新</button>
-                </div>
-                <div class="loading">加载中...</div>
-            `;
-
-            try {
-                const res = await fetch('/api/share/public-list');
-                if (!res.ok) throw new Error('加载失败');
-                const shares = await res.json();
-
-                // 保存到全局变量
-                allShares = shares;
-
-                if (shares.length === 0) {
-                    const listContainer = document.querySelector('.share-list');
-                    if (listContainer) {
-                        listContainer.innerHTML = '<div class="empty">暂无公开分享</div>';
-                    } else {
-                        container.innerHTML += '<div class="share-list"><div class="empty">暂无公开分享</div></div>';
-                    }
-                    return;
-                }
-
-                // 按用户分组
-                const byUser = {};
-                shares.forEach(s => {
-                    if (!byUser[s.owner]) byUser[s.owner] = [];
-                    byUser[s.owner].push(s);
-                });
-
-                renderAllShares(shares, byUser);
-
-                // 添加搜索事件
-                const input = document.getElementById('search-input');
-                input.addEventListener('input', handleSearch);
-            } catch (e) {
-                const listContainer = document.querySelector('.share-list');
-                if (listContainer) {
-                    listContainer.innerHTML = '<div class="error">加载失败，请刷新重试</div>';
-                } else {
-                    container.innerHTML += '<div class="share-list"><div class="error">加载失败，请刷新重试</div></div>';
-                }
-            }
-        }
-
-        // 渲染总分享列表（统一列表，包含类型列，支持分页）
-        function renderAllShares(shares, byUser) {
-            const container = document.getElementById('main-container');
-            const searchInput = document.getElementById('search-input');
-            const searchValue = searchInput ? searchInput.value : '';
-
-            // 按创建时间降序排序，最新在前面
-            const sortedShares = [...shares].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-            // 计算总数和分页
-            const totalShares = sortedShares.length;
-            const totalPages = Math.ceil(totalShares / pageSize);
-            const startIndex = (currentPage - 1) * pageSize;
-            const endIndex = startIndex + pageSize;
-            const pageShares = sortedShares.slice(startIndex, endIndex);
-
-            // 检查是否已存在 share-list
-            let listContainer = document.querySelector('.share-list');
-
-            if (!listContainer) {
-                // 首次渲染，创建完整HTML
-                let html = `
-                    <div class="toolbar">
-                        <input type="text" id="search-input" placeholder="搜索分享标题、用户名或分类..." value="${escapeHtml(searchValue)}">
-                        <button onclick="loadAllShares()">刷新</button>
-                    </div>
-                    <div class="share-list">
-                        <div class="share-header">
-                            <span>类型</span>
-                            <span>目录</span>
-                            <span>标题</span>
-                            <span>有效期</span>
-                            <span>日期</span>
-                            <span></span>
-                        </div>
-                `;
-
-                if (pageShares.length === 0) {
-                    html += '<div class="empty">暂无公开分享</div>';
-                } else {
-                    pageShares.forEach(s => {
-                        html += renderShareItem(s);
-                    });
-                }
-
-                // 添加分页控件
-                if (totalPages > 1) {
-                    html += '<div class="pagination">';
-                    html += '<button onclick="changePage(' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>上一页</button>';
-                    html += '<span>第 ' + currentPage + ' / ' + totalPages + ' 页</span>';
-                    html += '<button onclick="changePage(' + (currentPage + 1) + ')" ' + (currentPage === totalPages ? 'disabled' : '') + '>下一页</button>';
-                    html += '</div>';
-                }
-
-                html += '</div>';
-                container.innerHTML = html;
-            } else {
-                // 已存在，只更新列表内容
-                let html = '<div class="share-header"><span>类型</span><span>目录</span><span>标题</span><span>有效期</span><span>日期</span><span></span></div>';
-
-                if (pageShares.length === 0) {
-                    html += '<div class="empty">暂无公开分享</div>';
-                } else {
-                    pageShares.forEach(s => {
-                        html += renderShareItem(s);
-                    });
-                }
-
-                // 添加分页控件
-                if (totalPages > 1) {
-                    html += '<div class="pagination">';
-                    html += '<button onclick="changePage(' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>上一页</button>';
-                    html += '<span>第 ' + currentPage + ' / ' + totalPages + ' 页</span>';
-                    html += '<button onclick="changePage(' + (currentPage + 1) + ')" ' + (currentPage === totalPages ? 'disabled' : '') + '>下一页</button>';
-                    html += '</div>';
-                }
-
-                listContainer.innerHTML = html;
-            }
-        }
-
-        // 切换页面
-        function changePage(page) {
-            const totalPages = Math.ceil(allShares.length / pageSize);
-            if (page < 1 || page > totalPages) return;
-
-            currentPage = page;
-            renderAllShares(allShares, {});
-
-            // 滚动到顶部
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // 搜索处理函数 - 只更新列表，不重新渲染toolbar
-        function handleSearch(e) {
-            const keyword = e.target.value.toLowerCase().trim();
-            const listContainer = document.querySelector('.share-list');
-
-            if (!listContainer) return;
-
-            // 按时间排序
-            const sortedShares = [...allShares].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-            // 计算总数和分页
-            const totalShares = sortedShares.length;
-            const totalPages = Math.ceil(totalShares / pageSize);
-            
-            // 搜索时重置到第一页
-            if (keyword && currentPage !== 1) {
-                currentPage = 1;
-            }
-
-            const startIndex = (currentPage - 1) * pageSize;
-            const endIndex = startIndex + pageSize;
-            const pageShares = sortedShares.slice(startIndex, endIndex);
-
-            let html = '<div class="share-header"><span>类型</span><span>目录</span><span>标题</span><span>有效期</span><span>日期</span><span></span></div>';
-
-            if (!keyword) {
-                if (pageShares.length === 0) {
-                    html += '<div class="empty">暂无公开分享</div>';
-                } else {
-                    pageShares.forEach(s => {
-                        html += renderShareItem(s);
-                    });
-                }
-            } else {
-                // 过滤并显示
-                const filtered = sortedShares.filter(s =>
-                    (s.title || '').toLowerCase().includes(keyword) ||
-                    (s.owner || '').toLowerCase().includes(keyword) ||
-                    (s.category || '').toLowerCase().includes(keyword)
-                );
-
-                const filteredTotalPages = Math.ceil(filtered.length / pageSize);
-                const filteredStartIndex = (currentPage - 1) * pageSize;
-                const filteredEndIndex = filteredStartIndex + pageSize;
-                const filteredPageShares = filtered.slice(filteredStartIndex, filteredEndIndex);
-
-                if (filteredPageShares.length === 0) {
-                    html += '<div class="empty">没有找到匹配的分享</div>';
-                } else {
-                    filteredPageShares.forEach(s => {
-                        html += renderShareItem(s);
-                    });
-                }
-
-                // 更新分页信息
-                if (filteredTotalPages > 1) {
-                    html += '<div class="pagination">';
-                    html += '<button onclick="changePage(' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>上一页</button>';
-                    html += '<span>第 ' + currentPage + ' / ' + filteredTotalPages + ' 页</span>';
-                    html += '<button onclick="changePage(' + (currentPage + 1) + ')" ' + (currentPage === filteredTotalPages ? 'disabled' : '') + '>下一页</button>';
-                    html += '</div>';
-                }
-            }
-
-            listContainer.innerHTML = html;
-        }
-
-        // 渲染分享列表（已废弃，整合到 handleSearch 中）
-        function renderShareList(shares) {
-            // 此函数已整合到 handleSearch 中，保留兼容
-        }
-
-        // 加载用户分享页面
-        async function loadUserShares(user) {
-            document.getElementById('page-title').textContent = `${user} 的分享`;
-            const container = document.getElementById('main-container');
-            container.innerHTML = '<div class="loading">加载中...</div>';
-
-            try {
-                const res = await fetch('/api/share/public-list');
-                if (!res.ok) throw new Error('加载失败');
-                const allShares = await res.json();
-                let userShares = allShares.filter(s => s.owner === user);
-
-                if (userShares.length === 0) {
-                    container.innerHTML = '<div class="empty">该用户暂无分享</div>';
-                    return;
-                }
-
-                // 按时间排序
-                userShares.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-                // 分类整理（用于顶部统计）
-                const categories = {};
-                const noteCount = userShares.filter(s => s.type === 'note').length;
-                const fileCount = userShares.filter(s => s.type === 'file').length;
-
-                userShares.forEach(s => {
-                    if (s.type === 'category') {
-                        categories[s.category] = { ...s, count: 0 };
-                    } else if (s.type === 'note') {
-                        const cat = s.category || '未分类';
-                        if (!categories[cat]) categories[cat] = { name: cat, count: 0 };
-                        categories[cat].count++;
-                    }
-                });
-
-                let html = `<a href="shares.html" class="back-btn">← 返回分享中心</a>`;
-
-                html += `
-                    <div class="user-header">
-                        <div class="user-avatar">${user.charAt(0).toUpperCase()}</div>
-                        <div class="user-info">
-                            <h2>${user}</h2>
-                            <p>${Object.keys(categories).length} 个分类 · ${noteCount} 篇笔记 · ${fileCount} 个附件</p>
-                        </div>
-                    </div>
-
-                    <div class="toolbar">
-                        <input type="text" id="user-search-input" placeholder="搜索此用户的分享...">
-                    </div>
-
-                    <div class="share-list" id="user-share-list">
-                        <div class="share-header">
-                            <span>类型</span>
-                            <span>目录</span>
-                            <span>标题</span>
-                            <span>有效期</span>
-                            <span>日期</span>
-                            <span></span>
-                        </div>
-                `;
-
-                userShares.forEach(s => {
-                    html += renderShareItem(s);
-                });
-
-                html += '</div>';
-
-                container.innerHTML = html;
-
-                // 添加搜索事件
-                document.getElementById('user-search-input').addEventListener('input', (e) => {
-                    const keyword = e.target.value.toLowerCase().trim();
-                    const listDiv = document.getElementById('user-share-list');
-                    const headerHtml = '<div class="share-header"><span>类型</span><span>目录</span><span>标题</span><span>有效期</span><span>日期</span><span></span></div>';
-
-                    if (!keyword) {
-                        // 显示所有
-                        listDiv.innerHTML = headerHtml + userShares.map(s => renderShareItem(s)).join('');
-                    } else {
-                        // 过滤
-                        const filtered = userShares.filter(s =>
-                            (s.title || '').toLowerCase().includes(keyword) ||
-                            (s.category || '').toLowerCase().includes(keyword)
-                        );
-                        listDiv.innerHTML = headerHtml + filtered.map(s => renderShareItem(s)).join('');
-                    }
-                });
-            } catch (e) {
-                container.innerHTML = '<div class="error">加载失败，请刷新重试</div>';
-            }
-        }
-
-        // 加载分类笔记列表
-        async function loadCategoryNotes(user, category) {
-            document.getElementById('page-title').textContent = `${category}`;
-            const container = document.getElementById('main-container');
-            container.innerHTML = '<div class="loading">加载中...</div>';
-
-            try {
-                // 先查找是否有该分类的分享token
-                const listRes = await fetch('/api/share/public-list');
-                if (!listRes.ok) throw new Error('加载失败');
-                const allShares = await listRes.json();
-
-                // 查找该分类的分享token
-                const categoryShare = allShares.find(s =>
-                    s.owner === user && s.type === 'category' && s.target === category
-                );
-                const categoryToken = categoryShare ? categoryShare.token : null;
-
-                // 获取该分类下的笔记
-                const notesRes = await fetch(`/api/notes?user=${encodeURIComponent(user)}&category=${encodeURIComponent(category)}`);
-                let notes = [];
-
-                if (notesRes.ok) {
-                    notes = await notesRes.json();
-                }
-
-                let html = `<a href="?user=${encodeURIComponent(user)}" class="back-btn">← 返回 ${user} 的分享</a>`;
-
-                html += '<h3 class="section-title">📁 ' + escapeHtml(category) + '</h3>';
-
-                if (notes.length === 0) {
-                    html += '<div class="empty">该分类下暂无笔记</div>';
-                } else {
-                    html += '<div class="note-list">';
-                    notes.forEach(note => {
-                        const displayTitle = (note.title || '无标题').split('/').pop() || note.title;
-                        // 查找笔记分享
-                        const noteShare = allShares.find(s =>
-                            s.owner === user && s.type === 'note' && s.target === note.id.toString()
-                        );
-                        
-                        // 如果笔记没有单独分享，但分类有分享，使用分类token
-                        const shareToken = noteShare ? noteShare.token : (categoryToken ? `${categoryToken}?note=${note.id}` : null);
-                        const shareLink = shareToken ? `/share.html?token=${encodeURIComponent(shareToken)}` : `javascript:void(0)`;
-                        
-                        html += `
-                            <div class="note-item">
-                                <a href="${shareLink}" target="_blank" ${!shareToken ? 'style="color:var(--gray);"' : ''}>${escapeHtml(displayTitle)}</a>
-                                <span class="date">${formatTime(note.updatedAt || note.createdAt)}${!shareToken ? ' · 未分享' : ''}</span>
-                            </div>
-                        `;
-                    });
-                    html += '</div>';
-                }
-
-                container.innerHTML = html;
-            } catch (e) {
-                container.innerHTML = '<div class="error">加载失败，请刷新重试</div>';
-            }
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // 路由
-        if (categoryParam && userParam) {
-            loadCategoryNotes(userParam, categoryParam);
-        } else if (userParam) {
-            loadUserShares(userParam);
-        } else {
-            loadAllShares();
-        }
-    </script>
+    <script src="/js/shares-page.js"></script>
 </body>
 </html>

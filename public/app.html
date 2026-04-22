@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <script src="/js/boot.js?v=20250312-FINAL-FIX"></script>
+    <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="z7Note">
+    <meta name="description" content="z7Note - 知其种种，记其始末。让种种思绪，归于一处。">
+    <title>z7Note App - 工作区</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20250312-FINAL-FIX">
+
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="/">
+    <link rel="dns-prefetch" href="/">
+
+    <!-- CSS - 关键样式立即加载 -->
+    <link rel="stylesheet" href="/cdn/codemirror.min.css">
+    <link rel="stylesheet" href="/css/app.css?v=20250312-FINAL-FIX">
+
+    <!-- 非关键样式延迟加载 -->
+    <link rel="stylesheet" href="/cdn/highlight-dark.min.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="/cdn/github-markdown.min.css" media="print" onload="this.media='all'">
+
+    <!-- 核心依赖库 - 立即加载 -->
+    <script src="/cdn/localforage.min.js"></script>
+
+    <!-- CodeMirror 核心库 - 延迟加载 -->
+    <script src="/cdn/codemirror.min.js" defer></script>
+    <script src="/cdn/codemirror-markdown.min.js" defer></script>
+    <script src="/cdn/codemirror-closebrackets.min.js" defer></script>
+    <script src="/cdn/codemirror-matchbrackets.min.js" defer></script>
+    <script src="/cdn/activeline.min.js" defer></script>
+
+    <!-- 非核心功能 - 按需加载 -->
+    <script src="/js/app-bootstrap.js?v=20250312-FINAL-FIX"></script>
+</head>
+<body data-ms-editor="false" data-ui-surface="app" data-theme="default">
+    <div id="overlay" onclick="ui.toggleSidebar()"></div>
+
+    <!-- 邮箱绑定模态框 -->
+    <div id="email-modal" class="modal workspace-hidden">
+        <div class="modal-content compact-modal">
+            <div class="modal-header">
+                <h2>绑定/修改邮箱</h2>
+                <button class="close-btn" type="button" onclick="ui.closeEmailModal()">&times;</button>
+            </div>
+            <div class="modal-body compact-form-body">
+                <form class="compact-form" onsubmit="ui.modalVerifyCode(); return false;">
+                    <div class="form-group compact-group">
+                        <label for="modal-email-input">新邮箱地址</label>
+                        <div class="compact-inline-action">
+                            <input type="email" id="modal-email-input" placeholder="请输入邮箱地址" autocomplete="email" inputmode="email" data-bwignore="true">
+                            <button id="modal-send-btn" class="btn btn-secondary compact-inline-btn" type="button" onclick="ui.modalSendCode()">发送验证码</button>
+                        </div>
+                    </div>
+                    <div id="modal-email-feedback" class="compact-feedback workspace-hidden"></div>
+                    <div id="modal-code-area" class="compact-code-area">
+                        <div class="form-group compact-group">
+                            <label for="modal-code-input">验证码</label>
+                            <input type="text" id="modal-code-input" placeholder="6位数字" maxlength="6" autocomplete="one-time-code" inputmode="numeric" data-bwignore="true">
+                        </div>
+                        <div class="compact-hint">验证码发送后 10 分钟内有效，输入后即可完成邮箱绑定。</div>
+                        <div class="btn-group compact-btn-group">
+                            <button type="button" class="btn btn-secondary" onclick="ui.closeEmailModal()">取消</button>
+                            <button id="modal-verify-btn" type="submit" class="btn btn-primary">确认绑定</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="header workspace-brand-header">
+        <div class="header-group-wide">
+            <button onclick="ui.toggleSidebar()" class="tool-btn">☰</button>
+            <!-- 状态指示灯 -->
+            <div id="status-lights" class="status-lights workspace-brand-status">
+                <div class="status-indicator">
+                    <span id="status-dot" class="status-dot" title="保存状态"></span>
+                    <span id="status-text" class="status-text">就绪</span>
+                </div>
+            </div>
+        </div>
+        <div class="header-tools workspace-actions-scroll">
+            <div class="workspace-top-nav" aria-label="页面切换">
+                <a id="nav-home-btn" class="tool-btn workspace-nav-btn" href="/" title="首页">⌂</a>
+                <a id="nav-notes-btn" class="tool-btn workspace-nav-btn workspace-nav-btn-active" href="/app" title="笔记">✎</a>
+                <a id="nav-calendar-btn" class="tool-btn workspace-nav-btn" href="/calendar.html" title="日历">◷</a>
+                <a id="nav-contacts-btn" class="tool-btn workspace-nav-btn" href="/contacts.html" title="通讯录">☏</a>
+                <a id="nav-member-btn" class="tool-btn workspace-nav-btn" href="/member" title="会员中心">★</a>
+            </div>
+            <div data-theme-slot data-theme-mode="compact" data-theme-button-class="tool-btn"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div id="sidebar" class="workspace-brand-sidebar">
+            <div class="sidebar-search-panel workspace-brand-search-panel">
+                <input type="text" id="search" class="sidebar-search-input" name="search_notes" placeholder="搜索..." oninput="ui.debounceRender()" autocomplete="off">
+                <div class="sidebar-action-row">
+                    <button onclick="ui.create(); if(window.innerWidth <= 768) ui.toggleSidebar();" class="tool-btn sidebar-action-btn">新建</button>
+                    <button onclick="ui.toggleBatchMode()" class="tool-btn sidebar-action-btn">批量</button>
+                    <button onclick="ui.checkDuplicates()" class="tool-btn sidebar-action-btn" title="查找并删除重复笔记">去重</button>
+                    <button onclick="ui.toggleAllFolders(false)" class="tool-btn sidebar-action-btn" title="折叠所有">折叠</button>
+                    <button onclick="ui.toggleAllFolders(true)" class="tool-btn sidebar-action-btn" title="展开所有">展开</button>
+                </div>
+            </div>
+            <div id="list"></div>
+
+            <!-- 批量操作栏 -->
+            <div id="batch-bar">
+                <div class="batch-bar-main">
+                    <input type="checkbox" id="batch-select-all" class="batch-select-checkbox" onchange="ui.batchSelectAll(this.checked)">
+                    <span id="batch-count" class="batch-count-text">已选 0</span>
+                </div>
+                <div class="batch-bar-actions">
+                    <button onclick="ui.batchMove()" class="tool-btn batch-btn batch-btn-accent">移动</button>
+                    <button onclick="ui.batchDelete()" class="batch-btn batch-btn-danger">删除</button>
+                    <button onclick="ui.toggleBatchMode()" class="tool-btn batch-btn">取消</button>
+                </div>
+            </div>
+
+            <!-- 侧边栏底部 -->
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-row">
+                    <button onclick="ui.showTrash()" class="tool-btn sidebar-footer-btn" title="回收站">♻</button>
+                    <button id="notes-export-btn" onclick="ui.exportData()" class="tool-btn sidebar-footer-btn" title="导出">↑</button>
+                    <input type="file" id="importFile" class="hidden-file-input" onchange="ui.importData(event)">
+                    <button id="notes-import-btn" onclick="document.getElementById('importFile').click()" class="tool-btn sidebar-footer-btn" title="导入">↓</button>
+                    <button id="backup-config-btn" onclick="tools.openBackupConfig()" class="tool-btn sidebar-footer-btn" title="备份">⛁</button>
+                    <button id="shares-link" onclick="ui.loadShares()" class="tool-btn sidebar-footer-btn" title="分享">⇪</button>
+                    <a href="/help" class="tool-btn sidebar-footer-btn" title="帮助">?</a>
+                </div>
+            </div>
+
+            <!-- 用户信息区 -->
+            <div class="sidebar-user-panel workspace-brand-user-panel">
+                <div class="sidebar-user-row">
+                    <a id="user-display" class="sidebar-user-display" href="/member">
+                        加载中...
+                    </a>
+                    <div class="sidebar-user-links">
+                        <a href="/member" class="sidebar-user-link sidebar-user-link-accent">会员</a>
+                        <a href="javascript:ui.logout()" class="sidebar-user-link sidebar-user-link-danger">退出</a>
+                    </div>
+                </div>
+                <div class="sidebar-usage-row">
+                    <span>数据 <span id="note-usage-text">0/0</span></span>
+                    <span>空间 <span id="file-usage-text">0/0</span></span>
+                </div>
+                <div class="progress-bar">
+                    <div id="note-bar" class="workspace-progress-fill-note"></div>
+                    <div id="file-bar" class="workspace-progress-fill-file"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主编辑区 -->
+        <div id="main">
+            <!-- 快捷工具栏 -->
+            <div class="quick-tools workspace-brand-toolbar">
+                <div class="quick-tool-group" aria-label="历史与视图">
+                    <button class="tool-btn" onclick="ui.undo()" title="撤销 (Ctrl+Z)">↩️</button>
+                    <button class="tool-btn" onclick="ui.redo()" title="重做 (Ctrl+Y)">↪️</button>
+                    <button class="tool-btn" onclick="ui.toggleSplit()" title="分屏预览">↔️</button>
+                    <button id="btn-preview" class="tool-btn" onclick="ui.openDedicatedPreview()" title="弹出预览窗口">🖼️</button>
+                </div>
+                <div class="divider"></div>
+                <div class="quick-tool-group" aria-label="定位与选择">
+                    <button class="tool-btn" onclick="ui.scrollControl('top')" title="回到顶部">↑</button>
+                    <button class="tool-btn" onclick="ui.scrollControl('bottom')" title="回到底部">↓</button>
+                    <button class="tool-btn" onclick="tools.moveCursor('left')" title="左移光标">←</button>
+                    <button class="tool-btn" onclick="tools.moveCursor('right')" title="右移光标">→</button>
+                    <button class="tool-btn" onclick="tools.editorAction('copy')" title="复制内容">复</button>
+                    <button class="tool-btn" onclick="tools.editorAction('cut')" title="剪切内容">剪</button>
+                    <button class="tool-btn" onclick="tools.editorAction('paste')" title="粘贴内容">粘</button>
+                    <button class="tool-btn" onclick="tools.editorAction('selectAll')" title="全选内容">全</button>
+                    <button class="tool-btn" onclick="tools.editorAction('selectLine')" title="选择当前行">行</button>
+                </div>
+                <div class="divider"></div>
+                <div class="quick-tool-group" aria-label="插入与标记">
+                    <button class="tool-btn" onclick="tools.insertSymbol('#')" title="标题">#</button>
+                    <button class="tool-btn" onclick="tools.insertSymbol('*')" title="强调">*</button>
+                    <button class="tool-btn" onclick="tools.insertSymbol('`')" title="行内代码">`</button>
+                    <button class="tool-btn" onclick="tools.insertSymbol('>')" title="引用">></button>
+                    <button class="tool-btn" onclick="tools.insertSymbol('-')" title="列表">-</button>
+                    <button class="tool-btn" onclick="tools.insertTodo(false)" title="待办事项">☐</button>
+                    <button class="tool-btn" onclick="tools.insertTodo(true)" title="完成事项">☑</button>
+                    <button class="tool-btn" onclick="tools.insertSymbol('```\n', '\n```')" title="代码块">块</button>
+                    <button class="tool-btn" onclick="tools.insertSymbol('[', '](url)')" title="超链接">链</button>
+                    <button id="attachment-manager-btn" class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理">📂</button>
+                    <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号">🔢</button>
+                    <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行">↩️</button>
+                    <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">「</button>
+                    <button onclick="ui.setMarkerEnd()" class="tool-btn" title="标记终 (Alt+])">」</button>
+                </div>
+                <div class="divider"></div>
+                <div class="quick-tool-group" aria-label="搜索与导出">
+                    <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换">🔍</button>
+                    <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT">📃</button>
+                    <button class="tool-btn" onclick="tools.cleanFormat()" title="清理格式 (去除行末空格、多余空行)">🧹</button>
+                </div>
+            </div>
+
+            <!-- 查找替换栏 -->
+            <div id="search-replace-bar" class="search-bar hidden-by-default">
+                <div class="search-row">
+                    <input type="text" id="find-input" class="search-input" placeholder="查找内容..." onkeydown="if(event.key==='Enter') tools.findNext()" autocomplete="off">
+                    <button class="tool-btn" onclick="tools.findNext()" title="查找下一个">下一个</button>
+                </div>
+                <div class="search-row">
+                    <input type="text" id="replace-input" class="search-input" placeholder="替换为..." autocomplete="off">
+                    <button class="tool-btn tool-btn-accent" onclick="tools.replaceAll()">整篇</button>
+                    <button class="tool-btn tool-btn-orange" onclick="tools.replaceAllNotes()">全站</button>
+                </div>
+            </div>
+
+            <!-- 主视图 -->
+            <div id="main-view" class="edit-only">
+                <div id="editor-wrapper" class="editor-shell">
+                    <div id="editor-scroller">
+<div id="note-title-wrapper" class="note-title-wrapper workspace-brand-titlebar">
+    <input type="text" id="note-title-input" placeholder="分类_标题" class="note-title-input" oninput="ui.handleTitleInput(this.value)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-bwignore="true" data-1p-ignore="true">
+    <div id="note-meta" class="note-meta">创建：- · 修改：-</div>
+</div>
+                        <div id="editor-container" data-ms-editor="false" class="editor-container-fill"></div>
+                    </div>
+                </div>
+                <div id="preview-wrapper">
+                    <iframe id="preview-frame"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分享模态框 -->
+    <div id="share-modal" class="modal workspace-brand-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>我的分享</h3>
+                <button onclick="document.getElementById('share-modal').classList.remove('show')">×</button>
+            </div>
+            <div class="modal-body" id="share-list-body">
+                <div class="empty-state-inline">点击刷新列表加载分享内容</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 回收站模态框 -->
+    <div id="trash-modal" class="modal workspace-brand-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>回收站</h3>
+                <button onclick="document.getElementById('trash-modal').classList.remove('show')">×</button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="ui.loadTrash()">刷新</button>
+                <button class="btn btn-red" onclick="ui.emptyTrash()">清空回收站</button>
+            </div>
+            <div class="modal-body" id="trash-list-body">
+                <div class="empty-state-inline">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 附件选择器模态框 -->
+    <div id="attachment-picker-modal" class="modal workspace-brand-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>从附件库选择</h3>
+                <button onclick="document.getElementById('attachment-picker-modal').classList.remove('show')">×</button>
+            </div>
+            <div class="modal-actions modal-toolbar">
+                <input type="text" id="attachment-picker-search" class="modal-toolbar-input" name="attachment_picker_search" data-edge-autofill-field="false" placeholder="搜索附件..." oninput="api.filterAttachmentsForPicker()" autocomplete="off">
+                <button class="tool-btn modal-toolbar-btn" onclick="api.loadAttachmentsForPicker()">刷新列表</button>
+            </div>
+            <div class="modal-body">
+                <div id="attachment-picker-list" class="attachment-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 附件管理模态框 -->
+    <div id="attachment-modal" class="modal workspace-brand-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>附件管理</h3>
+                <button onclick="document.getElementById('attachment-modal').classList.remove('show')">×</button>
+            </div>
+            <!-- 上传进度条 -->
+            <div id="upload-progress-container" class="upload-progress-box">
+                <div class="upload-progress-head">
+                    <span id="upload-progress-text" class="upload-progress-label">正在上传...</span>
+                    <span id="upload-progress-percent" class="upload-progress-percent">0%</span>
+                </div>
+                <div class="upload-progress-track">
+                    <div id="upload-progress-bar" class="upload-progress-fill"></div>
+                </div>
+                <div id="upload-progress-details" class="upload-progress-detail"></div>
+            </div>
+            <div class="modal-actions modal-toolbar">
+                <label class="tool-btn btn-green upload-trigger">
+                    上传附件
+                    <input type="file" id="attachment-file-input" class="hidden-file-input" onchange="api.handleDirectUpload(this)">
+                </label>
+                <input type="text" id="attachment-search" class="modal-toolbar-input" name="attachment_search" data-edge-autofill-field="false" placeholder="搜索附件..." oninput="api.filterAttachments()" autocomplete="off">
+                <div class="toolbar-group">
+                    <button class="tool-btn toolbar-btn-sm" onclick="api.toggleAttachmentView()" id="view-toggle-btn" title="切换视图">列表</button>
+                    <button class="tool-btn toolbar-btn-sm" onclick="api.loadAttachments(true)" title="刷新列表">刷新</button>
+                </div>
+                <div class="toolbar-group toolbar-group-right">
+                    <button class="tool-btn toolbar-btn-sm toolbar-btn-warning" onclick="api.checkNotesWithInvalidAttachments()" title="检测引用无效附件的笔记">检测无效</button>
+                    <button class="tool-btn toolbar-btn-sm toolbar-btn-compact" onclick="api.findUnreferencedAttachments()" title="查询未被引用的附件">查询未引用</button>
+                    <button class="tool-btn toolbar-btn-sm toolbar-btn-compact" onclick="api.purgeAttachmentsInManager()" title="清理未引用">清理</button>
+                </div>
+            </div>
+            <!-- 未引用附件列表展示区域 -->
+            <div id="unreferenced-attachments-area" class="hidden-panel">
+                <div class="panel-header-inline">
+                    <span id="unreferenced-title" class="panel-title-sm">未引用附件列表</span>
+                    <button class="tool-btn panel-close-btn" onclick="api.closeUnreferencedArea()">关闭</button>
+                </div>
+                <div id="unreferenced-list" class="panel-scroll-body"></div>
+            </div>
+            <!-- 引用无效附件的笔记列表展示区域 -->
+            <div id="invalid-notes-area" class="hidden-panel">
+                <div class="panel-header-inline">
+                    <span id="invalid-notes-title" class="panel-title-sm panel-title-danger">引用无效附件的笔记</span>
+                    <button class="tool-btn panel-close-btn" onclick="api.closeInvalidNotesArea()">关闭</button>
+                </div>
+                <div id="invalid-notes-list" class="panel-scroll-body"></div>
+            </div>
+            <div class="modal-body">
+                <div id="attachment-container">
+                    <div id="attachment-list" class="attachment-grid"></div>
+                    <div id="attachment-list-view" class="attachment-list-view attachment-list-hidden"></div>
+                </div>
+                <div id="attachment-pagination" class="pagination pagination-hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
+    <script type="module" src="/js/app-entry.js?v=20250312-FINAL-FIX"></script>
+
+    <!-- 修改密码模态框 -->
+    <div id="change-password-modal" class="modal workspace-brand-modal hidden-by-default">
+        <div class="modal-content compact-modal">
+            <div class="modal-header">
+                <h3>修改密码</h3>
+                <button class="modal-close" onclick="ui.closeChangePasswordModal()">×</button>
+            </div>
+            <div class="modal-body compact-form-body">
+                <form id="change-password-form" class="compact-form" onsubmit="ui.changePassword(); return false;">
+                    <input type="text" id="username-input" name="username" autocomplete="username" class="hidden-file-input">
+                    <div class="form-group compact-group">
+                        <label for="old-password-input">旧密码</label>
+                        <input type="password" id="old-password-input" name="current-password" placeholder="输入当前密码" autocomplete="current-password">
+                    </div>
+                    <div class="form-group compact-group">
+                        <label for="new-password-input">新密码</label>
+                        <input type="password" id="new-password-input" name="new-password" placeholder="至少 6 位" autocomplete="new-password">
+                        <div class="hint">建议使用字母、数字和符号组合，提高账户安全性。</div>
+                    </div>
+                    <div class="form-group compact-group">
+                        <label for="confirm-password-input">确认新密码</label>
+                        <input type="password" id="confirm-password-input" name="confirm-password" placeholder="再次输入新密码" autocomplete="new-password">
+                    </div>
+                    <div id="change-password-error" class="compact-error hidden-by-default"></div>
+                    <div class="btn-group compact-btn-group">
+                        <button type="button" class="btn" onclick="ui.closeChangePasswordModal()">取消</button>
+                        <button type="submit" id="change-password-btn" class="btn btn-green">确认修改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2FA 设置模态框 -->
+    <div id="2fa-modal" class="modal workspace-brand-modal hidden-by-default">
+        <div class="modal-content compact-modal compact-2fa-modal">
+            <div class="modal-header">
+                <h3>两步验证设置</h3>
+                <button class="modal-close" onclick="ui.close2FAModal()">×</button>
+            </div>
+            <div class="modal-body compact-form-body" id="2fa-content">
+            </div>
+        </div>
+    </div>
+
+    <!-- 备份配置模态框 -->
+    <div id="backup-modal" class="modal workspace-brand-modal">
+        <div class="modal-content modal-content-narrow">
+            <div class="modal-header modal-header-compact">
+                <h2 class="form-section-title">💾 自动备份</h2>
+                <button class="modal-close modal-close-lg" onclick="document.getElementById('backup-modal').classList.remove('show')">×</button>
+            </div>
+            <div class="modal-body modal-body-padded">
+                <div id="backup-status-text" class="status-inline-box"></div>
+                <form id="backup-config-form" onsubmit="saveBackupConfig(event)">
+                    <!-- 基本设置 -->
+                    <div class="form-section">
+                        <div class="form-inline-wide">
+                            <input type="checkbox" id="backup-enabled" class="checkbox-auto">
+                            <span class="form-label-md">启用自动备份</span>
+                        </div>
+                        <div class="form-inline">
+                            <select id="backup-schedule" class="form-input form-input-flex">
+                                <option value="0 20 * * *">每天晚上8点</option>
+                                <option value="0 3 * * *">每天凌晨3点</option>
+                                <option value="0 3 * * 0">每周日凌晨3点</option>
+                                <option value="0 3 1 * *">每月1号凌晨3点</option>
+                                <option value="0 */6 * * *">每6小时</option>
+                                <option value="0 */12 * * *">每12小时</option>
+                            </select>
+                            <span class="form-hint-inline">⏰ UTC+8</span>
+                        </div>
+                    </div>
+
+                    <!-- WebDAV 配置 -->
+                    <div class="form-section">
+                        <div class="form-title-row">
+                            <h3 class="form-section-title">WebDAV 配置</h3>
+                            <button type="button" onclick="testWebDAVConnection()" class="form-btn-inline">测试连接</button>
+                        </div>
+                        <div class="form-stack">
+                            <div class="form-grid-2">
+                                <input type="text" id="backup-webdav-username" class="form-input" placeholder="用户名" autocomplete="username">
+                                <input type="password" id="backup-webdav-password" class="form-input" placeholder="密码" autocomplete="current-password">
+                            </div>
+                            <input type="url" id="backup-webdav-url" class="form-input" placeholder="https://dav.example.com" autocomplete="url">
+                        </div>
+                    </div>
+
+                    <!-- 备份选项 -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">备份选项</h3>
+                        <div class="form-grid-2">
+                            <div class="form-check-row">
+                                <input type="checkbox" id="backup-include-attachments" class="checkbox-auto" checked>
+                                <span class="form-label-sm">包含附件</span>
+                            </div>
+                            <div class="form-check-row">
+                                <input type="checkbox" id="backup-send-email" class="checkbox-auto" checked>
+                                <span class="form-label-sm">邮件通知</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 数据类型选择 -->
+                    <div class="form-section">
+                        <h3 class="form-section-title">数据类型</h3>
+                        <div class="form-grid-2">
+                            <div class="form-check-row">
+                                <input type="checkbox" id="backup-include-calendar" class="checkbox-auto" checked>
+                                <span class="form-label-sm">📅 日历事件</span>
+                            </div>
+                            <div class="form-check-row">
+                                <input type="checkbox" id="backup-include-todos" class="checkbox-auto" checked>
+                                <span class="form-label-sm">✓ 待办事项</span>
+                            </div>
+                            <div class="form-check-row">
+                                <input type="checkbox" id="backup-include-contacts" class="checkbox-auto" checked>
+                                <span class="form-label-sm">👤 联系人</span>
+                            </div>
+                            <div class="form-check-row">
+                                <input type="checkbox" id="backup-include-reminders" class="checkbox-auto" checked>
+                                <span class="form-label-sm">🔔 提醒设置</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 邮件配置 -->
+                    <div class="form-section">
+                        <input type="email" id="backup-email-address" class="form-input" placeholder="your@email.com" autocomplete="email">
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="form-actions-row">
+                        <button type="submit" class="btn-green form-action-btn">保存配置</button>
+                        <button type="button" onclick="backupNow()" class="btn-blue form-action-btn">立即备份</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 专门的预览窗口 -->
+    <div id="dedicated-preview-modal" class="modal workspace-brand-modal modal-z-preview">
+        <div class="modal-content modal-content-preview">
+            <div class="modal-header">
+                <h3 class="preview-header-title">文档预览</h3>
+                <div class="preview-header-actions">
+                    <button onclick="ui.printPreviewFromModal()" title="打印" class="preview-header-btn preview-header-btn-print">🖨️</button>
+                    <button onclick="ui.closeDedicatedPreview()" class="preview-header-btn preview-header-btn-close">×</button>
+                </div>
+            </div>
+            <div class="preview-frame-shell">
+                <iframe id="dedicated-preview-frame" class="preview-frame-full"></iframe>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

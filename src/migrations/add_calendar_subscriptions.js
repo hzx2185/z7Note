@@ -7,7 +7,7 @@ module.exports = {
     version: 4,
     description: '添加日历订阅表',
     migrate: async (db) => {
-        console.log('开始迁移: 添加日历订阅表...');
+        db.log('开始迁移: 添加日历订阅表...');
 
         // 创建日历订阅表
         await db.exec(`CREATE TABLE IF NOT EXISTS calendar_subscriptions (
@@ -31,6 +31,6 @@ module.exports = {
             await db.exec(`ALTER TABLE events ADD COLUMN subscriptionId TEXT`);
         }
 
-        console.log('迁移完成: 日历订阅表已创建');
+        db.log('迁移完成: 日历订阅表已创建');
     }
 };

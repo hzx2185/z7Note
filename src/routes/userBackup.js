@@ -7,9 +7,15 @@ const {
   performUserBackup,
   setupUserBackupCron
 } = require('../services/userExport');
+const { requirePlanCapability } = require('../middleware/memberAccess');
 
 // 直接读取环境变量，避免模块初始化顺序问题
 const dailyBackupLimit = parseInt(process.env.DAILY_BACKUP_LIMIT) || 0;
+
+router.use(requirePlanCapability('backupExportEnabled', { message: '当前套餐未开启备份导出功能' }));
+router.use('/test', requirePlanCapability('webdavEnabled', { message: '当前套餐未开启 WebDAV 功能' }));
+router.use('/now', requirePlanCapability('webdavEnabled', { message: '当前套餐未开启 WebDAV 功能' }));
+router.use('/config', requirePlanCapability('webdavEnabled', { message: '当前套餐未开启 WebDAV 功能' }));
 
 // 获取用户备份配置
 router.get('/config', async (req, res) => {

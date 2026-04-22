@@ -2,6 +2,7 @@
    * vCard 解析工具
    * 用于 CardDAV 联系人同步
    */
+  const log = require('./logger');
 
   class VCardParser {
     static normalizeWhitespace(text) {
@@ -218,7 +219,7 @@
             const contact = this.parse(block);
             contacts.push(contact);
           } catch (e) {
-            console.error('解析 vCard 块失败', e.message);
+            log('ERROR', '解析 vCard 块失败', { error: e.message, stack: e.stack });
           }
         }
       }

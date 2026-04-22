@@ -91,7 +91,7 @@ router.get('/month/:year/:month', async (req, res) => {
           festival: festivalInfo ? festivalInfo.name : null
         };
       } catch (error) {
-        console.error('计算农历失败:', dateStr, error);
+        log('ERROR', '计算单日农历失败', { date: dateStr, error: error.message, stack: error.stack });
         results[dateStr] = null;
       }
     }

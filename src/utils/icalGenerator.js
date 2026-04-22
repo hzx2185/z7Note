@@ -6,42 +6,16 @@
 const log = require('./logger');
 const TimeHelper = require('./timeHelper');
 const lunarHelper = require('./lunarHelper');
+const {
+  getReminderTrigger,
+  escapeICS,
+  formatLocalTime,
+  foldIcsLines,
+  mapPriorityToICal,
+  mapPriorityFromICal
+} = require('./icalShared');
 
 class ICalGenerator {
-  static getReminderTrigger(event) {
-    const preset = event.reminderPreset || (event.allDay ? 'same_day_9am' : '15m');
-    const timeZone = event.timezone || TimeHelper.getAppTimeZone();
-
-    switch (preset) {
-      case '15m':
-        if (event.allDay) {
-          const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
-            allDay: true
-          });
-          return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
-        }
-        return ':-PT15M';
-      case 'same_day_9am':
-        if (event.allDay) {
-          const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
-            allDay: true
-          });
-          return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
-        }
-        return ':-PT15M';
-      case 'one_day_9am':
-        if (event.allDay) {
-          const reminderTs = TimeHelper.getReminderPresetTs(event.startTime, preset, timeZone, {
-            allDay: true
-          });
-          return reminderTs ? `;VALUE=DATE-TIME:${TimeHelper.toIcalUTC(reminderTs)}` : null;
-        }
-        return ':-P1D';
-      default:
-        return null;
-    }
-  }
-
   static eventToICal(event) {
     const lines = [];
     lines.push('BEGIN:VEVENT');
@@ -60,14 +34,14 @@ class ICalGenerator {
       lines.push(`DTEND;VALUE=DATE:${TimeHelper.toIcalDate(endTs)}`);
     } else {
       // 使用本地时间格式 (带时区信息)
-      lines.push(`DTSTART;TZID=${tzid}:${this.formatLocalTime(event.startTime)}`);
+      lines.push(`DTSTART;TZID=${tzid}:${formatLocalTime(event.startTime, tzid)}`);
       if (event.endTime) {
-        lines.push(`DTEND;TZID=${tzid}:${this.formatLocalTime(event.endTime)}`);
+        lines.push(`DTEND;TZID=${tzid}:${formatLocalTime(event.endTime, tzid)}`);
       }
     }
 
-    if (event.title) lines.push(`SUMMARY:${this.escapeText(event.title)}`);
-    if (event.description) lines.push(`DESCRIPTION:${this.escapeText(event.description)}`);
+    if (event.title) lines.push(`SUMMARY:${escapeICS(event.title)}`);
+    if (event.description) lines.push(`DESCRIPTION:${escapeICS(event.description)}`);
 
     // 添加重复规则
     if (event.recurrence) {
@@ -99,18 +73,18 @@ class ICalGenerator {
     lines.push(`SEQUENCE:${Math.floor(event.updatedAt || 0)}`);
 
     // 提醒 (VALARM)
-    const reminderTrigger = this.getReminderTrigger(event);
+    const reminderTrigger = getReminderTrigger(event);
     if (reminderTrigger && (event.reminderEmail || event.reminderBrowser || event.reminderCaldav)) {
       lines.push('BEGIN:VALARM');
       lines.push(`X-WR-ALARMUID:ALARM-${event.id}`);
       lines.push('ACTION:DISPLAY');
-      lines.push(`DESCRIPTION:Reminder: ${this.escapeText(event.title || 'Event')}`);
+      lines.push(`DESCRIPTION:Reminder: ${escapeICS(event.title || 'Event')}`);
       lines.push(`TRIGGER${reminderTrigger}`);
       lines.push('END:VALARM');
     }
 
     lines.push('END:VEVENT');
-    return this.foldLines(lines.join('\r\n'));
+    return foldIcsLines(lines.join('\r\n'));
   }
 
   static todoToICal(todo) {
@@ -128,17 +102,17 @@ class ICalGenerator {
       }
     } else {
       if (todo.startTime) {
-        lines.push(`DTSTART;TZID=Asia/Shanghai:${this.formatLocalTime(todo.startTime)}`);
+        lines.push(`DTSTART;TZID=Asia/Shanghai:${formatLocalTime(todo.startTime, 'Asia/Shanghai')}`);
       }
       if (todo.dueDate) {
-        lines.push(`DUE;TZID=Asia/Shanghai:${this.formatLocalTime(todo.dueDate)}`);
+        lines.push(`DUE;TZID=Asia/Shanghai:${formatLocalTime(todo.dueDate, 'Asia/Shanghai')}`);
       }
     }
     
-    if (todo.title) lines.push(`SUMMARY:${this.escapeText(todo.title)}`);
-    if (todo.description) lines.push(`DESCRIPTION:${this.escapeText(todo.description)}`);
+    if (todo.title) lines.push(`SUMMARY:${escapeICS(todo.title)}`);
+    if (todo.description) lines.push(`DESCRIPTION:${escapeICS(todo.description)}`);
     
-    lines.push(`PRIORITY:${this.mapPriorityToICal(todo.priority || 5)}`);
+    lines.push(`PRIORITY:${mapPriorityToICal(todo.priority || 5)}`);
     lines.push(`STATUS:${todo.completed ? 'COMPLETED' : 'NEEDS-ACTION'}`);
     if (todo.completed) {
         lines.push(`COMPLETED:${TimeHelper.toIcalUTC(todo.updatedAt || Date.now()/1000)}`);
@@ -149,7 +123,7 @@ class ICalGenerator {
     
     lines.push(`SEQUENCE:${Math.floor(todo.updatedAt || 0)}`);
     lines.push('END:VTODO');
-    return this.foldLines(lines.join('\r\n'));
+    return foldIcsLines(lines.join('\r\n'));
   }
 
   static noteToICal(note) {
@@ -157,15 +131,15 @@ class ICalGenerator {
     lines.push('BEGIN:VJOURNAL');
     lines.push(`UID:${note.id}`);
     lines.push(`DTSTAMP:${TimeHelper.toIcalUTC(note.updatedAt || note.createdAt || Date.now()/1000)}`);
-    lines.push(`DTSTART;TZID=Asia/Shanghai:${this.formatLocalTime(note.updatedAt || note.createdAt || Date.now()/1000)}`);
+    lines.push(`DTSTART;TZID=Asia/Shanghai:${formatLocalTime(note.updatedAt || note.createdAt || Date.now() / 1000, 'Asia/Shanghai')}`);
     
-    if (note.title) lines.push(`SUMMARY:${this.escapeText(note.title)}`);
-    if (note.content) lines.push(`DESCRIPTION:${this.escapeText(note.content)}`);
+    if (note.title) lines.push(`SUMMARY:${escapeICS(note.title)}`);
+    if (note.content) lines.push(`DESCRIPTION:${escapeICS(note.content)}`);
     
     lines.push('STATUS:FINAL');
     lines.push(`SEQUENCE:${Math.floor(note.updatedAt || 0)}`);
     lines.push('END:VJOURNAL');
-    return this.foldLines(lines.join('\r\n'));
+    return foldIcsLines(lines.join('\r\n'));
   }
 
   static generateCalendar(events = [], todos = [], username = 'user', notes = []) {
@@ -196,7 +170,7 @@ class ICalGenerator {
     lines.push('END:VTIMEZONE');
 
     const calendarContent = lines.join('\r\n');
-    const parts = [this.foldLines(calendarContent)];
+    const parts = [foldIcsLines(calendarContent)];
 
     if (events && events.length > 0) {
       events.forEach(e => {
@@ -235,88 +209,9 @@ class ICalGenerator {
     return parts.join('\r\n');
   }
 
-  static escapeText(text) {
-    if (!text) return '';
-    return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
-  }
-
-  /**
-   * 折行处理 (RFC 5545)
-   * 每行不能超过 75 个字节,超过部分需另起一行并以空格开头
-   */
-  static foldLines(content) {
-    return content.split(/\r?\n/).map(line => {
-      if (line.length <= 75) return line;
-      let result = '';
-      let currentLine = line;
-      while (currentLine.length > 75) {
-        result += currentLine.substring(0, 75) + '\r\n ';
-        currentLine = currentLine.substring(75);
-      }
-      result += currentLine;
-      return result;
-    }).join('\r\n');
-  }
-
-  // 格式化本地时间 (YYYYMMDDTHHMMSS) - 显式使用 Asia/Shanghai 时区
-  static formatLocalTime(ts) {
-    if (!ts) return '';
-    const d = new Date(ts * 1000);
-    
-    try {
-      // 使用 Intl 确保无论服务器在什么时区,都按上海时区格式化
-      const formatter = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Shanghai',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: false
-      });
-      
-      const parts = formatter.formatToParts(d);
-      const getPart = (type) => parts.find(p => p.type === type).value;
-      
-      const y = getPart('year');
-      const m = getPart('month');
-      const day = getPart('day');
-      let h = getPart('hour');
-      if (h === '24') h = '00';
-      const min = getPart('minute');
-      const s = getPart('second');
-      
-      return `${y}${m}${day}T${h}${min}${s}`;
-    } catch (e) {
-      // 降级方案
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const h = String(d.getHours()).padStart(2, '0');
-      const min = String(d.getMinutes()).padStart(2, '0');
-      const s = String(d.getSeconds()).padStart(2, '0');
-      return `${y}${m}${day}T${h}${min}${s}`;
-    }
-  }
-
-  /**
-   * 将系统优先级映射到 iCal 优先级 (1-9)
-   * 系统: 1(高), 3(中), 5(低)
-   * iCal: 1(高), 5(中), 9(低), 0(未指定)
-   */
-  static mapPriorityToICal(priority) {
-    if (priority <= 1) return 1;
-    if (priority <= 3) return 5;
-    return 9;
-  }
-
-  /**
-   * 将 iCal 优先级映射到系统优先级
-   */
-  static mapPriorityFromICal(priority) {
-    const p = parseInt(priority);
-    if (p >= 1 && p <= 4) return 1;
-    if (p === 5) return 3;
-    if (p >= 6 && p <= 9) return 5;
-    return 5;
-  }
 }
+
+ICalGenerator.mapPriorityToICal = mapPriorityToICal;
+ICalGenerator.mapPriorityFromICal = mapPriorityFromICal;
 
 module.exports = ICalGenerator;

@@ -7,11 +7,16 @@ const path = require('path');
 const nodeFs = require('fs');
 
 const ROOT_DIR = path.resolve(__dirname, '../..');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(ROOT_DIR, 'data');
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
-const LOGS_DIR = path.join(ROOT_DIR, 'logs');
+const LOGS_DIR = process.env.LOGS_DIR
+  ? path.resolve(process.env.LOGS_DIR)
+  : path.join(ROOT_DIR, 'logs');
+const isProduction = process.env.NODE_ENV === 'production';
 
 // 确保日志目录存在
 nodeFs.mkdirSync(LOGS_DIR, { recursive: true });
@@ -85,6 +90,9 @@ const config = {
 
   // 管理员用户 (默认为 admin)
   adminUsers: (process.env.ADMIN_USER || 'admin').split(',').map(u => u.trim()),
+  adminRegistrationToken: process.env.ADMIN_REGISTRATION_TOKEN || '',
+  requireAdminRegistrationToken: isProduction || !!process.env.ADMIN_REGISTRATION_TOKEN,
+  isProduction,
 
   // 每日备份限制 (默认不限制: 0)
   dailyBackupLimit: process.env.DAILY_BACKUP_LIMIT !== undefined ? parseInt(process.env.DAILY_BACKUP_LIMIT) : 0,
@@ -129,6 +137,14 @@ const config = {
   validateEnv() {
     if (!['sqlite'].includes(this.database.dialect)) {
       throw new Error(`不支持的 DB_DIALECT: ${this.database.dialect}`);
+    }
+
+    if (this.isProduction && !process.env.JWT_SECRET) {
+      throw new Error('生产环境必须设置 JWT_SECRET');
+    }
+
+    if (this.requireAdminRegistrationToken && !this.adminRegistrationToken) {
+      throw new Error('启用管理员注册保护时必须设置 ADMIN_REGISTRATION_TOKEN');
     }
   }
 };

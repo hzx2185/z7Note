@@ -815,20 +815,21 @@ async function loadBackupConfig() {
                     timeText = '刚刚';
                 }
 
-                statusEl.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;">
+                statusEl.innerHTML = `<div class="backup-status-row">
                     <span>上次备份: <strong>${formattedTime}</strong></span>
-                    <span style="color:var(--accent);font-size:11px;">${timeText}</span>
+                    <span class="backup-status-relative">${timeText}</span>
                 </div>`;
                 statusEl.style.display = 'block';
-                statusEl.style.background = config.enabled ? 'rgba(34, 197, 94, 0.1)' : 'var(--side)';
-                statusEl.style.color = config.enabled ? 'var(--green)' : 'var(--gray)';
+                statusEl.classList.remove('backup-status-warning', 'backup-status-idle', 'backup-status-enabled');
+                statusEl.classList.add(config.enabled ? 'backup-status-enabled' : 'backup-status-idle');
             } else if (config.enabled) {
                 statusEl.innerHTML = '<span>暂未备份过数据</span>';
                 statusEl.style.display = 'block';
-                statusEl.style.background = 'rgba(234, 179, 8, 0.1)';
-                statusEl.style.color = 'var(--orange)';
+                statusEl.classList.remove('backup-status-enabled', 'backup-status-idle');
+                statusEl.classList.add('backup-status-warning');
             } else {
                 statusEl.style.display = 'none';
+                statusEl.classList.remove('backup-status-enabled', 'backup-status-idle', 'backup-status-warning');
             }
         }
     } catch (e) {

@@ -7,8 +7,30 @@ const { getUserReminderSettings, updateUserReminderSettings, checkAndSendPending
 const log = require('../utils/logger');
 const db = require('../db/client');
 const config = require('../config');
+const { loadUserPlanCapabilities, requirePlanCapability } = require('../middleware/memberAccess');
 
 const router = express.Router();
+
+router.use(requirePlanCapability('remindersEnabled', { message: '当前套餐未开启提醒功能' }));
+
+async function validateReminderChannels(req, res, next) {
+  try {
+    const { capabilities } = await loadUserPlanCapabilities(req.user);
+    const body = req.body || {};
+    const source = body.remindersData?.reminders || body;
+
+    if ((source.emailReminderEnabled === true || source.emailReminderEnabled === 1) && !capabilities.emailRemindersEnabled) {
+      return res.status(403).json({ error: '当前套餐未开启邮件提醒' });
+    }
+    if ((source.caldavReminderEnabled === true || source.caldavReminderEnabled === 1) && !capabilities.caldavRemindersEnabled) {
+      return res.status(403).json({ error: '当前套餐未开启 CalDAV 提醒' });
+    }
+
+    return next();
+  } catch (error) {
+    return res.status(500).json({ error: '提醒权限校验失败' });
+  }
+}
 
 /**
  * 获取用户提醒设置
@@ -26,7 +48,7 @@ router.get('/', async (req, res) => {
 /**
  * 更新用户提醒设置
  */
-router.put('/', async (req, res) => {
+router.put('/', validateReminderChannels, async (req, res) => {
   try {
     const settings = await updateUserReminderSettings(req.user, req.body);
     res.json(settings);
@@ -103,7 +125,7 @@ router.delete('/history', async (req, res) => {
 /**
  * 导入提醒设置
  */
-router.post('/import', async (req, res) => {
+router.post('/import', validateReminderChannels, async (req, res) => {
   try {
     const { remindersData } = req.body;
     if (!remindersData || !remindersData.reminders) {

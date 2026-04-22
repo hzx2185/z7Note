@@ -25,7 +25,7 @@ const APIManager = {
             return;
         }
         modal.classList.add('show');
-        container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;">加载中...</div>';
+        container.innerHTML = '<div class="attachment-picker-state">加载中...</div>';
         try {
             const res = await fetchWithTimeout('/api/attachments');
             if (!res.ok) throw new Error('list fetch failed');
@@ -35,14 +35,14 @@ const APIManager = {
             this.attachmentsCache = files || [];
 
             if (!files || files.length === 0) {
-                container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--gray);">暂无附件</div>';
+                container.innerHTML = '<div class="attachment-picker-state attachment-picker-state-muted">暂无附件</div>';
                 return;
             }
 
             this.renderAttachmentPicker(files);
         } catch (e) {
             console.error('loadAttachmentsForPicker error', e);
-            container.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--red);">加载失败</div>';
+            container.innerHTML = '<div class="attachment-picker-state attachment-picker-state-danger">加载失败</div>';
         }
     },
 
@@ -61,10 +61,10 @@ const APIManager = {
             return `
                 <div class="file-card" onclick="api.insertAttachmentToEditor('${encodedName}', ${isImage})">
                     <div class="file-preview">
-                        ${isImage ? `<img src="${rawUrl}">` : `<span style="font-size:24px">📄</span>`}
+                        ${isImage ? `<img src="${rawUrl}">` : `<span class="file-icon">📄</span>`}
                     </div>
                     <div class="file-name" title="${name}">${name}</div>
-                    <div style="font-size:12px; color:var(--gray);">${sizeText}</div>
+                    <div class="file-meta">${sizeText}</div>
                 </div>
             `;
         }).join('');
@@ -249,7 +249,7 @@ const APIManager = {
         } catch (e) {
             const container = document.getElementById('attachment-list');
             if (container) {
-                container.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--red);">加载失败</div>';
+                container.innerHTML = '<div class="attachment-picker-state attachment-picker-state-danger">加载失败</div>';
             }
         }
     },
@@ -263,8 +263,8 @@ const APIManager = {
         const viewToggleBtn = document.getElementById('view-toggle-btn');
 
         if (!files || files.length === 0) {
-            if (container) container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--gray);">暂无附件</div>';
-            if (listView) listView.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray);">暂无附件</div>';
+            if (container) container.innerHTML = '<div class="attachment-picker-state attachment-picker-state-muted">暂无附件</div>';
+            if (listView) listView.innerHTML = '<div class="attachment-picker-state attachment-picker-state-muted">暂无附件</div>';
             if (pagination) pagination.style.display = 'none';
             return;
         }
@@ -281,7 +281,7 @@ const APIManager = {
                 pagination.style.display = 'flex';
                 pagination.innerHTML = `
                     <button class="tool-btn" onclick="api.goToPage(${this.attachmentCurrentPage - 1})" ${this.attachmentCurrentPage === 1 ? 'disabled' : ''}>上一页</button>
-                    <span style="font-size:12px;color:var(--gray);">${this.attachmentCurrentPage} / ${totalPages}</span>
+                    <span class="file-meta">${this.attachmentCurrentPage} / ${totalPages}</span>
                     <button class="tool-btn" onclick="api.goToPage(${this.attachmentCurrentPage + 1})" ${this.attachmentCurrentPage === totalPages ? 'disabled' : ''}>下一页</button>
                 `;
             } else {
@@ -321,20 +321,19 @@ const APIManager = {
         
         // 检查是否为无效附件
         const isInvalid = this.invalidAttachmentsCache.some(inv => inv.name === name);
-        const invalidStyle = isInvalid ? 'border: 2px solid var(--red); opacity: 0.7;' : '';
-        const invalidBadge = isInvalid ? '<span class="badge" style="background:var(--red);color:white;">无效</span>' : '';
+        const invalidBadge = isInvalid ? '<span class="badge badge-danger">无效</span>' : '';
 
         return `
-            <div class="file-card" style="${invalidStyle}">
+            <div class="file-card ${isInvalid ? 'attachment-invalid' : ''}">
                 <div class="file-preview">
-                    ${isImage ? `<img src="${rawUrl}" loading="lazy">` : `<span style="font-size:24px">📄</span>`}
+                    ${isImage ? `<img src="${rawUrl}" loading="lazy">` : `<span class="file-icon">📄</span>`}
                 </div>
                 <div class="file-name" title="${name}" onclick="window.open('${rawUrl}', '_blank')">${name} ${invalidBadge}</div>
-                <div style="font-size:11px; color:var(--gray);">${sizeText}</div>
-                <div style="font-size:11px; color:var(--gray);">${timeText}</div>
+                <div class="file-meta-sm">${sizeText}</div>
+                <div class="file-meta-sm">${timeText}</div>
                 <div class="file-actions">
-                    <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="color:var(--green);">分享</button>
-                    <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="color:var(--accent);">插入</button>
+                    <button class="tool-btn tool-btn-share" onclick="api.shareAttachment('${encodedName}')" title="分享链接">分享</button>
+                    <button class="tool-btn tool-btn-insert" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入">插入</button>
                     <button class="tool-btn" onclick="api.renameAttachment('${encodedName}')" title="重命名">重命名</button>
                     <button class="tool-btn btn-danger" onclick="api.deleteAttachment('${encodedName}')" title="删除">删除</button>
                 </div>
@@ -353,20 +352,19 @@ const APIManager = {
 
         // 检查是否为无效附件
         const isInvalid = this.invalidAttachmentsCache.some(inv => inv.name === name);
-        const invalidStyle = isInvalid ? 'border: 1px solid var(--red); opacity: 0.8;' : '';
-        const invalidBadge = isInvalid ? '<span class="badge" style="background:var(--red);color:white;margin-left:4px;">无效</span>' : '';
+        const invalidBadge = isInvalid ? '<span class="badge badge-danger badge-inline-offset">无效</span>' : '';
 
         return `
-            <div class="attachment-list-item" style="${invalidStyle}">
+            <div class="attachment-list-item ${isInvalid ? 'attachment-invalid-list' : ''}">
                 <div class="file-preview">
-                    ${isImage ? `<img src="${rawUrl}" loading="lazy">` : `<span style="font-size:18px">📄</span>`}
+                    ${isImage ? `<img src="${rawUrl}" loading="lazy">` : `<span class="file-icon-sm">📄</span>`}
                 </div>
                 <div class="file-name" onclick="window.open('${rawUrl}', '_blank')" title="${name}">${name} ${invalidBadge}</div>
-                <div style="font-size:11px; color:var(--gray); flex-shrink:0;">${sizeText}</div>
-                <div style="font-size:11px; color:var(--gray); flex-shrink:0; min-width:132px; text-align:right;" title="${timeText}">${timeText}</div>
+                <div class="file-meta-sm file-meta-shrink">${sizeText}</div>
+                <div class="file-meta-sm file-meta-shrink file-time-meta" title="${timeText}">${timeText}</div>
                 <div class="file-actions">
-                    <button class="tool-btn" onclick="api.shareAttachment('${encodedName}')" title="分享链接" style="color:var(--green);">分享</button>
-                    <button class="tool-btn" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入" style="color:var(--accent);">插入</button>
+                    <button class="tool-btn tool-btn-share" onclick="api.shareAttachment('${encodedName}')" title="分享链接">分享</button>
+                    <button class="tool-btn tool-btn-insert" onclick="api.insertAttachmentToEditorFromManager('${encodedName}', ${isImage})" title="插入">插入</button>
                     <button class="tool-btn" onclick="api.renameAttachment('${encodedName}')" title="重命名">重命名</button>
                     <button class="tool-btn btn-danger" onclick="api.deleteAttachment('${encodedName}')" title="删除">删除</button>
                 </div>
@@ -649,14 +647,14 @@ const APIManager = {
         if (unreferenced.length === 0) {
             title.textContent = '未引用附件列表 (0)';
             title.style.color = 'var(--green)';
-            list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--gray);font-size:12px;">所有附件都已被引用 ✅</div>';
+            list.innerHTML = '<div class="attachment-audit-state attachment-audit-state-success">所有附件都已被引用 ✅</div>';
         } else {
             title.textContent = `未引用附件列表 (${unreferenced.length})`;
             title.style.color = 'var(--orange)';
             list.innerHTML = unreferenced.map(att => `
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(128,128,128,0.2);">
-                    <span style="font-size:12px;color:var(--text);" title="${att.name}">${att.name}</span>
-                    <span style="font-size:11px;color:var(--gray);flex-shrink:0;">${att.size}</span>
+                <div class="attachment-audit-row">
+                    <span class="attachment-audit-name" title="${att.name}">${att.name}</span>
+                    <span class="file-meta-sm file-meta-shrink">${att.size}</span>
                 </div>
             `).join('');
         }
@@ -1246,12 +1244,11 @@ const APIManager = {
             searchArea = document.createElement('div');
             searchArea.id = 'share-search-area';
             searchArea.innerHTML = `
-                <div style="padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                    <button onclick="api.loadShares()" style="background: var(--accent); color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap;">刷新列表</button>
-                    <input type="text" id="share-search-input" placeholder="搜索分享..." 
-                        style="flex: 1; min-width: 120px; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px;"
+                <div class="share-search-bar">
+                    <button onclick="api.loadShares()" class="share-action-btn refresh">刷新列表</button>
+                    <input type="text" id="share-search-input" class="share-search-input" placeholder="搜索分享..." 
                         oninput="api.filterShares(this.value)" onkeydown="if(event.key==='Enter') api.filterShares(this.value)">
-                    <button onclick="api.batchRevokeShares()" style="background: var(--red); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap;">批量删除</button>
+                    <button onclick="api.batchRevokeShares()" class="share-action-btn delete">批量删除</button>
                 </div>
             `;
             listBody.appendChild(searchArea);
@@ -1266,7 +1263,7 @@ const APIManager = {
         }
         
         // 显示加载中
-        listContainer.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray);">加载中...</div>';
+        listContainer.innerHTML = '<div class="share-list-state">加载中...</div>';
 
         try {
             const res = await fetchWithTimeout('/api/share/list');
@@ -1277,7 +1274,7 @@ const APIManager = {
             const notesMap = new Map(notes.map(n => [n.id.toString(), n]));
 
             if (!shares || shares.length === 0) {
-                listContainer.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--gray);">暂无分享内容</div>';
+                listContainer.innerHTML = '<div class="share-list-state">暂无分享内容</div>';
                 return;
             }
 
@@ -1288,7 +1285,7 @@ const APIManager = {
             api.renderShareList(shares, notesMap);
         } catch (e) {
             console.error('loadShares error', e);
-            listContainer.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--red);">加载失败，请稍后重试</div>';
+            listContainer.innerHTML = '<div class="share-list-state share-list-state-danger">加载失败，请稍后重试</div>';
         }
     },
 
@@ -1306,14 +1303,14 @@ const APIManager = {
 
         // 表格头部
         const tableHeader = `
-            <div class="share-list-compact" style="display: table; width: 100%; table-layout: fixed; border-collapse: collapse;">
-                <div class="share-list-header" style="display: table-row; background: linear-gradient(to bottom, var(--bg), var(--border)); border-bottom: 2px solid var(--border);">
-                    <span class="share-col-type" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: 40px; text-align: center; font-size: 11px; font-weight: 600; color: var(--gray);">
-                        <input type="checkbox" id="share-select-all" onchange="api.toggleSelectAllShares(this.checked)" style="cursor: pointer;">
+            <div class="share-list-compact">
+                <div class="share-list-header">
+                    <span class="share-cell share-cell-header share-col-type">
+                        <input type="checkbox" id="share-select-all" onchange="api.toggleSelectAllShares(this.checked)">
                     </span>
-                    <span class="share-col-name" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: auto; font-size: 11px; font-weight: 600; color: var(--gray);">标题</span>
-                    <span class="share-col-expires" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: 75px; font-size: 11px; font-weight: 600; color: var(--gray);">有效期</span>
-                    <span class="share-col-actions" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: 100px; text-align: right; font-size: 11px; font-weight: 600; color: var(--gray);">操作</span>
+                    <span class="share-cell share-cell-header share-col-name">标题</span>
+                    <span class="share-cell share-cell-header share-col-expires">有效期</span>
+                    <span class="share-cell share-cell-header share-col-actions">操作</span>
                 </div>
         `;
 
@@ -1338,16 +1335,16 @@ const APIManager = {
             const shareUrl = `${location.protocol}//${location.host}/s/${s.token}`;
 
             return `
-                <div class="share-item" style="display: table-row;">
-                    <span class="share-col-type" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: 40px; text-align: center; font-size: 14px;">
-                        <input type="checkbox" class="share-select-checkbox" data-token="${s.token}" style="cursor: pointer;">
+                <div class="share-item">
+                    <span class="share-cell share-col-type">
+                        <input type="checkbox" class="share-select-checkbox" data-token="${s.token}">
                     </span>
-                    <span class="share-col-name" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: auto; color: var(--text); overflow: hidden; text-overflow: ellipsis; max-width: 0; font-size: 13px;" title="${escapedTitle}">${typeLabel} ${title}</span>
-                    <span class="share-col-expires" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: 75px; font-size: 11px; color: var(--gray); font-weight: 500;">${expiresText}</span>
-                    <span class="share-col-actions" style="display: table-cell; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; width: 100px; text-align: right;">
-                        <button onclick="api.showShareLink('${s.token}', '${escapedTitle}')" title="复制" style="background: transparent; border: 1px solid var(--border); color: var(--text); padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; min-width: 26px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 3px;">🔗</button>
-                        <button onclick="window.open('${shareUrl}')" title="打开" style="background: transparent; border: 1px solid var(--border); color: var(--text); padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; min-width: 26px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 3px;">👁</button>
-                        <button onclick="api.revokeShare('${s.token}', '${escapedTitle}')" title="删除" class="btn-del" style="background: transparent; border: 1px solid var(--border); color: var(--text); padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; min-width: 26px; height: 24px; display: inline-flex; align-items: center; justify-content: center; margin-right: 0;">🗑</button>
+                    <span class="share-cell share-col-name" title="${escapedTitle}">${typeLabel} ${title}</span>
+                    <span class="share-cell share-col-expires">${expiresText}</span>
+                    <span class="share-cell share-col-actions">
+                        <button onclick="api.showShareLink('${s.token}', '${escapedTitle}')" title="复制" class="share-action-icon">🔗</button>
+                        <button onclick="window.open('${shareUrl}')" title="打开" class="share-action-icon">👁</button>
+                        <button onclick="api.revokeShare('${s.token}', '${escapedTitle}')" title="删除" class="share-action-icon btn-del">🗑</button>
                     </span>
                 </div>
             `;
@@ -1360,14 +1357,14 @@ const APIManager = {
             for (let i = 1; i <= totalPages; i++) {
                 if (i === 1 || i === totalPages || (i >= page - 2 && i <= page + 2)) {
                     pageBtns.push(`<button onclick="api.renderShareList(api.filteredShares || api.allShares, ui.notes ? new Map(ui.notes.map(n => [n.id.toString(), n])) : new Map(), ${i})" 
-                        style="padding: 4px 10px; margin: 0 2px; background: ${i === page ? 'var(--accent)' : 'transparent'}; color: ${i === page ? 'white' : 'var(--text)'}; border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">${i}</button>`);
+                        class="share-pagination-btn ${i === page ? 'active' : ''}">${i}</button>`);
                 } else if (pageBtns.length > 0 && pageBtns[pageBtns.length - 1].includes('...') === false) {
-                    pageBtns.push('<span style="padding: 4px;">...</span>');
+                    pageBtns.push('<span class="share-pagination-ellipsis">...</span>');
                 }
             }
             pagination = `
-                <div style="padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: center; align-items: center; gap: 8px;">
-                    <span style="font-size: 12px; color: var(--gray);">共 ${shares.length} 条，第 ${page}/${totalPages} 页</span>
+                <div class="share-pagination">
+                    <span class="share-pagination-info">共 ${shares.length} 条，第 ${page}/${totalPages} 页</span>
                     ${pageBtns.join('')}
                 </div>
             `;
@@ -1431,7 +1428,7 @@ const APIManager = {
                 });
                 if (res.ok) successCount++;
             } catch (e) {
-                console.error('删除分享失败:', token, e);
+                console.error('删除分享失败:', e);
             }
         }
 
@@ -1660,7 +1657,7 @@ const APIManager = {
         if (problematicNotes.length === 0) {
             title.textContent = '引用无效附件的笔记 (0)';
             title.style.color = 'var(--green)';
-            list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--gray);font-size:12px;">所有笔记的附件引用均正常 ✅</div>';
+            list.innerHTML = '<div class="attachment-audit-state attachment-audit-state-success">所有笔记的附件引用均正常 ✅</div>';
         } else {
             title.textContent = `引用无效附件的笔记 (${problematicNotes.length})`;
             title.style.color = 'var(--red)';
@@ -1671,15 +1668,15 @@ const APIManager = {
                     displayTitle = displayTitle.split('_').slice(1).join('_').trim();
                 }
                 return `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(128,128,128,0.2);">
-                        <div style="flex:1;min-width:0;">
-                            <div style="font-size:12px;color:var(--text);cursor:pointer;" 
+                    <div class="attachment-audit-row attachment-audit-row-note">
+                        <div class="attachment-audit-copy">
+                            <div class="attachment-audit-link" 
                                  onclick="api.switchToNote('${note.id}');api.closeInvalidNotesArea();document.getElementById('attachment-modal').classList.remove('show');" 
                                  title="点击打开笔记">
                                 ${displayTitle}
-                                <span style="color:var(--red);margin-left:4px;">(${note.invalidCount}个无效)</span>
+                                <span class="attachment-audit-link-danger badge-inline-offset">(${note.invalidCount}个无效)</span>
                             </div>
-                            <div style="font-size:10px;color:var(--gray);margin-top:2px;">
+                            <div class="attachment-audit-detail">
                                 ${note.invalidAttachments.join(', ')}
                             </div>
                         </div>

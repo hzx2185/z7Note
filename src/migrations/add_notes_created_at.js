@@ -1,4 +1,5 @@
 const version = 23;
+const description = 'backfill notes createdAt column';
 
 async function migrate(db) {
   if (!(await db.schema.hasTable('notes'))) return;
@@ -14,5 +15,6 @@ async function migrate(db) {
 
 module.exports = {
   version,
+  description,
   migrate
 };

@@ -26,7 +26,7 @@ async function up(executor) {
     'CREATE INDEX IF NOT EXISTS idx_contacts_username_createdAt ON contacts(username, createdAt)'
   );
 
-  console.log('联系人表索引创建成功');
+  db.log('联系人表索引创建成功');
 }
 
 async function down(executor) {
@@ -35,7 +35,7 @@ async function down(executor) {
   await db.run('DROP INDEX IF EXISTS idx_contacts_username_fn');
   await db.run('DROP INDEX IF EXISTS idx_contacts_username_createdAt');
 
-  console.log('联系人表索引删除成功');
+  db.log('联系人表索引删除成功');
 }
 
 module.exports = {

@@ -9,8 +9,16 @@ const log = require('../utils/logger');
 const VCardGenerator = require('../utils/vCardGenerator');
 const VCardParser = require('../utils/vCardParser');
 const { basicAuthMiddleware } = require('../middleware/basicAuth');
+const { requirePlanCapability } = require('../middleware/memberAccess');
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  return basicAuthMiddleware(req, res, () => requirePlanCapability('carddavEnabled', { message: '当前套餐未开启 CardDAV 功能' })(req, res, next));
+});
 
 // XML 转义
 function esc(str) {

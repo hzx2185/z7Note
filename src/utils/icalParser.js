@@ -3,55 +3,12 @@
  */
 
 const log = require('./logger');
-const TimeHelper = require('./timeHelper');
+const ICalGenerator = require('./icalGenerator');
+const { inferReminderPreset, getTimezoneOffset } = require('./icalShared');
 
 class ICalParser {
-  static parseAbsoluteTrigger(trigger) {
-    const match = String(trigger || '').trim().toUpperCase().match(/(?:;VALUE=DATE-TIME:)?(\d{8}T\d{6}Z)$/);
-    if (!match) return null;
-
-    const value = match[1];
-    const year = Number(value.slice(0, 4));
-    const month = Number(value.slice(4, 6));
-    const day = Number(value.slice(6, 8));
-    const hour = Number(value.slice(9, 11));
-    const minute = Number(value.slice(11, 13));
-    const second = Number(value.slice(13, 15));
-    return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000);
-  }
-
   static inferReminderPreset(item, alarms) {
-    if (!Array.isArray(alarms) || alarms.length === 0) {
-      return 'none';
-    }
-
-    const displayAlarm = alarms.find(alarm => alarm && alarm.action !== 'EMAIL') || alarms[0];
-    const trigger = String(displayAlarm?.trigger || '').trim().toUpperCase();
-
-    if (trigger === '-PT15M') {
-      return '15m';
-    }
-
-    if (item.allDay) {
-      const timeZone = item.timezone || TimeHelper.getAppTimeZone();
-      const triggerTs = this.parseAbsoluteTrigger(trigger);
-      const sameDayTs = TimeHelper.getReminderPresetTs(item.startTime, 'same_day_9am', timeZone, { allDay: true });
-      const oneDayTs = TimeHelper.getReminderPresetTs(item.startTime, 'one_day_9am', timeZone, { allDay: true });
-      const fifteenMinuteTs = TimeHelper.getReminderPresetTs(item.startTime, '15m', timeZone, { allDay: true });
-
-      if (triggerTs && fifteenMinuteTs && Math.abs(triggerTs - fifteenMinuteTs) <= 60) {
-        return '15m';
-      }
-
-      if (triggerTs && sameDayTs && Math.abs(triggerTs - sameDayTs) <= 60) {
-        return 'same_day_9am';
-      }
-      if (triggerTs && oneDayTs && Math.abs(triggerTs - oneDayTs) <= 60) {
-        return 'one_day_9am';
-      }
-    }
-
-    return item.allDay ? 'same_day_9am' : '15m';
+    return inferReminderPreset(item, alarms);
   }
 
   /**
@@ -323,7 +280,7 @@ class ICalParser {
 
       return Object.keys(result).length > 0 ? result : null;
     } catch (e) {
-      console.error('解析RRULE失败:', rrule, e);
+      log('ERROR', '解析RRULE失败', { rrule, error: e.message, stack: e.stack });
       return null;
     }
   }
@@ -489,7 +446,7 @@ class ICalParser {
       if (params && params.TZID) {
         const timezone = params.TZID;
         // 处理常见时区
-        const offset = this.getTimezoneOffset(timezone);
+        const offset = getTimezoneOffset(timezone);
         if (offset !== null) {
           // 先构造本地时间的时间戳（当作UTC处理）
           const localTimestamp = Date.UTC(
@@ -518,39 +475,6 @@ class ICalParser {
       );
       return Math.floor(date.getTime() / 1000);
     }
-  }
-
-  /**
-   * 获取时区偏移（小时）
-   * @param {string} timezone - 时区ID，如 'Asia/Shanghai'
-   * @returns {number|null} - 相对于UTC的偏移小时数，东时区为正
-   */
-  static getTimezoneOffset(timezone) {
-    // 常见时区映射表
-    const timezoneMap = {
-      'Asia/Shanghai': 8,
-      'Asia/Chongqing': 8,
-      'Asia/Hong_Kong': 8,
-      'Asia/Taipei': 8,
-      'Asia/Singapore': 8,
-      'Asia/Tokyo': 9,
-      'Asia/Seoul': 9,
-      'Asia/Dubai': 4,
-      'Asia/Kolkata': 5.5,
-      'Europe/London': 0,
-      'Europe/Paris': 1,
-      'Europe/Berlin': 1,
-      'Europe/Moscow': 3,
-      'America/New_York': -5,
-      'America/Chicago': -6,
-      'America/Denver': -7,
-      'America/Los_Angeles': -8,
-      'America/Sao_Paulo': -3,
-      'Australia/Sydney': 10,
-      'Pacific/Auckland': 12
-    };
-    
-    return timezoneMap[timezone] !== undefined ? timezoneMap[timezone] : null;
   }
 
   /**

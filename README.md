@@ -21,7 +21,7 @@
   - 实时同步滚动
   - 代码高亮和行号显示
   - 智能标题解析和分类管理
-  - 快捷键支持（F1 查看快捷键）
+  - 常用快捷键说明已整合到帮助中心
   - 自动保存到云端
 
 - **🎯 标记功能**: 高效的内容选择和操作
@@ -361,10 +361,16 @@ npm install
 # 例如：
 # export PORT=3000
 # export ADMIN_USER=admin
+# export JWT_SECRET=change-this-in-production
+# export ADMIN_REGISTRATION_TOKEN=one-time-admin-bootstrap-token
 
 # 4. 启动服务
 npm start
 ```
+
+生产环境要求：
+- 必须设置 `JWT_SECRET`
+- 若允许注册 `ADMIN_USER` 中的用户名，必须设置 `ADMIN_REGISTRATION_TOKEN`
 
 ## 🔄 数据备份
 
@@ -533,7 +539,7 @@ docker-compose up -d
 
 ### 编辑器快捷键
 
-- `F1` - 显示快捷键帮助
+- 快捷键说明入口已迁移到帮助中心
 - `Ctrl/Cmd + Z` - 撤销
 - `Ctrl/Cmd + Y` 或 `Ctrl/Cmd + Shift + Z` - 重做
 - `Ctrl/Cmd + B` - 切换侧边栏

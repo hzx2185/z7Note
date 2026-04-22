@@ -7,7 +7,7 @@ module.exports = {
     version: 5,
     description: '添加提醒功能表和字段',
     migrate: async (db) => {
-        console.log('开始迁移: 添加提醒功能...');
+        db.log('开始迁移: 添加提醒功能...');
 
         // 创建提醒设置表
         await db.exec(`CREATE TABLE IF NOT EXISTS reminder_settings (
@@ -74,6 +74,6 @@ module.exports = {
         await db.exec(`CREATE INDEX IF NOT EXISTS idx_reminder_history_status ON reminder_history(status)`);
         await db.exec(`CREATE INDEX IF NOT EXISTS idx_reminder_history_reminder_time ON reminder_history(reminder_time)`);
 
-        console.log('迁移完成: 提醒功能已添加');
+        db.log('迁移完成: 提醒功能已添加');
     }
 };

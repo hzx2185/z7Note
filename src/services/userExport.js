@@ -88,7 +88,7 @@ async function exportUserData(username, backupConfig) {
 
     return { textFiles, notesCount: notes.length };
   } catch (e) {
-    console.error(`[用户导出] ${username} 文本导出失败:`, e);
+    log('ERROR', '用户文本导出失败', { username, error: e.message, stack: e.stack });
     throw e;
   }
 }
@@ -99,21 +99,21 @@ async function exportUserData(username, backupConfig) {
 async function performUserBackup(username, backupConfig) {
   // 1. 并发与重复触发检查
   if (performingBackups.has(username)) {
-    console.log(`[用户备份] ${username} 备份任务已在运行中，跳过。`);
+    log('INFO', '用户备份任务已在运行中，跳过', { username });
     return { success: false, reason: 'already_running' };
   }
 
   const nowTs = Date.now();
   const lastTime = lastRunTime.get(username) || 0;
   if (nowTs - lastTime < 300000) { // 5分钟冷却期
-    console.log(`[用户备份] ${username} 5分钟内刚执行过备份，跳过重复触发。`);
+    log('INFO', '用户备份处于冷却期，跳过重复触发', { username, cooldownMs: 300000 });
     return { success: false, reason: 'cooldown' };
   }
 
   performingBackups.add(username);
   const startTime = Date.now();
   const nodeFs = require('fs');
-  console.log(`[用户备份] ${username} 开始备份流程...`);
+  log('INFO', '用户备份流程开始', { username });
 
   try {
     // 2. 获取文本数据 (JSON/ICS/VCF)
@@ -183,7 +183,9 @@ ${fileList}
           subject: `[z7Note 备份] 数据已备份到 WebDAV`,
           text: emailBody
         });
-      } catch (e) { console.error(`[用户备份] ${username} 邮件发送失败:`, e.message); }
+      } catch (e) {
+        log('ERROR', '用户备份邮件发送失败', { username, error: e.message });
+      }
     }
 
     // 7. 更新状态
@@ -191,13 +193,11 @@ ${fileList}
     lastRunTime.set(username, Date.now());
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[用户备份] ${username} 全部完成，总耗时: ${duration}秒`);
     log('INFO', '用户备份成功', { username, path: folderPath, fileCount: totalFiles, duration: `${duration}s` });
 
     return { success: true, path: folderPath, fileCount: totalFiles };
   } catch (e) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.error(`[用户备份] ${username} 备份失败:`, e.message);
     log('ERROR', '用户备份失败', { username, error: e.message, duration: `${duration}s` });
     throw e;
   } finally {
@@ -300,7 +300,7 @@ function setupUserBackupCron(username, backupConfig) {
         oldTask.stop();
       }
     } catch (e) {
-      console.error(`[用户备份] 停止旧任务失败 ${username}:`, e);
+      log('ERROR', '停止旧的用户备份任务失败', { username, error: e.message, stack: e.stack });
     }
     userBackupTasks.delete(username);
   }

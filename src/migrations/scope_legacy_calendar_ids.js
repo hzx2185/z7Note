@@ -4,7 +4,7 @@ module.exports = {
   version: 17,
   description: '为历史外部日历 ID 增加用户命名空间',
   migrate: async (db) => {
-    console.log('开始迁移: 回填历史日历外部 ID 命名空间...');
+    db.log('开始迁移: 回填历史日历外部 ID 命名空间...');
 
     const rewriteTableIds = async (tableName) => {
       const rows = await db.all(`SELECT id, username FROM ${tableName}`);
@@ -37,7 +37,7 @@ module.exports = {
     const eventStats = await rewriteTableIds('events');
     const todoStats = await rewriteTableIds('todos');
 
-    console.log('迁移完成: 历史日历外部 ID 已回填', {
+    db.log('迁移完成: 历史日历外部 ID 已回填', {
       eventsMigrated: eventStats.migrated,
       eventsSkipped: eventStats.skipped,
       todosMigrated: todoStats.migrated,

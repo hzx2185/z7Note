@@ -1,5 +1,7 @@
 const config = require('../config');
 const { getSession, clearSessionCookie } = require('../services/session');
+const { syncUserMembershipState } = require('../services/memberService');
+const log = require('../utils/logger');
 
 // 检测重定向循环
 function checkRedirectLoop(req) {
@@ -8,7 +10,7 @@ function checkRedirectLoop(req) {
 
   // 如果从登录页面重定向到登录页面，说明存在循环
   if (referer.includes('/login.html') && currentPath === '/login.html') {
-    console.error('[AUTH] Detected redirect loop!');
+    log('ERROR', '检测到登录重定向循环', { referer, currentPath });
     return true;
   }
 
@@ -17,7 +19,7 @@ function checkRedirectLoop(req) {
   const redirects = redirectHistory.split(',').filter(Boolean);
 
   if (redirects.length > 5) {
-    console.error('[AUTH] Too many redirects detected!');
+    log('ERROR', '检测到过多重定向', { currentPath, redirectCount: redirects.length });
     return true;
   }
 
@@ -41,7 +43,7 @@ const auth = async (req, res, next) => {
       clearSessionCookie(req, res);
     }
   } catch (error) {
-    console.error('[AUTH] Session lookup failed:', error);
+    log('ERROR', '会话查询失败', { error: error.message, stack: error.stack });
     return res.status(500).json({ error: '会话校验失败，请稍后重试' });
   }
 
@@ -56,6 +58,11 @@ const auth = async (req, res, next) => {
 
   // 有用户信息，放行
   if (user) {
+    try {
+      await syncUserMembershipState(user);
+    } catch (error) {
+      log('ERROR', '同步会员状态失败', { username: user, error: error.message, stack: error.stack });
+    }
     req.user = user;
     return next();
   }
@@ -104,7 +111,7 @@ const adminAuth = async (req, res, next) => {
         req.sessionId = session.id;
       }
     } catch (error) {
-      console.error('[AUTH] Admin session lookup failed:', error);
+      log('ERROR', '管理员会话查询失败', { error: error.message, stack: error.stack });
       return res.status(500).send('Internal Server Error');
     }
   }

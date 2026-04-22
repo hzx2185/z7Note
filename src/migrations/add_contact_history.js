@@ -25,12 +25,12 @@ async function up(db) {
     CREATE INDEX IF NOT EXISTS idx_contact_history_username ON contact_history(username)
   `);
 
-  console.log('联系人历史记录表创建成功');
+  db.log('联系人历史记录表创建成功');
 }
 
 async function down(db) {
   await db.run('DROP TABLE IF EXISTS contact_history');
-  console.log('联系人历史记录表已删除');
+  db.log('联系人历史记录表已删除');
 }
 
 module.exports = {

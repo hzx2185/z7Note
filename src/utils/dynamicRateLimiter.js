@@ -2,6 +2,7 @@ const { getSystemConfig } = require('../services/systemConfig');
 
 // 存储每个IP的限流器
 const limiters = new Map();
+let cleanupTimer = null;
 
 /**
  * 获取适合的限流值
@@ -44,7 +45,6 @@ class IPLimiter {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
     this.requests = new Map();
-    this.cleanupInterval = setInterval(() => this.cleanup(), windowMs);
   }
 
   isAllowed(ip) {
@@ -86,10 +86,27 @@ class IPLimiter {
   }
 }
 
+function ensureCleanupTimer() {
+  if (cleanupTimer) {
+    return;
+  }
+
+  cleanupTimer = setInterval(() => {
+    for (const [key, limiter] of limiters.entries()) {
+      limiter.cleanup();
+      if (limiter.requests.size === 0) {
+        limiters.delete(key);
+      }
+    }
+  }, 60000);
+}
+
 /**
  * 获取或创建限流器
  */
 function getLimiter(ip, maxRequests) {
+  ensureCleanupTimer();
+
   if (!limiters.has(ip)) {
     const limiter = new IPLimiter(60000, maxRequests); // 1分钟窗口
     limiters.set(ip, limiter);
@@ -224,8 +241,9 @@ function createChunkUploadLimitMiddleware(loadSession) {
  * 清理所有限流器
  */
 function cleanupAllLimiters() {
-  for (const limiter of limiters.values()) {
-    clearInterval(limiter.cleanupInterval);
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
   }
   limiters.clear();
 }

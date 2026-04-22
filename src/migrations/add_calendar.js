@@ -7,7 +7,7 @@ module.exports = {
     version: 2,
     description: '添加待办事项和日历事件表',
     migrate: async (db) => {
-        console.log('开始迁移: 添加待办和日历表...');
+        db.log('开始迁移: 添加待办和日历表...');
 
         // 创建待办事项表
         await db.exec(`CREATE TABLE IF NOT EXISTS todos (
@@ -44,6 +44,6 @@ module.exports = {
         await db.exec(`CREATE INDEX IF NOT EXISTS idx_events_username ON events(username)`);
         await db.exec(`CREATE INDEX IF NOT EXISTS idx_events_startTime ON events(startTime)`);
 
-        console.log('迁移完成: 待办和日历表已创建');
+        db.log('迁移完成: 待办和日历表已创建');
     }
 };

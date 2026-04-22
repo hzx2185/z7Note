@@ -10,8 +10,17 @@ const ICalParser = require('../utils/icalParser');
 const { basicAuthMiddleware } = require('../middleware/basicAuth');
 const { broadcast } = require('./ws');
 const { scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
+const { requirePlanCapability } = require('../middleware/memberAccess');
+const { getItemQuotaState } = require('../services/itemQuotaService');
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  return basicAuthMiddleware(req, res, () => requirePlanCapability('caldavEnabled', { message: '当前套餐未开启 CalDAV 功能' })(req, res, next));
+});
 
 /**
  * 优化：防抖广播
@@ -25,6 +34,11 @@ function debouncedBroadcast(username) {
         broadcast('calendar_update', { username, type: 'sync' }, { targetUsername: username });
     }, 2000);
     debounceBroadcasts.set(username, timer);
+}
+
+function getItemQuotaErrorMessage(error) {
+  if (error?.message !== 'ITEM_QUOTA_EXCEEDED') return '套餐数量限制';
+  return `${error.label || '内容'}数量已达套餐上限 (${error.current || 0} / ${error.limit || 0})`;
 }
 
 // XML 转义
@@ -221,23 +235,52 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
         try { id = decodeURIComponent(id); } catch(e) {}
         const parsed = ICalParser.parse(req.body || '');
         const now = Math.floor(Date.now() / 1000);
+        const eventQuota = await getItemQuotaState(username, 'event');
+        const todoQuota = await getItemQuotaState(username, 'todo');
+        let nextEventCount = eventQuota.current;
+        let nextTodoCount = todoQuota.current;
         for (const e of parsed.events) {
             const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
             const eventId = scopeExternalCalendarId(username, e.id || id);
             const ex = await db.queryOne('SELECT id FROM events WHERE id IN (?, ?) AND username = ?', [e.id || id, eventId, username]);
             if (ex) await db.execute('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, reminderEmail=?, reminderBrowser=?, reminderCaldav=?, reminderPreset=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
-            else await db.execute('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, now]);
+            else {
+                if (eventQuota.limit > 0 && nextEventCount + 1 > eventQuota.limit) {
+                    const error = new Error('ITEM_QUOTA_EXCEEDED');
+                    error.label = eventQuota.label;
+                    error.limit = eventQuota.limit;
+                    error.current = nextEventCount;
+                    throw error;
+                }
+                await db.execute('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, now]);
+                nextEventCount += 1;
+            }
         }
         for (const t of parsed.todos) {
             const todoId = scopeExternalCalendarId(username, t.id || id);
             const ex = await db.queryOne('SELECT id FROM todos WHERE id IN (?, ?) AND username = ?', [t.id || id, todoId, username]);
             if (ex) await db.execute('UPDATE todos SET title=?, description=?, priority=?, dueDate=?, completed=?, updatedAt=? WHERE id=? AND username=?', [t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, ex.id, username]);
-            else await db.execute('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [todoId, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
+            else {
+                if (todoQuota.limit > 0 && nextTodoCount + 1 > todoQuota.limit) {
+                    const error = new Error('ITEM_QUOTA_EXCEEDED');
+                    error.label = todoQuota.label;
+                    error.limit = todoQuota.limit;
+                    error.current = nextTodoCount;
+                    throw error;
+                }
+                await db.execute('INSERT INTO todos (id, username, title, description, priority, dueDate, completed, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)', [todoId, username, t.title, t.description||'', t.priority||5, t.dueDate, t.completed?1:0, now, now]);
+                nextTodoCount += 1;
+            }
         }
         res.setHeader('ETag', `"${now}"`);
         res.status(201).end();
         debouncedBroadcast(username);
-    } catch (e) { res.status(500).end(); }
+    } catch (e) {
+        if (e.message === 'ITEM_QUOTA_EXCEEDED') {
+            return res.status(403).send(getItemQuotaErrorMessage(e));
+        }
+        res.status(500).end();
+    }
 });
 
 router.delete('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => {

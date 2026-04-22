@@ -1,9 +1,10 @@
 let sharp;
+const log = require('../utils/logger');
 try {
   sharp = require('sharp');
 } catch (e) {
   // sharp 未安装，压缩功能不可用
-  console.warn('sharp 模块未安装，图片压缩功能将被跳过。运行 npm install sharp 启用此功能。');
+  log('WARN', 'sharp 模块未安装，图片压缩功能将被跳过');
 }
 
 const config = require('../config');
@@ -85,7 +86,7 @@ async function compressImage(inputBuffer, mimeType) {
       compressionRatio: parseFloat(compressionRatio)
     };
   } catch (error) {
-    console.error('图片压缩失败:', error);
+    log('ERROR', '图片压缩失败', { error: error.message, stack: error.stack });
     // 压缩失败，返回原始数据
     return { buffer: inputBuffer, compressed: false };
   }
@@ -113,7 +114,7 @@ async function generateThumbnail(inputBuffer, size = 200) {
 
     return thumbnail;
   } catch (error) {
-    console.error('生成缩略图失败:', error);
+    log('ERROR', '生成缩略图失败', { error: error.message, stack: error.stack });
     return null;
   }
 }

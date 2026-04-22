@@ -2,6 +2,7 @@
  * 用户名验证中间件
  * 防止路径遍历攻击
  */
+const log = require('../utils/logger');
 
 /**
  * 验证用户名是否安全
@@ -33,7 +34,7 @@ function validateUsername(req, res, next) {
   const username = req.user;
   
   if (!isUsernameSafe(username)) {
-    console.error(`[Security] Path traversal attempt detected: ${username}`);
+    log('ERROR', '检测到用户名路径遍历尝试', { username });
     return res.status(400).json({ error: 'Invalid username' });
   }
   

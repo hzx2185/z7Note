@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="z7Note 帮助中心 - 新手入门指南和常见问题解答">
+  <title>帮助中心 - z7Note</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20250312-FINAL-FIX">
+  <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
+  <link rel="stylesheet" href="/css/site.css?v=20260419-style-system">
+</head>
+<body data-ui-surface="site" data-theme="default">
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="topbar-left">
+        <a class="brand" href="/">
+          <div class="brand-mark">Z</div>
+          <div>
+            <div>z7Note</div>
+            <div class="brand-meta">全栈自托管 · 开源免费</div>
+          </div>
+        </a>
+        <nav class="topnav">
+          <a class="btn btn-secondary" href="/">首页</a>
+          <a class="btn btn-secondary" href="/#features">功能介绍</a>
+          <a class="btn btn-secondary" href="/pricing">会员套餐</a>
+          <a class="btn btn-secondary" href="/member">会员中心</a>
+          <a class="btn btn-secondary" href="/help">帮助中心</a>
+          <a class="btn btn-secondary" href="/changelog">更新日志</a>
+        </nav>
+      </div>
+      <div class="topbar-right">
+        <div class="topnav-actions">
+          <a class="btn btn-secondary" href="/login.html" data-site-auth-link>登录</a>
+          <a class="btn btn-secondary site-hidden" href="/login.html?tab=register" data-site-register-link>注册</a>
+          <a class="btn btn-secondary site-hidden" href="#" data-site-logout-link>退出</a>
+          <div class="app-dropdown">
+            <a class="btn btn-primary" href="/app">打开应用 ⌄</a>
+            <div class="app-dropdown-menu">
+              <a class="app-dropdown-item" href="/app" data-site-module="notes">
+                <span class="app-dropdown-item-icon">📝</span>
+                笔记
+              </a>
+              <a class="app-dropdown-item" href="/calendar.html" data-site-module="calendar">
+                <span class="app-dropdown-item-icon">📅</span>
+                日历
+              </a>
+              <a class="app-dropdown-item" href="/contacts.html" data-site-module="contacts">
+                <span class="app-dropdown-item-icon">👥</span>
+                通讯录
+              </a>
+            </div>
+          </div>
+        </div>
+        <div data-theme-slot data-theme-mode="compact" data-theme-button-class="btn btn-secondary theme-toggle-compact"></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="shell">
+        <h1>帮助中心</h1>
+        <p>快速入门指南和常见问题解答，帮你更好地使用 z7Note</p>
+        <div class="site-search-box">
+          <span class="site-search-icon">🔍</span>
+          <input type="text" placeholder="搜索问题...">
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-header">
+          <h2>快速入门</h2>
+          <p>根据你的需求选择对应的指南</p>
+        </div>
+        <div class="guide-grid" id="help-guide-grid">
+          <article class="guide-card">
+            <div class="guide-icon">📝</div>
+            <h3>创建第一篇笔记</h3>
+            <p>了解如何创建笔记、编辑内容、使用 Markdown 语法和管理笔记分类。</p>
+            <a class="guide-link" href="/app" data-site-module="notes">进入笔记 →</a>
+          </article>
+          <article class="guide-card">
+            <div class="guide-icon">📅</div>
+            <h3>管理日程安排</h3>
+            <p>学习创建事件、设置重复规则、添加提醒和导入外部日历。</p>
+            <a class="guide-link" href="/calendar.html" data-site-module="calendar">进入日历 →</a>
+          </article>
+          <article class="guide-card">
+            <div class="guide-icon">👥</div>
+            <h3>管理联系人</h3>
+            <p>掌握添加联系人、导入导出名片、查重和分组管理的技巧。</p>
+            <a class="guide-link" href="/contacts.html" data-site-module="contacts">进入通讯录 →</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-header">
+          <h2>常见问题</h2>
+          <p>点击问题查看解答</p>
+        </div>
+        <div class="faq-list" id="help-faq-list">
+          <article class="faq-item">
+            <h3>如何开始使用 z7Note？</h3>
+            <p>注册账号后即可进入工作区创建笔记、安排日程和管理联系人。免费版已包含所有基础功能。</p>
+          </article>
+          <article class="faq-item">
+            <h3>数据存储在哪里？</h3>
+            <p>z7Note 支持自托管部署，你的所有数据都存储在自己的服务器上，完全自主可控。如果使用官方托管版本，数据则存储在云端。</p>
+          </article>
+          <article class="faq-item">
+            <h3>如何升级套餐？</h3>
+            <p>进入会员中心查看当前套餐和升级选项。Pro 版本提供更大存储空间和高级功能，Team 版本支持团队协作。</p>
+          </article>
+          <article class="faq-item">
+            <h3>支持哪些导入导出格式？</h3>
+            <p>笔记支持 Markdown 和 HTML 导出，日历支持 ICS 格式，联系人支持 vCard 导入导出。</p>
+          </article>
+          <article class="faq-item">
+            <h3>如何实现多设备同步？</h3>
+            <p>登录同一账号后，你的笔记、日历和联系人会自动在所有设备间同步。也可以使用 WebDAV 或 CalDAV 连接外部客户端。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-header">
+          <h2>笔记编辑与快捷操作</h2>
+          <p>原笔记页快捷键指南已合并到帮助中心，常用操作集中在这里查看。</p>
+        </div>
+        <div class="help-shortcuts-grid">
+          <article class="help-shortcuts-card">
+            <h3>标记功能</h3>
+            <table class="help-shortcuts-table">
+              <tr><td>标记起</td><td><kbd>Alt</kbd> + <kbd>[</kbd></td></tr>
+              <tr><td>标记终</td><td><kbd>Alt</kbd> + <kbd>]</kbd></td></tr>
+              <tr><td>复制区域</td><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd></td></tr>
+              <tr><td>剪切区域</td><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>X</kbd></td></tr>
+              <tr><td>删除区域</td><td><kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>D</kbd></td></tr>
+              <tr><td>清除标记</td><td><kbd>Escape</kbd></td></tr>
+            </table>
+            <p class="help-shortcuts-note">Mac 使用 <kbd>Cmd</kbd>，Windows / Linux 使用 <kbd>Ctrl</kbd>。</p>
+          </article>
+          <article class="help-shortcuts-card">
+            <h3>编辑操作</h3>
+            <table class="help-shortcuts-table">
+              <tr><td>撤销</td><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td></tr>
+              <tr><td>重做</td><td><kbd>Ctrl</kbd> + <kbd>Y</kbd></td></tr>
+              <tr><td>保存</td><td>自动保存</td></tr>
+              <tr><td>全选</td><td><kbd>Ctrl</kbd> + <kbd>A</kbd></td></tr>
+              <tr><td>复制</td><td><kbd>Ctrl</kbd> + <kbd>C</kbd></td></tr>
+              <tr><td>剪切</td><td><kbd>Ctrl</kbd> + <kbd>X</kbd></td></tr>
+              <tr><td>粘贴</td><td><kbd>Ctrl</kbd> + <kbd>V</kbd></td></tr>
+              <tr><td>查找</td><td><kbd>Ctrl</kbd> + <kbd>F</kbd></td></tr>
+            </table>
+            <p class="help-shortcuts-note">复制、剪切、粘贴依赖浏览器原生能力，先选中文本后使用更稳定。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <div class="section-header">
+          <h2>快捷入口</h2>
+        </div>
+        <div class="site-quick-links" id="help-quick-links">
+          <a class="site-quick-link" href="/pricing">套餐价格</a>
+          <a class="site-quick-link" href="/changelog">更新日志</a>
+          <a class="site-quick-link" href="/app">打开应用</a>
+          <a class="site-quick-link" href="/member">会员中心</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <strong>z7Note</strong>
+          <span>全栈自托管 · 开源免费</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+  <script type="module" src="/js/site-nav.js"></script>
+  <script type="module" src="/js/help-page.js"></script>
+</body>
+</html>

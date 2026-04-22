@@ -1,5 +1,5 @@
 const config = require('../../config');
-const { sqliteHasColumn } = require('../dialects/sqlite-introspection');
+const { sqliteHasColumn, sqliteHasTable } = require('../dialects/sqlite-introspection');
 const { runMigrations } = require('./migrations');
 const { SQLITE_DEFAULTS } = require('./sqlite-defaults');
 
@@ -19,6 +19,10 @@ async function createBaseTables(db) {
     password TEXT,
     email TEXT,
     dataCutoffTime INTEGER DEFAULT 0,
+    planKey TEXT DEFAULT 'free',
+    planExpiresAt INTEGER DEFAULT 0,
+    membershipNoticeSentAt INTEGER DEFAULT 0,
+    membershipExpiredNoticeSentAt INTEGER DEFAULT 0,
     noteLimit INTEGER DEFAULT ${config.defaultNoteLimit},
     fileLimit INTEGER DEFAULT ${config.defaultFileLimit},
     blogTitle TEXT,
@@ -112,6 +116,49 @@ async function createBaseTables(db) {
     createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochMilliseconds},
     expiresAt INTEGER DEFAULT ${SQLITE_DEFAULTS.oneHourFromNowMilliseconds}
   )`);
+
+  await db.exec(`CREATE TABLE IF NOT EXISTS redeem_codes (
+    code TEXT PRIMARY KEY,
+    planKey TEXT NOT NULL,
+    noteLimit INTEGER NOT NULL,
+    fileLimit INTEGER NOT NULL,
+    durationDays INTEGER DEFAULT 0,
+    maxRedemptions INTEGER DEFAULT 1,
+    redeemedCount INTEGER DEFAULT 0,
+    enabled INTEGER DEFAULT 1,
+    expiresAt INTEGER DEFAULT 0,
+    createdBy TEXT,
+    createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+    updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds}
+  )`);
+
+  await db.exec(`CREATE TABLE IF NOT EXISTS redeem_code_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL,
+    username TEXT NOT NULL,
+    planKey TEXT NOT NULL,
+    noteLimit INTEGER NOT NULL,
+    fileLimit INTEGER NOT NULL,
+    durationDays INTEGER DEFAULT 0,
+    planExpiresAt INTEGER DEFAULT 0,
+    redeemedAt INTEGER NOT NULL
+  )`);
+
+  await db.exec(`CREATE TABLE IF NOT EXISTS membership_operations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    action TEXT NOT NULL,
+    operator TEXT,
+    source TEXT,
+    planKey TEXT NOT NULL,
+    noteLimit INTEGER NOT NULL,
+    fileLimit INTEGER NOT NULL,
+    durationDays INTEGER DEFAULT 0,
+    planExpiresAt INTEGER DEFAULT 0,
+    redeemCode TEXT,
+    details TEXT,
+    createdAt INTEGER NOT NULL
+  )`);
 }
 
 async function createBaseIndexes(db) {
@@ -127,6 +174,13 @@ async function createBaseIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_username ON upload_chunks(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_expires ON upload_chunks(expiresAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_backup_config_enabled ON user_backup_config(enabled)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_redeem_codes_enabled ON redeem_codes(enabled)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_redeem_codes_created_at ON redeem_codes(createdAt)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_redeem_redemptions_username ON redeem_code_redemptions(username)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_redeem_redemptions_code ON redeem_code_redemptions(code)`);
+  await db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_redeem_redemptions_code_username ON redeem_code_redemptions(code, username)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_membership_operations_username ON membership_operations(username)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_membership_operations_created_at ON membership_operations(createdAt)`);
 }
 
 async function migrateBaseSchema(db) {
@@ -135,33 +189,80 @@ async function migrateBaseSchema(db) {
     await db.exec('UPDATE notes SET createdAt = COALESCE(NULLIF(createdAt, 0), updatedAt) WHERE createdAt IS NULL OR createdAt = 0');
   }
 
-  if (await sqliteHasColumn(db, 'events', 'recurrence') && !(await sqliteHasColumn(db, 'events', 'excludedDates'))) {
-    await db.exec('ALTER TABLE events ADD COLUMN excludedDates TEXT');
+  if (await sqliteHasTable(db, 'events')) {
+    if (await sqliteHasColumn(db, 'events', 'recurrence') && !(await sqliteHasColumn(db, 'events', 'excludedDates'))) {
+      await db.exec('ALTER TABLE events ADD COLUMN excludedDates TEXT');
+    }
+
+    if (!(await sqliteHasColumn(db, 'events', 'reminderPreset'))) {
+      await db.exec('ALTER TABLE events ADD COLUMN reminderPreset TEXT');
+    }
+
+    await db.exec(`
+      UPDATE events
+      SET reminderPreset = CASE WHEN allDay = 1 THEN 'same_day_9am' ELSE '15m' END
+      WHERE reminderPreset IS NULL OR trim(reminderPreset) = ''
+    `);
   }
 
-  if (!(await sqliteHasColumn(db, 'events', 'reminderPreset'))) {
-    await db.exec('ALTER TABLE events ADD COLUMN reminderPreset TEXT');
+  if (await sqliteHasTable(db, 'todos')) {
+    if (!(await sqliteHasColumn(db, 'todos', 'reminderPreset'))) {
+      await db.exec('ALTER TABLE todos ADD COLUMN reminderPreset TEXT');
+    }
+
+    await db.exec(`
+      UPDATE todos
+      SET reminderPreset = CASE WHEN allDay = 1 THEN 'same_day_9am' ELSE '15m' END
+      WHERE reminderPreset IS NULL OR trim(reminderPreset) = ''
+    `);
   }
-
-  if (!(await sqliteHasColumn(db, 'todos', 'reminderPreset'))) {
-    await db.exec('ALTER TABLE todos ADD COLUMN reminderPreset TEXT');
-  }
-
-  await db.exec(`
-    UPDATE events
-    SET reminderPreset = CASE WHEN allDay = 1 THEN 'same_day_9am' ELSE '15m' END
-    WHERE reminderPreset IS NULL OR trim(reminderPreset) = ''
-  `);
-
-  await db.exec(`
-    UPDATE todos
-    SET reminderPreset = CASE WHEN allDay = 1 THEN 'same_day_9am' ELSE '15m' END
-    WHERE reminderPreset IS NULL OR trim(reminderPreset) = ''
-  `);
 
   if (!(await sqliteHasColumn(db, 'users', 'noteLimit'))) {
     await db.exec(`ALTER TABLE users ADD COLUMN noteLimit INTEGER DEFAULT ${config.defaultNoteLimit}`);
     await db.exec(`ALTER TABLE users ADD COLUMN fileLimit INTEGER DEFAULT ${config.defaultFileLimit}`);
+  }
+
+  if (!(await sqliteHasColumn(db, 'users', 'planKey'))) {
+    await db.exec(`ALTER TABLE users ADD COLUMN planKey TEXT DEFAULT 'free'`);
+    await db.exec(`
+      UPDATE users
+      SET planKey = CASE
+        WHEN noteLimit >= 500 OR fileLimit >= 2000 THEN 'team'
+        WHEN noteLimit > ${config.defaultNoteLimit} OR fileLimit > ${config.defaultFileLimit} THEN 'pro'
+        ELSE 'free'
+      END
+      WHERE planKey IS NULL OR trim(planKey) = ''
+    `);
+  }
+
+  if (!(await sqliteHasColumn(db, 'users', 'planExpiresAt'))) {
+    await db.exec(`ALTER TABLE users ADD COLUMN planExpiresAt INTEGER DEFAULT 0`);
+  }
+
+  if (!(await sqliteHasColumn(db, 'users', 'membershipNoticeSentAt'))) {
+    await db.exec(`ALTER TABLE users ADD COLUMN membershipNoticeSentAt INTEGER DEFAULT 0`);
+  }
+
+  if (!(await sqliteHasColumn(db, 'users', 'membershipExpiredNoticeSentAt'))) {
+    await db.exec(`ALTER TABLE users ADD COLUMN membershipExpiredNoticeSentAt INTEGER DEFAULT 0`);
+  }
+
+  if (!(await sqliteHasTable(db, 'membership_operations'))) {
+    await db.exec(`CREATE TABLE membership_operations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      action TEXT NOT NULL,
+      operator TEXT,
+      source TEXT,
+      planKey TEXT NOT NULL,
+      noteLimit INTEGER NOT NULL,
+      fileLimit INTEGER NOT NULL,
+      durationDays INTEGER DEFAULT 0,
+      planExpiresAt INTEGER DEFAULT 0,
+      redeemCode TEXT,
+      details TEXT,
+      createdAt INTEGER NOT NULL
+    )`);
   }
 
   if (!(await sqliteHasColumn(db, 'users', 'blogTitle'))) {

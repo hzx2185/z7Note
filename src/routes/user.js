@@ -5,8 +5,31 @@ const db = require('../db/client');
 const log = require('../utils/logger');
 const { isUsernameSafe } = require('../middleware/validateUser');
 const { safePath, isValidFilename } = require('../utils/path');
+const { requirePlanCapability } = require('../middleware/memberAccess');
+const { listPlanConfigs } = require('../services/memberService');
 
 const router = express.Router();
+
+router.get('/api/public/member-plans', async (req, res) => {
+  try {
+    const plans = await listPlanConfigs();
+    res.json(plans.map((plan) => ({
+      planKey: plan.planKey,
+      planName: plan.planName,
+      planBadge: plan.planBadge,
+      planSummary: plan.planSummary,
+      noteLimit: Number(plan.noteLimit || 0),
+      fileLimit: Number(plan.fileLimit || 0),
+      eventLimit: Number(plan.eventLimit || 0),
+      todoLimit: Number(plan.todoLimit || 0),
+      contactLimit: Number(plan.contactLimit || 0),
+      features: Array.isArray(plan.features) ? plan.features : [],
+      capabilities: plan.capabilities || {}
+    })));
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load public member plans' });
+  }
+});
 
 function normalizeImportTimestamp(value, fallback) {
   if (typeof value === 'string') {
@@ -27,31 +50,34 @@ router.get('/api/user/stats', async (req, res) => {
     const username = req.user;
     if (!username) return res.status(401).json({ error: "未登录" });
     
-    // 获取当前年/月的起始时间戳
+    // 获取当前年/月/日的起始时间戳
     const now = new Date();
     const startOfYear = Math.floor(new Date(now.getFullYear(), 0, 1).getTime() / 1000);
     const startOfMonth = Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000);
+    const startOfDay = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
 
     const stats = {
       total: {},
       year: {},
-      month: {}
+      month: {},
+      day: {}
     };
 
     // 1. 总计
     stats.total.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ?', [username])).c;
     stats.total.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ?', [username])).c;
-    stats.total.notes = (await db.queryOne('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0', [username])).c;
 
     // 2. 本年
     stats.year.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfYear])).c;
     stats.year.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfYear, startOfYear])).c;
-    stats.year.notes = (await db.queryOne('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfYear])).c;
 
     // 3. 本月
     stats.month.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfMonth])).c;
     stats.month.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfMonth, startOfMonth])).c;
-    stats.month.notes = (await db.queryOne('SELECT COUNT(*) as c FROM notes WHERE username = ? AND deleted = 0 AND updatedAt >= ?', [username, startOfMonth])).c;
+
+    // 4. 今日
+    stats.day.events = (await db.queryOne('SELECT COUNT(*) as c FROM events WHERE username = ? AND startTime >= ?', [username, startOfDay])).c;
+    stats.day.todos = (await db.queryOne('SELECT COUNT(*) as c FROM todos WHERE username = ? AND (dueDate >= ? OR createdAt >= ?)', [username, startOfDay, startOfDay])).c;
 
     res.json(stats);
   } catch (e) {
@@ -81,7 +107,10 @@ router.post('/api/user/blog-config', async (req, res) => {
        blogShowFooter ? 1 : 0, customCSS || null, req.user]
     );
     res.json({ status: "ok" });
-  } catch (e) { console.error('Update blog config error:', e); res.status(500).json({ error: "更新失败" }); }
+  } catch (e) {
+    log('ERROR', '更新博客配置失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: "更新失败" });
+  }
 });
 
 // 更新用户编辑器类型
@@ -91,11 +120,14 @@ router.post('/api/user/editor-type', async (req, res) => {
     if (!['codemirror', 'textarea'].includes(editorType)) return res.status(400).json({ error: "无效的编辑器类型" });
     await db.execute('UPDATE users SET editorType = ? WHERE username = ?', [editorType, req.user]);
     res.json({ status: "ok" });
-  } catch (e) { console.error('Update editor type error:', e); res.status(500).json({ error: "更新失败" }); }
+  } catch (e) {
+    log('ERROR', '更新编辑器类型失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: "更新失败" });
+  }
 });
 
 // 导出用户数据
-router.get('/api/export', async (req, res) => {
+router.get('/api/export', requirePlanCapability('importExport', { message: '当前套餐未开启导出功能' }), async (req, res) => {
   try {
     // 验证用户名，防止路径遍历
     if (!isUsernameSafe(req.user)) {
@@ -130,15 +162,20 @@ router.get('/api/export', async (req, res) => {
           }
         }
       }
-    } catch (e) { console.error('读取附件目录失败:', e); }
+    } catch (e) {
+      log('ERROR', '读取导出附件目录失败', { username: req.user, error: e.message, stack: e.stack });
+    }
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="z7note-export-${Date.now()}.json"`);
     res.json({ version: 1, exportedAt: new Date().toISOString(), username: req.user, notes, attachments });
-  } catch (e) { console.error('Export error:', e); res.status(500).json({ error: "导出失败" }); }
+  } catch (e) {
+    log('ERROR', '导出用户数据失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: "导出失败" });
+  }
 });
 
 // 导入用户数据
-router.post('/api/import', async (req, res) => {
+router.post('/api/import', requirePlanCapability('importExport', { message: '当前套餐未开启导入功能' }), async (req, res) => {
   try {
     const { notes, attachments } = req.body;
     if (notes && Array.isArray(notes)) {
@@ -181,12 +218,17 @@ router.post('/api/import', async (req, res) => {
             continue;
           }
           await fs.writeFile(safePath(userDir, att.name), Buffer.from(att.content, 'base64')); 
-        } catch (e) { console.error('Failed to import attachment:', att.name, e); }
+        } catch (e) {
+          log('ERROR', '导入附件失败', { username: req.user, attachmentName: att?.name, error: e.message, stack: e.stack });
+        }
       }
     }
     log('INFO', '用户导入数据', { username: req.user, notesCount: notes?.length || 0, attachmentsCount: attachments?.length || 0 });
     res.json({ status: "ok", message: `导入完成 ${notes?.length || 0} 条笔记, ${attachments?.length || 0} 个附件` });
-  } catch (e) { console.error('Import error:', e); res.status(500).json({ error: "导入失败" }); }
+  } catch (e) {
+    log('ERROR', '导入用户数据失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: "导入失败" });
+  }
 });
 
 module.exports = router;

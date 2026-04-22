@@ -17,7 +17,7 @@ module.exports = {
       return;
     }
 
-    console.log('开始迁移: 规范 contact_history.contact_id 为 TEXT...');
+    db.log('开始迁移: 规范 contact_history.contact_id 为 TEXT...');
 
     await db.exec('BEGIN TRANSACTION');
 
@@ -47,7 +47,7 @@ module.exports = {
       await db.exec('CREATE INDEX IF NOT EXISTS idx_contact_history_username ON contact_history(username)');
 
       await db.exec('COMMIT');
-      console.log('迁移完成: contact_history.contact_id 已规范为 TEXT');
+      db.log('迁移完成: contact_history.contact_id 已规范为 TEXT');
     } catch (error) {
       await db.exec('ROLLBACK');
       throw error;

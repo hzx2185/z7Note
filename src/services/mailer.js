@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { getSmtpConfig } = require('./systemConfig');
+const log = require('../utils/logger');
 
 // 缓存 transporter 实例
 let cachedTransporter = null;
@@ -68,10 +69,10 @@ async function sendMail(options) {
       transporter.verify((error, success) => {
         clearTimeout(timeout);
         if (error) {
-          console.error('SMTP 连接验证失败:', error.message);
+          log('ERROR', 'SMTP 连接验证失败', { error: error.message });
           reject(new Error('SMTP 连接失败: ' + error.message));
         } else {
-          console.log('SMTP 连接验证成功');
+          log('INFO', 'SMTP 连接验证成功');
           resolve(success);
         }
       });
@@ -83,8 +84,7 @@ async function sendMail(options) {
     });
     return result;
   } catch (e) {
-    console.error('邮件发送失败:', e.message);
-    console.error('错误详情:', e);
+    log('ERROR', '邮件发送失败', { error: e.message, stack: e.stack });
     throw e;
   }
 }

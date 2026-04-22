@@ -13,8 +13,16 @@ const fs = require('fs').promises;
 const config = require('../config');
 const { broadcastNoteUpdate, broadcastNoteDelete } = require('./ws');
 const { safePath, isValidFilename } = require('../utils/path');
+const { requirePlanCapability } = require('../middleware/memberAccess');
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  return basicAuthMiddleware(req, res, () => requirePlanCapability('webdavEnabled', { message: '当前套餐未开启 WebDAV 功能' })(req, res, next));
+});
 
 // 辅助：转换附件路径（WebDAV → Web）
 function convertAttachmentPathToWeb(content, username) {
@@ -505,7 +513,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
     return res.status(405).end();
 
   } catch (err) {
-    console.error('[WebDAV Error]', err);
+    log('ERROR', 'WebDAV 请求处理失败', { error: err.message, stack: err.stack, path: req.path, method: req.method, username: req.user });
     res.status(500).send();
   }
 });

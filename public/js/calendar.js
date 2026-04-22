@@ -20,6 +20,10 @@ const CalendarApp = (function() {
       currentTab: 'all', // all, event, todo, note
       searchQuery: '',
       onlyRecurring: false,
+      expandedRangeTabs: {
+        all: false,
+        event: false
+      },
       // 滚动加载相关
       loadedDays: 0, // 已加载的天数（前后各多少天）
       isLoadingMore: false,
@@ -339,7 +343,18 @@ const CalendarApp = (function() {
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          let detail = '';
+          try {
+            const payload = await response.json();
+            detail = payload?.error || payload?.message || '';
+          } catch {
+            try {
+              detail = (await response.text()).trim();
+            } catch {
+              detail = '';
+            }
+          }
+          throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}: ${response.statusText}`);
         }
 
         return await response.json();
@@ -582,11 +597,9 @@ const CalendarApp = (function() {
       }
 
       // 绑定滚动加载事件
-      if (elements.sidebarContent) {
-        elements.sidebarContent.addEventListener('scroll', utils.debounce(() => {
-          this.handleScroll();
-        }, 100));
-      }
+      window.addEventListener('scroll', utils.debounce(() => {
+        this.handleScroll();
+      }, 100), { passive: true });
 
       // 初始加载
       this.loadInitialData();
@@ -596,6 +609,9 @@ const CalendarApp = (function() {
     // 切换标签
     async switchTab(tab) {
       state.sidebar.currentTab = tab;
+      if (tab === 'all' || tab === 'event') {
+        state.sidebar.expandedRangeTabs[tab] = false;
+      }
       elements.sidebarTabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
       });
@@ -726,13 +742,21 @@ const CalendarApp = (function() {
     // 加载初始数据（只加载选中日期当天）
     async loadInitialData() {
       const selectedDate = state.selectedDate;
-      const dateStr = utils.formatDate(selectedDate);
+      const preloadDays = 7;
       
-      state.sidebar.loadedDays = 0;
+      state.sidebar.dataByDate.clear();
+      state.sidebar.loadedDays = preloadDays;
       state.sidebar.hasMoreBefore = true;
       state.sidebar.hasMoreAfter = true;
 
-      await this.loadDayData(dateStr);
+      const pendingLoads = [];
+      for (let offset = -preloadDays; offset <= preloadDays; offset++) {
+        const targetDate = new Date(selectedDate);
+        targetDate.setDate(selectedDate.getDate() + offset);
+        pendingLoads.push(this.loadDayData(utils.formatDate(targetDate)));
+      }
+
+      await Promise.all(pendingLoads);
       this.render();
     },
 
@@ -836,7 +860,8 @@ const CalendarApp = (function() {
     async handleScroll() {
       if (state.sidebar.isLoadingMore) return;
 
-      const container = elements.sidebarContent;
+      const container = document.scrollingElement || document.documentElement;
+      if (!container) return;
       const scrollTop = container.scrollTop;
       const scrollHeight = container.scrollHeight;
       const clientHeight = container.clientHeight;
@@ -856,6 +881,9 @@ const CalendarApp = (function() {
       if (state.sidebar.isLoadingMore) return;
       
       state.sidebar.isLoadingMore = true;
+      if (state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') {
+        state.sidebar.expandedRangeTabs[state.sidebar.currentTab] = true;
+      }
       this.showLoadingIndicator(direction);
 
       try {
@@ -1006,11 +1034,15 @@ const CalendarApp = (function() {
       const selectedIndex = dates.indexOf(selectedDateStr);
       // 全天事件，使用UTC时间避免时区偏差
       let renderDates = dates;
-      if (selectedIndex >= 0 && state.sidebar.currentTab !== 'incomplete') {
-        // 渲染选中日期前后各loadedDays天（除了未完成标签）
-        const startIndex = Math.max(0, selectedIndex - state.sidebar.loadedDays);
-        const endIndex = Math.min(dates.length, selectedIndex + state.sidebar.loadedDays + 1);
-        renderDates = dates.slice(startIndex, endIndex);
+      if (selectedIndex >= 0) {
+        if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') && !state.sidebar.expandedRangeTabs[state.sidebar.currentTab]) {
+          renderDates = dates.slice(selectedIndex, selectedIndex + 1);
+        } else if (state.sidebar.currentTab !== 'incomplete') {
+          // 其他标签渲染选中日期前后各 loadedDays 天
+          const startIndex = Math.max(0, selectedIndex - state.sidebar.loadedDays);
+          const endIndex = Math.min(dates.length, selectedIndex + state.sidebar.loadedDays + 1);
+          renderDates = dates.slice(startIndex, endIndex);
+        }
       }
 
       // 对于待办标签，特殊处理：显示已完成、已逾期和进行中的待办事项，按时间排序
@@ -1402,7 +1434,7 @@ const CalendarApp = (function() {
       if (todo.allDay) {
         if (todo.dueDate) {
           const dateStr = utils.formatDate(new Date(todo.dueDate * 1000));
-          timeHtml = `<span style="margin-left:8px; font-size:10px; color:var(--gray)">截止: ${dateStr}</span>`;
+          timeHtml = `<span class="todo-time">截止: ${dateStr}</span>`;
         }
       } else {
         const formatTime = (ts) => {
@@ -1411,9 +1443,9 @@ const CalendarApp = (function() {
         };
         
         if (todo.startTime && todo.dueDate) {
-          timeHtml = `<span style="margin-left:8px; font-size:10px; color:var(--gray)">${formatTime(todo.startTime)} - ${formatTime(todo.dueDate)}</span>`;
+          timeHtml = `<span class="todo-time">${formatTime(todo.startTime)} - ${formatTime(todo.dueDate)}</span>`;
         } else if (todo.dueDate) {
-          timeHtml = `<span style="margin-left:8px; font-size:10px; color:var(--gray)">截止: ${formatTime(todo.dueDate)}</span>`;
+          timeHtml = `<span class="todo-time">截止: ${formatTime(todo.dueDate)}</span>`;
         }
       }
 
@@ -1421,13 +1453,13 @@ const CalendarApp = (function() {
       if (state.batchSelect.enabled) {
         const key = `todo_${todo.id}`;
         const isChecked = state.batchSelect.selectedItems.has(key);
-        checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${todo.id}" data-type="todo" ${isChecked ? 'checked' : ''} style="width: 14px; height: 14px; margin-right: 6px;">` + checkboxHtml;
+        checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${todo.id}" data-type="todo" ${isChecked ? 'checked' : ''}>` + checkboxHtml;
       }
 
       item.innerHTML = `
         ${checkboxHtml}
         <div class="todo-content" data-id="${todo.id}">
-          <div style="display:flex; align-items:center; justify-content:space-between">
+          <div class="todo-row">
             <div class="todo-title ${todo.completed ? 'completed' : ''}">${utils.escapeHtml(todo.title)}</div>
             ${timeHtml}
           </div>
@@ -1500,7 +1532,7 @@ const CalendarApp = (function() {
         const eventId = event.isRecurringInstance ? event._originalId : event.id;
         const key = `event_${eventId}`;
         const isChecked = state.batchSelect.selectedItems.has(key);
-        checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${eventId}" data-type="event" ${isChecked ? 'checked' : ''} style="width: 14px; height: 14px; margin-right: 6px;">`;
+        checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${eventId}" data-type="event" ${isChecked ? 'checked' : ''}>`;
       }
 
       item.innerHTML = `
@@ -1543,7 +1575,7 @@ const CalendarApp = (function() {
       if (state.batchSelect.enabled) {
         const key = `note_${note.id}`;
         const isChecked = state.batchSelect.selectedItems.has(key);
-        checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${note.id}" data-type="note" ${isChecked ? 'checked' : ''} style="width: 14px; height: 14px; margin-right: 6px;">`;
+        checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${note.id}" data-type="note" ${isChecked ? 'checked' : ''}>`;
       }
 
       item.innerHTML = `
@@ -1576,11 +1608,9 @@ const CalendarApp = (function() {
         if (data) {
           const eventsEl = document.getElementById('stats-events');
           const todosEl = document.getElementById('stats-todos');
-          const notesEl = document.getElementById('stats-notes');
           
-          if (eventsEl) eventsEl.textContent = `${data.month.events}·${data.year.events}·${data.total.events}`;
-          if (todosEl) todosEl.textContent = `${data.month.todos}·${data.year.todos}·${data.total.todos}`;
-          if (notesEl) notesEl.textContent = `${data.month.notes}·${data.year.notes}·${data.total.notes}`;
+          if (eventsEl) eventsEl.textContent = `${data.day.events}·${data.month.events}·${data.year.events}·${data.total.events}`;
+          if (todosEl) todosEl.textContent = `${data.day.todos}·${data.month.todos}·${data.year.todos}·${data.total.todos}`;
         }
       } catch (e) {
         console.error('加载统计失败:', e);
@@ -1833,6 +1863,17 @@ const CalendarApp = (function() {
     async updateMonthIndicators() {
       const year = state.currentDate.getFullYear();
       const month = state.currentDate.getMonth();
+      const monthLabel = `${year}年${month + 1}月`;
+
+      if (elements.currentMonth) {
+        elements.currentMonth.textContent = monthLabel;
+        elements.currentMonth.classList.remove('hidden');
+      }
+
+      const bannerText = document.getElementById('calendar-month-banner-text');
+      if (bannerText) {
+        bannerText.textContent = monthLabel;
+      }
 
       elements.monthView.querySelectorAll('.day-content').forEach(container => {
         container.innerHTML = '';
@@ -2412,9 +2453,7 @@ const CalendarApp = (function() {
       sidebarRenderer.refresh();
       
       // 滚动侧边栏内容到顶部
-      if (elements.sidebarContent) {
-        elements.sidebarContent.scrollTop = 0;
-      }
+      window.scrollTo({ top: 0, behavior: 'auto' });
     },
 
     async updateLunarInfo(dateStr) {
@@ -2709,7 +2748,7 @@ const CalendarApp = (function() {
         await dataLoader.loadMonthData(state.currentDate.getFullYear(), state.currentDate.getMonth());
       } catch (error) {
         console.error('保存事件失败:', error);
-        alert('保存失败，请重试');
+        alert(`保存失败：${error.message || '请重试'}`);
       }
     },
 
@@ -3680,16 +3719,16 @@ const CalendarApp = (function() {
       }
 
       container.innerHTML = subscriptions.map(sub => `
-        <div class="subscription-item" style="display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; background: var(--bg);">
-          <div style="width: 20px; height: 20px; border-radius: 4px; background: ${sub.color}; flex-shrink: 0;"></div>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-weight: 600; font-size: 13px; color: var(--text);">${sub.name}</div>
-            <div style="font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sub.url}</div>
+        <div class="subscription-item">
+          <div class="subscription-swatch" style="background: ${sub.color};"></div>
+          <div class="subscription-copy">
+            <div class="subscription-name">${sub.name}</div>
+            <div class="subscription-url">${sub.url}</div>
           </div>
-          <div style="display: flex; gap: 4px; flex-shrink: 0;">
-            <button type="button" class="sync-sub-btn" data-sub-id="${sub.id}" style="padding: 4px 8px; font-size: 11px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer;">同步</button>
-            <button type="button" class="edit-sub-btn" data-sub-id="${sub.id}" style="padding: 4px 8px; font-size: 11px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer;">编辑</button>
-            <button type="button" class="delete-sub-btn" data-sub-id="${sub.id}" style="padding: 4px 8px; font-size: 11px; background: #fee2e2; color: #dc2626; border: none; border-radius: 4px; cursor: pointer;">删除</button>
+          <div class="subscription-actions">
+            <button type="button" class="subscription-btn sync-sub-btn" data-sub-id="${sub.id}">同步</button>
+            <button type="button" class="subscription-btn edit-sub-btn" data-sub-id="${sub.id}">编辑</button>
+            <button type="button" class="subscription-btn delete-sub-btn" data-sub-id="${sub.id}">删除</button>
           </div>
         </div>
       `).join('');

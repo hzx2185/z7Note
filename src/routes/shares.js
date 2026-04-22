@@ -5,128 +5,72 @@ const db = require('../db/client');
 const { genToken } = require('../utils/helpers');
 const config = require('../config');
 const log = require('../utils/logger');
-const { safePath: buildSafePath, isValidFilename } = require('../utils/path');
+const { SHARE_EVENTS } = require('../constants/securityEvents');
+const { loadUserPlanCapabilities } = require('../middleware/memberAccess');
+const {
+  resolveOwnedFilePath,
+  ensureShareTargetOwned,
+  isAttachmentAllowedForShare,
+  buildBlogConfig,
+  collectOwnerShareContext,
+  ensureCategoryNoteShares,
+  isValidFilename
+} = require('../services/shareService');
 
 const router = express.Router();
 
-function getUserUploadDir(username) {
-  return path.join(config.paths.uploads, username);
-}
-
-function resolveOwnedFilePath(username, target) {
-  if (typeof target !== 'string' || !target.trim()) {
-    throw new Error('缺少有效的文件路径');
+function getShareCapabilityRequirement(targetType) {
+  if (targetType === 'note' || targetType === 'category') {
+    return {
+      key: 'noteSharingEnabled',
+      message: '当前套餐未开启笔记分享功能'
+    };
   }
 
-  const normalizedTarget = path.normalize(target).replace(/^([/\\])+/, '');
-  const userDir = getUserUploadDir(username);
+  if (targetType === 'file') {
+    return {
+      key: 'fileSharingEnabled',
+      message: '当前套餐未开启附件分享功能'
+    };
+  }
+
+  return null;
+}
+
+async function ensureShareCapabilityForOwner(owner, targetType, options = {}) {
+  const requirement = getShareCapabilityRequirement(targetType);
+  if (!requirement) {
+    return { allowed: true };
+  }
+
+  const { capabilities } = await loadUserPlanCapabilities(owner);
+  if (capabilities[requirement.key]) {
+    return { allowed: true, capabilities };
+  }
+
+  if (options.deleteToken) {
+    await db.execute('DELETE FROM shares WHERE token = ?', [options.deleteToken]);
+  }
 
   return {
-    normalizedTarget,
-    filePath: buildSafePath(userDir, normalizedTarget)
+    allowed: false,
+    message: requirement.message,
+    capabilities
   };
-}
-
-async function ensureShareTargetOwned(type, target, owner) {
-  if (type === 'note') {
-    const note = await db.queryOne(
-      'SELECT id FROM notes WHERE id = ? AND username = ? AND deleted = 0',
-      [target, owner]
-    );
-    if (!note) {
-      throw new Error('笔记不存在或无权分享');
-    }
-    return target;
-  }
-
-  if (type === 'file') {
-    const { normalizedTarget, filePath } = resolveOwnedFilePath(owner, target);
-    try {
-      await fs.access(filePath);
-    } catch (error) {
-      throw new Error('文件不存在或无权分享');
-    }
-    return normalizedTarget;
-  }
-
-  if (type === 'category') {
-    const categoryNotes = await db.queryAll(
-      'SELECT id FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
-      [owner, `${target}/%`]
-    );
-    if (categoryNotes.length === 0) {
-      throw new Error('该分类下没有笔记');
-    }
-    return target;
-  }
-
-  throw new Error('无效的分享类型');
-}
-
-function extractAttachmentCandidates(content) {
-  const candidates = new Set();
-  if (!content) {
-    return candidates;
-  }
-
-  const patterns = [
-    /!\[[^\]]*\]\(([^)]+)\)/g,
-    /\[[^\]]*\]\(([^)]+)\)/g,
-    /!\[\[([^\]]+)\]\]/g
-  ];
-
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(content)) !== null) {
-      const rawValue = (match[1] || '').trim();
-      if (!rawValue || rawValue.startsWith('http://') || rawValue.startsWith('https://')) {
-        continue;
-      }
-
-      const cleaned = rawValue.split('?')[0].split('#')[0];
-      const basename = path.basename(cleaned);
-      if (basename) {
-        candidates.add(basename);
-      }
-    }
-  }
-
-  return candidates;
-}
-
-async function isAttachmentAllowedForShare(share, requestedFilename) {
-  const basename = path.basename(requestedFilename || '');
-  if (!basename || !isValidFilename(basename)) {
-    return false;
-  }
-
-  if (share.targetType === 'file') {
-    return path.basename(share.target) === basename;
-  }
-
-  if (share.targetType === 'note') {
-    const note = await db.queryOne(
-      'SELECT content FROM notes WHERE id = ? AND username = ? AND deleted = 0',
-      [share.target, share.owner]
-    );
-    return !!note && extractAttachmentCandidates(note.content).has(basename);
-  }
-
-  if (share.targetType === 'category') {
-    const notes = await db.queryAll(
-      'SELECT content FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ?',
-      [share.owner, `${share.target}/%`]
-    );
-    return notes.some(note => extractAttachmentCandidates(note.content).has(basename));
-  }
-
-  return false;
 }
 
 // 创建分享
 router.post('/api/share/create', async (req, res) => {
   try {
     const { type, target, expiresMs = 0, password = '', public: isPublic = true } = req.body;
+
+    const { capabilities } = await loadUserPlanCapabilities(req.user);
+    if ((type === 'note' || type === 'category') && !capabilities.noteSharingEnabled) {
+      return res.status(403).json({ error: '当前套餐未开启笔记分享功能' });
+    }
+    if (type === 'file' && !capabilities.fileSharingEnabled) {
+      return res.status(403).json({ error: '当前套餐未开启附件分享功能' });
+    }
 
     if (!['note','file','category'].includes(type)) {
       return res.status(400).json({ error: 'type 必须是 note、file 或 category' });
@@ -189,7 +133,11 @@ router.post('/api/share/create', async (req, res) => {
     if (['笔记不存在或无权分享', '文件不存在或无权分享', '该分类下没有笔记', '无效的分享类型', '缺少有效的文件路径'].includes(e.message)) {
       return res.status(400).json({ error: e.message });
     }
-    log('ERROR', '创建分享失败', { username: req.user, error: e.message });
+    log('ERROR', '创建分享失败', {
+      event: SHARE_EVENTS.CREATE_FAILED,
+      username: req.user,
+      error: e.message
+    });
     res.status(500).json({ error: '创建失败，请稍后重试' });
   }
 });
@@ -201,7 +149,14 @@ router.post('/api/share/revoke', async (req, res) => {
     if (!token) return res.status(400).json({ error: '缺少 token' });
     const row = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!row) return res.status(404).json({ error: '未找到' });
-    if (row.owner !== req.user && !config.adminUsers.includes(req.user)) return res.status(403).json({ error: '无权限' });
+    if (row.owner !== req.user && !config.adminUsers.includes(req.user)) {
+      log('WARN', '撤销分享被拒绝', {
+        event: SHARE_EVENTS.REVOKE_FORBIDDEN,
+        username: req.user,
+        token
+      });
+      return res.status(403).json({ error: '无权限' });
+    }
     await db.execute('DELETE FROM shares WHERE token = ?', [token]);
     res.json({ status: 'ok' });
   } catch (e) { res.status(500).json({ error: '撤销失败' }); }
@@ -238,6 +193,8 @@ router.post('/api/share/batch-revoke', async (req, res) => {
 // 获取用户的分享列表（只返回有效的，自动清理过期和已删除的）
 router.get('/api/share/list', async (req, res) => {
   try {
+    const { capabilities } = await loadUserPlanCapabilities(req.user);
+
     // 先获取所有分享（包括已过期的，用于清理）
     const allShares = await db.queryAll(
       'SELECT token, targetType, target, public, expiresAt, createdAt, owner FROM shares WHERE owner = ?',
@@ -251,9 +208,15 @@ router.get('/api/share/list', async (req, res) => {
     // 检查每个分享的有效性
     for (const share of allShares) {
       const exp = parseInt(share.expiresAt) || 0;
+      const requirement = getShareCapabilityRequirement(share.targetType);
       
       // 检查是否过期
       if (exp && exp < now) {
+        invalidTokens.push(share.token);
+        continue;
+      }
+
+      if (requirement && !capabilities[requirement.key]) {
         invalidTokens.push(share.token);
         continue;
       }
@@ -316,7 +279,21 @@ router.get('/api/share/public-list', async (req, res) => {
       [Date.now()]
     );
     const results = [];
+    const ownerCapabilityCache = new Map();
     for (const s of shares) {
+      let capabilities = ownerCapabilityCache.get(s.owner);
+      if (!capabilities) {
+        const capabilityState = await loadUserPlanCapabilities(s.owner);
+        capabilities = capabilityState.capabilities;
+        ownerCapabilityCache.set(s.owner, capabilities);
+      }
+
+      const requirement = getShareCapabilityRequirement(s.targetType);
+      if (requirement && !capabilities[requirement.key]) {
+        await db.execute('DELETE FROM shares WHERE token = ?', [s.token]);
+        continue;
+      }
+
       let title = '', summary = '', category = '', ownerName = s.owner;
       if (s.targetType === 'note') {
         const note = await db.queryOne(
@@ -394,15 +371,32 @@ router.get('/api/share/public/:token', async (req, res) => {
       if (!categoryShare || categoryShare.targetType !== 'category') {
         return res.status(404).json({ error: 'not found' });
       }
+
+      const capabilityState = await ensureShareCapabilityForOwner(categoryShare.owner, categoryShare.targetType, {
+        deleteToken: categoryShare.token
+      });
+      if (!capabilityState.allowed) {
+        return res.status(403).json({ error: 'sharing disabled' });
+      }
       
       // 检查分类分享是否有效
       const exp = parseInt(categoryShare.expiresAt) || 0;
       if (exp && Date.now() > exp) {
+        log('INFO', '分类分享访问已过期', {
+          event: SHARE_EVENTS.PUBLIC_ACCESS_EXPIRED,
+          token: categoryToken
+        });
         await db.execute('DELETE FROM shares WHERE token = ?', [categoryToken]);
         return res.status(410).json({ error: 'expired' });
       }
       
-      if (!categoryShare.public) return res.status(403).json({ error: 'private' });
+      if (!categoryShare.public) {
+        log('WARN', '分类分享为私有访问被拒绝', {
+          event: SHARE_EVENTS.PUBLIC_ACCESS_PRIVATE,
+          token: categoryToken
+        });
+        return res.status(403).json({ error: 'private' });
+      }
       
       // 查找笔记
       const note = await db.queryOne(
@@ -434,18 +428,7 @@ router.get('/api/share/public/:token', async (req, res) => {
       }
       
       // 返回笔记详情
-      const userConfig = await db.queryOne(
-        'SELECT blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS FROM users WHERE username = ?', 
-        [categoryShare.owner]
-      );
-      const blogConfig = {
-        blogTitle: userConfig?.blogTitle || `${categoryShare.owner} 的博客`,
-        blogSubtitle: userConfig?.blogSubtitle || '我的公开笔记与分享',
-        blogTheme: userConfig?.blogTheme || 'light',
-        blogShowHeader: userConfig?.blogShowHeader !== 0,
-        blogShowFooter: userConfig?.blogShowFooter !== 0,
-        customCSS: userConfig?.customCSS || ''
-      };
+      const blogConfig = await buildBlogConfig(categoryShare.owner);
       
       let category = note.title?.includes('/') ? note.title.split('/')[0].trim() : '未分类';
       
@@ -461,61 +444,32 @@ router.get('/api/share/public/:token', async (req, res) => {
     // 原有的逻辑处理普通分享
     const row = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!row) return res.status(404).json({ error: 'not found' });
+    const capabilityState = await ensureShareCapabilityForOwner(row.owner, row.targetType, {
+      deleteToken: row.token
+    });
+    if (!capabilityState.allowed) {
+      return res.status(403).json({ error: 'sharing disabled' });
+    }
     const exp = parseInt(row.expiresAt) || 0;
     if (exp && Date.now() > exp) {
       // 分享已过期，自动清理
+      log('INFO', '公开分享访问已过期', {
+        event: SHARE_EVENTS.PUBLIC_ACCESS_EXPIRED,
+        token
+      });
       await db.execute('DELETE FROM shares WHERE token = ?', [token]);
       return res.status(410).json({ error: 'expired' });
     }
-    if (!row.public) return res.status(403).json({ error: 'private' });
-
-    const userConfig = await db.queryOne(
-      'SELECT blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS FROM users WHERE username = ?', 
-      [row.owner]
-    );
-    const blogConfig = {
-      blogTitle: userConfig?.blogTitle || `${row.owner} 的博客`,
-      blogSubtitle: userConfig?.blogSubtitle || '我的公开笔记与分享',
-      blogTheme: userConfig?.blogTheme || 'light',
-      blogShowHeader: userConfig?.blogShowHeader !== 0,
-      blogShowFooter: userConfig?.blogShowFooter !== 0,
-      customCSS: userConfig?.customCSS || ''
-    };
-
-    const allShares = await db.queryAll(
-      'SELECT * FROM shares WHERE public = 1 AND owner = ? AND (expiresAt = 0 OR expiresAt > ?) ORDER BY createdAt DESC',
-      [row.owner, Date.now()]
-    );
-    const categoryShares = [];
-    const categoryCount = {};
-    const categoryTokens = {}; // 分类对应的token
-
-    for (const s of allShares) {
-      let category = '', title = '';
-      if (s.targetType === 'note') {
-        const note = await db.queryOne(
-          'SELECT id, title FROM notes WHERE id = ? AND username = ? AND deleted = 0',
-          [s.target, s.owner]
-        );
-        if (note) {
-          title = note.title || '无标题';
-          if (note.title?.includes('/')) category = note.title.split('/')[0].trim();
-        }
-      } else { title = s.target.split('/').pop() || s.target; category = '文件'; }
-      if (title) {
-        const catName = category || '未分类';
-        categoryCount[catName] = (categoryCount[catName] || 0) + 1;
-        categoryShares.push({ token: s.token, type: s.targetType, title, category: catName });
-        // 保存分类对应的token（如果是分类分享）
-        if (s.targetType === 'category' && s.target === catName && !categoryTokens[catName]) {
-          categoryTokens[catName] = s.token;
-        }
-        // 如果是笔记分享，但还没有该分类的token，创建一个基于用户的token
-        if (s.targetType === 'note' && catName && catName !== '未分类' && !categoryTokens[catName]) {
-          categoryTokens[catName] = `cat-${catName}`;
-        }
-      }
+    if (!row.public) {
+      log('WARN', '公开分享为私有访问被拒绝', {
+        event: SHARE_EVENTS.PUBLIC_ACCESS_PRIVATE,
+        token
+      });
+      return res.status(403).json({ error: 'private' });
     }
+
+    const blogConfig = await buildBlogConfig(row.owner);
+    const { categoryShares, categoryCount, categoryTokens } = await collectOwnerShareContext(row.owner);
 
     if (row.targetType === 'note') {
       const note = await db.queryOne(
@@ -539,32 +493,11 @@ router.get('/api/share/public/:token', async (req, res) => {
     } else if (row.targetType === 'category') {
       // 分类分享：获取该分类下所有笔记
       const categoryName = row.target;
-      const notes = await db.queryAll(
-        'SELECT id, title, content, updatedAt FROM notes WHERE username = ? AND deleted = 0 AND title LIKE ? ORDER BY updatedAt DESC',
-        [row.owner, `${categoryName}/%`]
-      );
+      const notes = await ensureCategoryNoteShares(row.owner, categoryName, row.public, row.expiresAt);
       if (notes.length === 0) {
         // 分类下无笔记，自动清理分享记录
         await db.execute('DELETE FROM shares WHERE token = ?', [token]);
         return res.status(404).json({ error: 'category empty' });
-      }
-
-      // 获取该用户已有的笔记分享
-      const existingShares = await db.queryAll(
-        'SELECT target FROM shares WHERE owner = ? AND targetType = ?',
-        [row.owner, 'note']
-      );
-      const existingNoteIds = new Set(existingShares.map(s => s.target));
-
-      // 为未分享的笔记自动创建分享记录
-      for (const note of notes) {
-        if (!existingNoteIds.has(note.id.toString())) {
-          const noteToken = genToken(24);
-          await db.execute(
-            'INSERT INTO shares (token, owner, targetType, target, public, password, expiresAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [noteToken, row.owner, 'note', note.id.toString(), row.public, null, row.expiresAt]
-          );
-        }
       }
 
       // 处理笔记数据
@@ -597,7 +530,10 @@ router.get('/api/share/public/:token', async (req, res) => {
       });
     }
   } catch (e) {
-    log('ERROR', '获取分享详情失败', { error: e.message });
+    log('ERROR', '获取分享详情失败', {
+      event: SHARE_EVENTS.DETAIL_FAILED,
+      error: e.message
+    });
     res.status(500).json({ error: 'server error' });
   }
 });
@@ -608,6 +544,12 @@ router.get('/s/:token', async (req, res) => {
     const token = req.params.token;
     const row = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!row) return res.status(404).send('分享链接不存在');
+    const capabilityState = await ensureShareCapabilityForOwner(row.owner, row.targetType, {
+      deleteToken: row.token
+    });
+    if (!capabilityState.allowed) {
+      return res.status(403).send(capabilityState.message);
+    }
     const exp2 = parseInt(row.expiresAt) || 0;
     if (exp2 && Date.now() > exp2) {
       // 分享已过期，自动清理
@@ -624,7 +566,7 @@ router.get('/s/:token', async (req, res) => {
         await fs.access(filePath);
         return res.sendFile(filePath);
       } catch (err) {
-        console.error('[Share] File not found:', filePath);
+        log('ERROR', '分享文件不存在', { token, filePath, error: err.message });
         return res.status(404).send('文件不存在或已被删除');
       }
     } else if (row.targetType === 'category') {
@@ -634,7 +576,10 @@ router.get('/s/:token', async (req, res) => {
       // 笔记分享跳转到预览页面
       return res.redirect(`/share.html?token=${encodeURIComponent(token)}`);
     }
-  } catch (e) { console.error('[Share] Error:', e); res.status(500).send('服务器错误'); }
+  } catch (e) {
+    log('ERROR', '访问分享链接失败', { token: req.params.token, error: e.message, stack: e.stack });
+    res.status(500).send('服务器错误');
+  }
 });
 
 // 通过分享链接获取附件
@@ -644,28 +589,51 @@ router.get('/api/share/attachment/:token/:filename(*)', async (req, res) => {
     const filename = req.params.filename || '';
     const share = await db.queryOne('SELECT * FROM shares WHERE token = ?', [token]);
     if (!share) return res.status(404).send('Share not found');
+    const attachmentCapabilityState = await ensureShareCapabilityForOwner(share.owner, 'file', {
+      deleteToken: share.token
+    });
+    if (!attachmentCapabilityState.allowed) {
+      return res.status(403).send(attachmentCapabilityState.message);
+    }
     if (!share.public) return res.status(403).send('Private share');
     const exp3 = parseInt(share.expiresAt) || 0;
     if (exp3 && Date.now() > exp3) {
       // 分享已过期，自动清理
+      log('INFO', '分享附件访问已过期', {
+        event: SHARE_EVENTS.PUBLIC_ACCESS_EXPIRED,
+        token
+      });
       await db.execute('DELETE FROM shares WHERE token = ?', [token]);
       return res.status(410).send('Share expired');
     }
 
     const requestedName = path.basename(filename);
     if (requestedName !== filename.split('/').pop() || !isValidFilename(requestedName)) {
+      log('WARN', '分享附件文件名非法', {
+        event: SHARE_EVENTS.ATTACHMENT_INVALID_FILENAME,
+        token,
+        filename
+      });
       return res.status(400).send('Invalid filename');
     }
 
     const allowed = await isAttachmentAllowedForShare(share, requestedName);
     if (!allowed) {
+      log('WARN', '分享附件访问被拒绝', {
+        event: SHARE_EVENTS.ATTACHMENT_FORBIDDEN,
+        token,
+        filename: requestedName
+      });
       return res.status(403).send('Forbidden');
     }
 
     const { filePath } = resolveOwnedFilePath(share.owner, requestedName);
     try { await fs.access(filePath); } catch (err) { return res.status(404).send('File not found'); }
     return res.sendFile(filePath);
-  } catch (err) { console.error('[Share Attachment] Error:', err); return res.status(500).send('Server error'); }
+  } catch (err) {
+    log('ERROR', '通过分享链接获取附件失败', { token: req.params.token, filename: req.params.filename, error: err.message, stack: err.stack });
+    return res.status(500).send('Server error');
+  }
 });
 
 module.exports = router;

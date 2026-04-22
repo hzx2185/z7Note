@@ -1,0 +1,322 @@
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 40px;
+    padding: 8px 14px;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-button-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast);
+}
+
+.btn:hover {
+    border-color: var(--accent);
+    background: var(--surface-button-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-primary {
+    background: color-mix(in srgb, var(--green, var(--accent)) 88%, var(--accent) 12%);
+    color: var(--text-on-accent);
+    border-color: transparent;
+}
+
+.btn-secondary {
+    background: var(--surface-secondary-button-bg);
+    color: var(--text);
+}
+
+.card {
+    background: var(--surface-1);
+    border: 1px solid var(--border, var(--line));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 7px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: var(--surface-secondary-button-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-fast);
+}
+
+.tool-btn:hover {
+    border-color: var(--accent);
+    background: var(--surface-secondary-button-hover);
+    box-shadow: var(--shadow-md);
+}
+
+.control-base,
+.workspace-search-input,
+.search-input,
+.sidebar-search-input,
+.modal-toolbar-input,
+.form-input,
+.workspace-page-select,
+.workspace-page-input,
+.date-input,
+.admin-input,
+.admin-select,
+.admin-textarea,
+.form-group input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]),
+.form-group select,
+.form-group textarea,
+.site-search-box input {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--control-height-md);
+    padding: 0 var(--control-padding-x-md);
+    border: 1px solid var(--control-border);
+    border-radius: 10px;
+    background: var(--surface-input-bg);
+    color: var(--text);
+    outline: none;
+    font-size: var(--font-size-md);
+    line-height: var(--line-height-md);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.control-base:focus,
+.workspace-search-input:focus,
+.search-input:focus,
+.sidebar-search-input:focus,
+.modal-toolbar-input:focus,
+.form-input:focus,
+.workspace-page-select:focus,
+.workspace-page-input:focus,
+.date-input:focus,
+.admin-input:focus,
+.admin-select:focus,
+.admin-textarea:focus,
+.form-group input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):focus,
+.form-group select:focus,
+.form-group textarea:focus,
+.site-search-box input:focus {
+    border-color: var(--accent);
+    background: var(--surface-input-focus);
+    box-shadow: var(--focus-ring);
+}
+
+.control-base::placeholder,
+.workspace-search-input::placeholder,
+.search-input::placeholder,
+.sidebar-search-input::placeholder,
+.modal-toolbar-input::placeholder,
+.form-input::placeholder,
+.workspace-page-input::placeholder,
+.date-input::placeholder,
+.admin-input::placeholder,
+.admin-textarea::placeholder,
+.form-group input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"])::placeholder,
+.form-group textarea::placeholder,
+.site-search-box input::placeholder {
+    color: var(--text-placeholder);
+}
+
+.control-base[type="number"],
+.workspace-page-input[type="number"],
+.date-input[type="number"] {
+    text-align: center;
+}
+
+.control-base[type="color"],
+.workspace-color-input {
+    min-height: var(--control-height-md);
+    padding: 4px;
+    border-radius: 10px;
+}
+
+.control-base[type="date"],
+.control-base[type="datetime-local"],
+.form-group input[type="date"],
+.form-group input[type="datetime-local"] {
+    padding-right: 10px;
+}
+
+.control-base[type="file"],
+.form-group input[type="file"] {
+    min-height: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.form-group textarea,
+.admin-textarea {
+    min-height: 96px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    resize: vertical;
+}
+
+body[data-ui-surface] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]),
+body[data-ui-surface] select,
+body[data-ui-surface] textarea,
+body.admin-page input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]),
+body.admin-page select,
+body.admin-page textarea {
+    accent-color: var(--accent);
+}
+
+body[data-ui-surface] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.workspace-search-input):not(.search-input):not(.sidebar-search-input):not(.modal-toolbar-input):not(.form-input):not(.workspace-page-select):not(.workspace-page-input):not(.date-input):not(.admin-input):not(.admin-select):not(.admin-textarea),
+body[data-ui-surface] select:not(.workspace-page-select):not(.admin-select),
+body[data-ui-surface] textarea:not(.admin-textarea),
+body.admin-page input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.workspace-search-input):not(.search-input):not(.sidebar-search-input):not(.modal-toolbar-input):not(.form-input):not(.workspace-page-select):not(.workspace-page-input):not(.date-input):not(.admin-input):not(.admin-select):not(.admin-textarea),
+body.admin-page select:not(.workspace-page-select):not(.admin-select),
+body.admin-page textarea:not(.admin-textarea) {
+    border: 1px solid var(--control-border);
+    background: var(--surface-input-bg);
+    color: var(--text);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+body[data-ui-surface] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.workspace-search-input):not(.search-input):not(.sidebar-search-input):not(.modal-toolbar-input):not(.form-input):not(.workspace-page-select):not(.workspace-page-input):not(.date-input):not(.admin-input):not(.admin-select):not(.admin-textarea):focus,
+body[data-ui-surface] select:not(.workspace-page-select):not(.admin-select):focus,
+body[data-ui-surface] textarea:not(.admin-textarea):focus,
+body.admin-page input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.workspace-search-input):not(.search-input):not(.sidebar-search-input):not(.modal-toolbar-input):not(.form-input):not(.workspace-page-select):not(.workspace-page-input):not(.date-input):not(.admin-input):not(.admin-select):not(.admin-textarea):focus,
+body.admin-page select:not(.workspace-page-select):not(.admin-select):focus,
+body.admin-page textarea:not(.admin-textarea):focus {
+    border-color: var(--accent);
+    background: var(--surface-input-focus);
+    box-shadow: var(--focus-ring);
+}
+
+body[data-ui-surface] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"])::placeholder,
+body[data-ui-surface] textarea::placeholder,
+body.admin-page input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"])::placeholder,
+body.admin-page textarea::placeholder {
+    color: var(--text-placeholder);
+}
+
+body[data-ui-surface] input[type="date"],
+body[data-ui-surface] input[type="datetime-local"],
+body[data-ui-surface] input[type="time"],
+body[data-ui-surface] input[type="month"],
+body.admin-page input[type="date"],
+body.admin-page input[type="datetime-local"],
+body.admin-page input[type="time"],
+body.admin-page input[type="month"] {
+    color-scheme: light;
+}
+
+html.dark-mode body[data-ui-surface] input[type="date"],
+html.dark-mode body[data-ui-surface] input[type="datetime-local"],
+html.dark-mode body[data-ui-surface] input[type="time"],
+html.dark-mode body[data-ui-surface] input[type="month"],
+html.dark-mode body.admin-page input[type="date"],
+html.dark-mode body.admin-page input[type="datetime-local"],
+html.dark-mode body.admin-page input[type="time"],
+html.dark-mode body.admin-page input[type="month"] {
+    color-scheme: dark;
+}
+
+.theme-switcher {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.theme-switcher-btn {
+    min-width: 46px;
+}
+
+.theme-switcher-btn.is-open {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-md);
+}
+
+.theme-switcher-btn .theme-switcher-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.theme-switcher-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(184px, calc(100vw - 16px));
+    min-width: min(184px, calc(100vw - 16px));
+    max-width: calc(100vw - 16px);
+    padding: 8px;
+    border: 1px solid var(--control-border);
+    border-radius: 14px;
+    background: var(--surface-popover-bg);
+    box-shadow: var(--shadow-lg);
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 3200;
+}
+
+.theme-switcher.is-open .theme-switcher-menu {
+    display: flex;
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    text-align: left;
+}
+
+.theme-option:hover,
+.theme-option.is-active {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft-strong);
+}
+
+.theme-option-copy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.theme-option-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 1px solid var(--control-border);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+    flex-shrink: 0;
+}
+
+.theme-option-name {
+    font-weight: 600;
+}
+
+.theme-option-mark {
+    color: var(--accent);
+    font-size: 12px;
+}

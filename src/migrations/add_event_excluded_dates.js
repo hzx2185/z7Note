@@ -1,4 +1,5 @@
 const version = 24;
+const description = 'add events excludedDates column';
 
 async function migrate(db) {
   if (!(await db.schema.hasTable('events'))) return;
@@ -10,5 +11,6 @@ async function migrate(db) {
 
 module.exports = {
   version,
+  description,
   migrate
 };

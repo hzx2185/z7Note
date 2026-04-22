@@ -5,6 +5,7 @@ const qrcode = require('qrcode');
 const crypto = require('crypto');
 const db = require('../db/client');
 const { auth } = require('../middleware/auth');
+const log = require('../utils/logger');
 
 const router = express.Router();
 
@@ -36,7 +37,7 @@ router.get('/status', async (req, res) => {
 
         res.json({ enabled: !!user.tfa_enabled });
     } catch (e) {
-        console.error('[2FA Status] 获取2FA状态失败:', e.message);
+        log('ERROR', '获取2FA状态失败', { username: req.user, error: e.message, stack: e.stack });
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -64,13 +65,13 @@ router.post('/setup', async (req, res) => {
 
         qrcode.toDataURL(otpAuthUrl, (err, qrCode) => {
             if (err) {
-                console.error('[2FA Setup] 生成二维码失败:', err.message);
+                log('ERROR', '生成2FA二维码失败', { username: req.user, error: err.message });
                 return res.status(500).json({ message: '无法生成二维码' });
             }
             res.json({ secret, qrCode, otpAuthUrl });
         });
     } catch (e) {
-        console.error('[2FA Setup] 设置2FA失败:', e.message);
+        log('ERROR', '设置2FA失败', { username: req.user, error: e.message, stack: e.stack });
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -123,7 +124,7 @@ router.post('/enable', async (req, res) => {
             res.status(400).json({ message: '验证码无效' });
         }
     } catch (e) {
-        console.error('[2FA Enable] Error:', e.message);
+        log('ERROR', '启用2FA失败', { username: req.user, error: e.message, stack: e.stack });
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -140,7 +141,7 @@ router.post('/disable', async (req, res) => {
         );
         res.json({ message: '2FA已成功禁用' });
     } catch (e) {
-        console.error('[2FA Disable] 禁用2FA失败:', e.message);
+        log('ERROR', '禁用2FA失败', { username: req.user, error: e.message, stack: e.stack });
         res.status(500).json({ message: '服务器内部错误' });
     }
 });
@@ -167,7 +168,7 @@ router.post('/refresh-backup-codes', async (req, res) => {
         
         res.json({ backupCodes });
     } catch (e) {
-        console.error('[2FA Refresh Backup Codes] 刷新备用代码失败:', e.message);
+        log('ERROR', '刷新2FA备用代码失败', { username: req.user, error: e.message, stack: e.stack });
         res.status(500).json({ message: '服务器内部错误' });
     }
 });

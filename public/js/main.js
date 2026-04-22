@@ -25,7 +25,7 @@ import wsManager from './websocket.js';
         // 显示加载状态
         const listEl = document.getElementById('list');
         if (listEl) {
-            listEl.innerHTML = '<div style="padding:40px;text-align:center;color:var(--gray);">加载中...</div>';
+            listEl.innerHTML = '<div class="loading">加载中...</div>';
         }
 
         // 从服务器加载笔记
@@ -64,7 +64,7 @@ import wsManager from './websocket.js';
             // 显示错误提示
             const listEl = document.getElementById('list');
             if (listEl) {
-                listEl.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red);">加载失败，请刷新重试</div>';
+                listEl.innerHTML = '<div class="error">加载失败，请刷新重试</div>';
             }
         }
     }

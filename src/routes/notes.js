@@ -5,39 +5,33 @@ const log = require('../utils/logger');
 const { broadcastNoteUpdate, broadcastNotesUpdate } = require('./sse');
 const { broadcastNoteUpdate: wsBroadcastNoteUpdate, broadcastNoteDelete: wsBroadcastNoteDelete } = require('./ws');
 const { getSystemConfig } = require('../services/systemConfig');
+const {
+  sanitizeTitle,
+  normalizeNoteTimestamp,
+  restoreNote,
+  permanentlyDeleteNote,
+  softDeleteNote,
+  emptyTrash,
+  deduplicateNotes,
+  batchReplaceNotes,
+  batchMoveNotes
+} = require('../services/noteService');
+const { getPlanSummaryAsync, redeemCodeForUser, syncUserMembershipState, getRemainingPlanDays } = require('../services/memberService');
+const { requirePlanCapability } = require('../middleware/memberAccess');
 const config = require('../config');
 
 const router = express.Router();
 
-// 辅助：清洗标题，移除控制字符以防止文件名冲突
-function sanitizeTitle(title) {
-  if (!title) return title;
-  // 移除 0-31 和 127 之间的控制字符（包括 \v, \n, \r 等）
-  // 但保留 \n \r \t 可能在某些情况下有用，虽然作为标题通常不需要
-  // Windows 不允许: \ / : * ? " < > |
-  // 我们主要移除不可见的控制字符
-  return title.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function normalizeNoteTimestamp(value, fallback) {
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return Math.floor(parsed / 1000);
-    }
-  }
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value > 2000000000 ? Math.floor(value / 1000) : Math.floor(value);
-  }
-  return fallback;
-}
+router.use('/api/files', requirePlanCapability('notesEnabled', { message: '当前套餐未开启笔记功能' }));
+router.use('/api/notes', requirePlanCapability('notesEnabled', { message: '当前套餐未开启笔记功能' }));
 
 // 获取用户信息
 router.get('/api/user-info', async (req, res) => {
   try {
     const username = req.user;
+    const membership = await syncUserMembershipState(username);
     const user = await db.queryOne(
-      'SELECT username, email, noteLimit, fileLimit, blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS, editorType FROM users WHERE username = ?',
+      'SELECT username, email, planKey, planExpiresAt, noteLimit, fileLimit, blogTitle, blogSubtitle, blogTheme, blogShowHeader, blogShowFooter, customCSS, editorType FROM users WHERE username = ?',
       [username]
     );
     if (!user) return res.status(404).json({ error: "用户不存在" });
@@ -74,7 +68,7 @@ router.get('/api/user-info', async (req, res) => {
       const freeBytes = storageStats.freeBytes || 0;
       dbFreeSpaceMB = (freeBytes / (1024 * 1024)).toFixed(2);
     } catch (err) {
-      log.error('获取数据库大小失败:', err);
+      log('ERROR', '获取数据库大小失败', { username, error: err.message, stack: err.stack });
     }
 
     // 获取附件预览配置
@@ -88,6 +82,12 @@ router.get('/api/user-info', async (req, res) => {
 
     res.json({
       ...user,
+      ...(await getPlanSummaryAsync(membership.planKey)),
+      planKey: membership.planKey,
+      planExpiresAt: membership.planExpiresAt || 0,
+      planRemainingDays: getRemainingPlanDays(membership.planExpiresAt),
+      noteLimit: membership.noteLimit,
+      fileLimit: membership.fileLimit,
       noteCount: n?.cnt || 0,
       contactCount: c?.cnt || 0,
       eventCount: e?.cnt || 0,
@@ -100,8 +100,50 @@ router.get('/api/user-info', async (req, res) => {
       attachmentPreviewConfig
     });
   } catch (e) {
-    console.error('[API] Get user-info error:', e);
+    log('ERROR', '获取用户信息失败', { username: req.user, error: e.message, stack: e.stack });
     res.status(500).json({ error: "系统内部错误" });
+  }
+});
+
+router.post('/api/member/redeem-code', async (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code : '';
+
+  if (!code.trim()) {
+    return res.status(400).json({ error: '请输入兑换码' });
+  }
+
+  try {
+    const result = await redeemCodeForUser(code, req.user);
+    const expiryText = result.planExpiresAt
+      ? `，有效期至 ${new Date(result.planExpiresAt * 1000).toLocaleDateString('zh-CN')}`
+      : '';
+    return res.json({
+      status: 'ok',
+      message: `兑换成功，当前套餐已更新为 ${result.planName}${expiryText}`,
+      plan: result
+    });
+  } catch (error) {
+    if (error.message === 'REDEEM_CODE_NOT_FOUND') {
+      return res.status(404).json({ error: '兑换码不存在' });
+    }
+    if (error.message === 'REDEEM_CODE_DISABLED') {
+      return res.status(400).json({ error: '兑换码已停用' });
+    }
+    if (error.message === 'REDEEM_CODE_EXPIRED') {
+      return res.status(400).json({ error: '兑换码已过期' });
+    }
+    if (error.message === 'REDEEM_CODE_DEPLETED') {
+      return res.status(400).json({ error: '兑换码已被使用完' });
+    }
+    if (error.message === 'REDEEM_CODE_ALREADY_USED') {
+      return res.status(400).json({ error: '你已经使用过这个兑换码' });
+    }
+    log('ERROR', '兑换套餐兑换码失败', {
+      username: req.user,
+      error: error.message,
+      stack: error.stack
+    });
+    return res.status(500).json({ error: '兑换失败，请稍后重试' });
   }
 });
 
@@ -124,7 +166,7 @@ router.get('/api/files', async (req, res) => {
   }
 });
 
-// 获取指定分类下的笔记（公开访问，用于分享页面）
+// 获取指定分类下的笔记（仅允许当前登录用户访问自己的数据）
 router.get('/api/notes', async (req, res) => {
   try {
     const category = req.query.category;
@@ -132,6 +174,10 @@ router.get('/api/notes', async (req, res) => {
 
     if (!user) {
       return res.status(400).json({ error: "缺少用户参数" });
+    }
+
+    if (user !== req.user) {
+      return res.status(403).json({ error: "无权访问其他用户的笔记" });
     }
 
     let query = 'SELECT * FROM notes WHERE username = ? AND deleted = 0';
@@ -147,7 +193,7 @@ router.get('/api/notes', async (req, res) => {
     const notes = await db.queryAll(query, params);
     res.json(notes);
   } catch (e) {
-    console.error('[API] 获取笔记失败:', e);
+    log('ERROR', '获取笔记失败', { username: req.user, requestedUser: req.query.user, error: e.message, stack: e.stack });
     res.status(500).json({ error: "获取失败" });
   }
 });
@@ -169,10 +215,7 @@ router.get('/api/notes/trash', async (req, res) => {
 // 恢复笔记 - 必须在 /api/notes/:id 之前
 router.put('/api/notes/:id/restore', async (req, res) => {
   try {
-    const result = await db.execute(
-      'UPDATE notes SET deleted = 0, updatedAt = ? WHERE id = ? AND username = ?',
-      [Math.floor(Date.now() / 1000), req.params.id, req.user]
-    );
+    const result = await restoreNote(req.params.id, req.user);
     if (result.changes === 0) {
       return res.status(404).json({ error: '笔记不存在' });
     }
@@ -187,18 +230,10 @@ router.put('/api/notes/:id/restore', async (req, res) => {
 // 永久删除笔记 - 必须在 /api/notes/:id 之前
 router.delete('/api/notes/:id/permanent', async (req, res) => {
   try {
-    const result = await db.execute(
-      'DELETE FROM notes WHERE id = ? AND username = ?',
-      [req.params.id, req.user]
-    );
+    const result = await permanentlyDeleteNote(req.params.id, req.user);
     if (result.changes === 0) {
       return res.status(404).json({ error: '笔记不存在' });
     }
-    // 同步删除该笔记的分享链接
-    await db.execute(
-      'DELETE FROM shares WHERE targetType = ? AND target = ? AND owner = ?',
-      ['note', req.params.id, req.user]
-    );
     log('INFO', '永久删除笔记', { username: req.user, noteId: req.params.id });
     res.json({ status: 'ok' });
   } catch (e) {
@@ -268,68 +303,11 @@ router.post('/api/notes/deduplicate', async (req, res) => {
   try {
     const username = req.user;
     const { mode = 'both' } = req.body; // both, title, content
-
-    let duplicates;
-
-    if (mode === 'title') {
-      // 只按标题查找重复
-      duplicates = await db.queryAll(`
-        SELECT title, COUNT(*) as count, GROUP_CONCAT(id) as ids
-        FROM notes
-        WHERE username = ? AND deleted = 0
-        GROUP BY title
-        HAVING count > 1
-      `, [username]);
-    } else if (mode === 'content') {
-      // 只按内容查找重复
-      duplicates = await db.queryAll(`
-        SELECT content, COUNT(*) as count, GROUP_CONCAT(id) as ids
-        FROM notes
-        WHERE username = ? AND deleted = 0
-        GROUP BY content
-        HAVING count > 1
-      `, [username]);
-    } else {
-      // 按标题和内容都相同查找重复（默认）
-      duplicates = await db.queryAll(`
-        SELECT title, content, COUNT(*) as count, GROUP_CONCAT(id) as ids
-        FROM notes
-        WHERE username = ? AND deleted = 0
-        GROUP BY title, content
-        HAVING count > 1
-      `, [username]);
-    }
-
-    let deletedCount = 0;
-    const now = Math.floor(Date.now() / 1000);
-
-    deletedCount = await db.withTransaction(async (tx) => {
-      let count = 0;
-      for (const dup of duplicates) {
-        const ids = dup.ids.split(',');
-        const notes = await tx.queryAll(
-          `SELECT id, updatedAt FROM notes WHERE id IN (${ids.map(() => '?').join(',')}) AND username = ?`,
-          [...ids, username]
-        );
-
-        notes.sort((a, b) => b.updatedAt - a.updatedAt);
-        const idsToDelete = notes.slice(1).map(n => n.id);
-
-        if (idsToDelete.length > 0) {
-          const placeholders = idsToDelete.map(() => '?').join(',');
-          await tx.execute(
-            `UPDATE notes SET deleted = 1, updatedAt = ? WHERE id IN (${placeholders}) AND username = ?`,
-            [now, ...idsToDelete, username]
-          );
-          count += idsToDelete.length;
-        }
-      }
-      return count;
-    });
+    const { deletedCount, groupsProcessed } = await deduplicateNotes(username, mode);
 
     broadcastNotesUpdate(username);
     log('INFO', '批量去重笔记', { username, deletedCount, mode });
-    res.json({ success: true, deletedCount, groupsProcessed: duplicates.length, mode });
+    res.json({ success: true, deletedCount, groupsProcessed, mode });
   } catch (e) {
     log('ERROR', '批量去重笔记失败', { username: req.user, error: e.message });
     res.status(500).json({ error: '去重失败' });
@@ -391,15 +369,7 @@ router.put('/api/notes/:id', async (req, res) => {
       const trimmedContent = content || '';
       if (trimmedContent.trim().length === 0) {
         // 内容为空时,自动删除笔记
-        await db.execute(
-          'UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?',
-          [Math.floor(Date.now() / 1000), req.params.id, req.user]
-        );
-        // 同步删除该笔记的分享链接
-        await db.execute(
-          'DELETE FROM shares WHERE targetType = ? AND target = ? AND owner = ?',
-          ['note', req.params.id, req.user]
-        );
+        await softDeleteNote(req.params.id, req.user);
         // 广播笔记删除通知
         try {
           wsBroadcastNoteDelete(req.user, req.params.id);
@@ -443,15 +413,7 @@ router.put('/api/notes/:id', async (req, res) => {
 // 删除笔记
 router.delete('/api/notes/:id', async (req, res) => {
   try {
-    await db.execute(
-      'UPDATE notes SET deleted = 1, updatedAt = ? WHERE id = ? AND username = ?',
-      [Math.floor(Date.now() / 1000), req.params.id, req.user]
-    );
-    // 同步删除该笔记的分享链接
-    await db.execute(
-      'DELETE FROM shares WHERE targetType = ? AND target = ? AND owner = ?',
-      ['note', req.params.id, req.user]
-    );
+    await softDeleteNote(req.params.id, req.user);
     res.json({ status: "ok" });
 
     // 广播笔记删除通知（WebSocket）
@@ -550,39 +512,7 @@ router.post('/api/notes/batch-replace', async (req, res) => {
       replaceText
     });
 
-    const result = await db.withTransaction(async (tx) => {
-      // 优化：一次性查询所有需要替换的笔记
-      const placeholders = ids.map(() => '?').join(',');
-      const notes = await tx.queryAll(
-        `SELECT id, title, content FROM notes WHERE id IN (${placeholders}) AND username = ?`,
-        [...ids, req.user]
-      );
-
-      let replacedCount = 0;
-      const now = Math.floor(Date.now() / 1000);
-
-      // 批量更新
-      for (const note of notes) {
-        let newTitle = note.title;
-        for (const findText of validFindTexts) {
-          newTitle = newTitle.split(findText).join(replaceText);
-        }
-        newTitle = sanitizeTitle(newTitle);
-
-        let newContent = note.content || '';
-        for (const findText of validFindTexts) {
-          newContent = newContent.split(findText).join(replaceText);
-        }
-
-        await tx.execute(
-          'UPDATE notes SET title = ?, content = ?, updatedAt = ? WHERE id = ? AND username = ?',
-          [newTitle, newContent, now, note.id, req.user]
-        );
-
-        replacedCount++;
-      }
-      return replacedCount;
-    });
+    const result = await batchReplaceNotes(req.user, ids, validFindTexts, replaceText);
 
     log('INFO', '批量替换笔记成功', {
       username: req.user,
@@ -626,65 +556,7 @@ router.post('/api/notes/batch-move', async (req, res) => {
 
     log('INFO', '批量移动笔记开始', { username: req.user, count: ids.length, targetFolder });
 
-    const movedCount = await db.withTransaction(async (tx) => {
-      // 优化：一次性查询所有需要移动的笔记
-      const placeholders = ids.map(() => '?').join(',');
-      const notes = await tx.queryAll(
-        `SELECT id, title, content FROM notes WHERE id IN (${placeholders}) AND username = ?`,
-        [...ids, req.user]
-      );
-
-      let movedCount = 0;
-      const now = Math.floor(Date.now() / 1000);
-
-      // 批量更新
-      for (const note of notes) {
-        let newTitle = note.title;
-        let newContent = note.content;
-
-        // 解析当前标题中的分类和标题
-        let pureTitle = note.title;
-        if (note.title.includes('/')) {
-          const parts = note.title.split('/');
-          pureTitle = parts.slice(1).join('/').trim() || '未命名';
-        }
-
-        // 构建新的标题（分类/标题）
-        newTitle = pureTitle ? `${targetFolderName}/${pureTitle}` : targetFolderName;
-        newTitle = sanitizeTitle(newTitle);
-
-        // 更新内容的第一行（如果包含分类标记）
-        if (newContent && newContent.trim()) {
-          const lines = newContent.split('\n');
-          if (lines.length > 0) {
-            const firstLine = lines[0].trim();
-
-            // 移除 Markdown 标记
-            let cleanLine = firstLine.replace(/^#+\s*/, '').trim();
-
-            // 如果第一行包含斜杠，说明有分类标记，需要更新
-            if (cleanLine.includes('/')) {
-              const parts = cleanLine.split('/');
-              const titlePart = parts.slice(1).join('/').trim() || '未命名';
-              // 重新构建第一行，保持 Markdown 标记
-              const markdownPrefix = firstLine.match(/^#+\s*/)?.[0] || '';
-              lines[0] = markdownPrefix + `${targetFolderName}/${titlePart}`;
-              newContent = lines.join('\n');
-            }
-          }
-        } else {
-          newContent = targetFolderName;
-        }
-
-        await tx.execute(
-          'UPDATE notes SET title = ?, content = ?, updatedAt = ? WHERE id = ? AND username = ?',
-          [newTitle, newContent, now, note.id, req.user]
-        );
-
-        movedCount++;
-      }
-      return movedCount;
-    });
+    const movedCount = await batchMoveNotes(req.user, ids, targetFolderName);
 
     log('INFO', '批量移动笔记成功', { username: req.user, movedCount, targetFolder });
     res.json({
@@ -860,10 +732,7 @@ router.post('/api/files', async (req, res) => {
 // 清空回收站（当前用户）
 router.delete('/api/notes/trash/empty', async (req, res) => {
   try {
-    const result = await db.execute(
-      'DELETE FROM notes WHERE username = ? AND deleted = 1',
-      [req.user]
-    );
+    const result = await emptyTrash(req.user);
     log('INFO', '清空回收站', { username: req.user, count: result.changes });
     res.json({ status: 'ok', count: result.changes });
   } catch (e) {
