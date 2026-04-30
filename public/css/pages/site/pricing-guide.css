@@ -1,0 +1,318 @@
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.pricing-category-tabs {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 auto 16px;
+}
+
+.pricing-category-tab {
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.pricing-category-tab:hover {
+    background: var(--surface-hover);
+    transform: translateY(-1px);
+}
+
+.pricing-category-tab.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft-strong);
+    color: var(--accent-deep);
+}
+
+.pricing-card {
+    padding: 22px;
+    border-radius: 24px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+}
+
+.pricing-card.featured {
+    background: linear-gradient(180deg, var(--accent-soft), var(--surface-1));
+    border-color: var(--accent-soft-strong);
+    transform: scale(1.02);
+}
+
+.tier-header {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.tier-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.tier-name {
+    font-size: 22px;
+    margin: 0 0 6px;
+}
+
+.price {
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.price small {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.price-free {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.tier-quota {
+    text-align: center;
+    padding: 12px 0;
+    margin: 12px 0;
+    border-top: 1px dashed var(--line);
+    border-bottom: 1px dashed var(--line);
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.feature-list {
+    flex: 1;
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.feature-list div {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.feature-list div::before {
+    content: "✓";
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.tier-cta {
+    text-align: center;
+}
+
+.compare-table {
+    width: 100%;
+    max-width: 980px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    border-spacing: 0;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--surface-1);
+    box-shadow: var(--shadow);
+}
+
+.compare-table th,
+.compare-table td {
+    padding: 12px 14px;
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+}
+
+.compare-table th:first-child,
+.compare-table td:first-child {
+    text-align: left;
+}
+
+.compare-table th {
+    font-size: 15px;
+    background: var(--table-head-bg);
+}
+
+.compare-table td {
+    font-size: 14px;
+    color: var(--muted);
+    background: var(--surface-1);
+}
+
+.compare-table td.check {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.compare-table td.empty {
+    color: var(--text-soft);
+}
+
+.guide-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.guide-card {
+    padding: 24px;
+    border-radius: 20px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    transition: transform 0.2s ease;
+}
+
+.guide-card:hover {
+    transform: translateY(-3px);
+}
+
+.guide-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: var(--accent-soft);
+    font-size: 24px;
+    margin-bottom: 16px;
+}
+
+.guide-card h3 {
+    margin: 0 0 10px;
+    font-size: 18px;
+}
+
+.guide-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.guide-link {
+    display: inline-block;
+    margin-top: 14px;
+    color: var(--accent-deep);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.guide-link:hover {
+    text-decoration: underline;
+}
+
+.faq-list {
+    max-width: 760px;
+    margin: 0 auto;
+    display: grid;
+    gap: 16px;
+}
+
+.faq-item {
+    padding: 20px;
+    border-radius: 18px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+}
+
+.faq-item h3 {
+    margin: 0 0 10px;
+    font-size: 17px;
+}
+
+.faq-item p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.help-shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.help-shortcuts-card {
+    padding: 28px;
+    border-radius: 24px;
+    background: var(--surface-1);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+}
+
+.help-shortcuts-card h3 {
+    margin: 0 0 16px;
+    font-size: 20px;
+}
+
+.help-shortcuts-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.help-shortcuts-table tr {
+    border-bottom: 1px solid var(--line);
+}
+
+.help-shortcuts-table tr:last-child {
+    border-bottom: none;
+}
+
+.help-shortcuts-table td {
+    padding: 10px 0;
+    color: var(--text);
+}
+
+.help-shortcuts-table td:last-child {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.help-shortcuts-table kbd,
+.help-shortcuts-note kbd {
+    display: inline-block;
+    min-width: 24px;
+    padding: 3px 7px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    color: var(--text);
+}
+
+.help-shortcuts-note {
+    margin: 16px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+}

@@ -66,8 +66,6 @@ function initWebSocketServer(server) {
     ws.userId = username; // 保持兼容性
     ws.isAlive = true;
 
-    log('INFO', 'WebSocket客户端连接', { username, clientId: ws.id });
-
     // 发送欢迎消息
     ws.send(JSON.stringify({
       type: 'connected',
@@ -88,11 +86,6 @@ function initWebSocketServer(server) {
     // 处理心跳
     ws.on('pong', () => {
       ws.isAlive = true;
-    });
-
-    // 处理断开连接
-    ws.on('close', () => {
-      log('INFO', 'WebSocket客户端断开', { username });
     });
 
     // 处理错误
@@ -139,27 +132,26 @@ function handleMessage(ws, data) {
       }
       break;
     default:
-      log('WARN', '未知的WebSocket消息类型', { type: data.type });
+      log('DEBUG', '未知的WebSocket消息类型', { type: data.type });
   }
 }
 
 // 广播消息给所有客户端或指定用户
 function broadcast(type, data, options = {}) {
   if (!wss) {
-    log('WARN', 'WebSocket服务器未初始化，无法广播消息');
-    return;
+    log('DEBUG', 'WebSocket服务器未初始化，跳过广播', { type });
+    return 0;
+  }
+
+  if (wss.clients.size === 0) {
+    return 0;
   }
 
   const message = JSON.stringify({ type, ...data });
   let sentCount = 0;
-  let totalClients = 0;
-  const { username: targetUsername } = options;
-
-  log('INFO', 'WebSocket开始广播', { type, targetUsername, clientCount: wss.clients.size });
+  const targetUsername = options.targetUsername || options.username;
 
   wss.clients.forEach((client) => {
-    totalClients++;
-
     // 如果指定了用户名，只发送给该用户
     if (targetUsername && client.username !== targetUsername) {
       return;
@@ -171,7 +163,7 @@ function broadcast(type, data, options = {}) {
     }
   });
 
-  log('INFO', 'WebSocket广播完成', { type, targetUsername, totalClients, sentCount });
+  return sentCount;
 }
 
 // 广播笔记更新

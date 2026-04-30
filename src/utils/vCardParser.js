@@ -21,6 +21,31 @@
       return this.containsCJK(contact.n_family) && this.containsCJK(contact.n_given);
     }
 
+    static getPropertyName(rawName) {
+      const name = String(rawName || '').trim();
+      const dotIndex = name.lastIndexOf('.');
+      return dotIndex >= 0 ? name.slice(dotIndex + 1) : name;
+    }
+
+    static normalizeTypeParam(type, fallback) {
+      if (!type) return fallback;
+      if (Array.isArray(type)) return type.filter(Boolean).join(',');
+      return String(type);
+    }
+
+    static normalizeTelephoneValue(value) {
+      let text = this.unescapeText(value || '').trim();
+      if (/^tel:/i.test(text)) {
+        text = text.replace(/^tel:/i, '');
+        try {
+          text = decodeURIComponent(text);
+        } catch (error) {
+          // 保留原始 tel URI 内容
+        }
+      }
+      return text;
+    }
+
     static buildStructuredDisplayName(contact) {
       const family = contact.n_family || '';
       const given = contact.n_given || '';
@@ -120,17 +145,17 @@
             break;
 
           case 'TEL':
-            const telType = params.TYPE || 'CELL';
-            contact.tel.push({ type: telType, value: value });
+            const telType = this.normalizeTypeParam(params.TYPE, 'CELL');
+            contact.tel.push({ type: telType, value: this.normalizeTelephoneValue(value) });
             break;
 
           case 'EMAIL':
-            const emailType = params.TYPE || 'INTERNET';
+            const emailType = this.normalizeTypeParam(params.TYPE, 'INTERNET');
             contact.email.push({ type: emailType, value: value });
             break;
 
           case 'ADR':
-            const adrType = params.TYPE || 'HOME';
+            const adrType = this.normalizeTypeParam(params.TYPE, 'HOME');
             // 地址格式：邮编;街道;城市;州/省;国家
             const adrParts = value.split(';');
             // vCard ADR 格式: PO Box;Extended Addr;Street;City;Region;Postal Code;Country
@@ -266,7 +291,7 @@
 
       // 解析名称和参数
       const parts = nameAndParams.split(';');
-      const name = parts[0];
+      const name = this.getPropertyName(parts[0]);
       const params = {};
 
       for (let i = 1; i < parts.length; i++) {
@@ -275,10 +300,22 @@
         if (eqIndex !== -1) {
           const paramName = param.substring(0, eqIndex);
           const paramValue = param.substring(eqIndex + 1);
-          params[paramName.toUpperCase()] = paramValue;
+          const key = paramName.toUpperCase();
+          if (key === 'TYPE' && params.TYPE) {
+            params.TYPE = Array.isArray(params.TYPE) ? [...params.TYPE, paramValue] : [params.TYPE, paramValue];
+          } else {
+            params[key] = paramValue;
+          }
         } else {
-          // 无值的参数（如 TYPE=CELL 可能写成 TYPE;CELL）
-          params[param.toUpperCase()] = true;
+          // 无值的 TYPE 参数（如 TEL;CELL;VOICE:...）
+          const key = param.toUpperCase();
+          if (['CELL', 'VOICE', 'HOME', 'WORK', 'PREF', 'FAX', 'MAIN', 'IPHONE'].includes(key)) {
+            params.TYPE = params.TYPE
+              ? (Array.isArray(params.TYPE) ? [...params.TYPE, key] : [params.TYPE, key])
+              : key;
+          } else {
+            params[key] = true;
+          }
         }
       }
 

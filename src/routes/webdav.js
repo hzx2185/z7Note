@@ -165,7 +165,7 @@ function parseWebDavTimestamp(req) {
 router.use((req, res, next) => {
   // 统一路径斜杠
   if (req.url.includes('//')) req.url = req.url.replace(/\/+/g, '/');
-  log('INFO', 'WebDAV 请求', { method: req.method, path: req.path, username: req.user || '未认证' });
+  log.protocol('WebDAV 请求', { method: req.method, path: req.path, username: req.user || '未认证' });
   next();
 });
 
@@ -187,8 +187,8 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
     const pathParts = req.path.split('/').filter(p => p); // 移除空字符串
     const method = req.method;
     const username = req.user;
-    
-    log('INFO', 'WebDAV 请求处理', { method, path: req.path, username, pathParts: pathParts.length });
+
+    log.protocol('WebDAV 请求处理', { method, path: req.path, username, pathParts: pathParts.length });
 
     // 1. 根路径 /
     if (pathParts.length === 0) {
@@ -215,12 +215,12 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
     if (pathParts.length === 1) {
       if (method === 'PROPFIND') {
         const depth = req.header('Depth') || '0';
-        log('INFO', 'WebDAV PROPFIND 请求', { username, depth, pathParts: pathParts.length });
+        log.protocol('WebDAV PROPFIND 请求', { username, depth, pathParts: pathParts.length });
         let responses = [createResponseXml(`${req.baseUrl}/${username}/`, { resourcetype: 'collection', displayname: username })];
 
         if (depth === '1' || depth === 'infinity') {
           const notes = await db.queryAll('SELECT title, updatedAt, content FROM notes WHERE username = ? AND deleted = 0', [username]);
-          log('INFO', 'WebDAV PROPFIND depth=' + depth, { username, notesCount: notes.length });
+          log.protocol('WebDAV PROPFIND depth=' + depth, { username, notesCount: notes.length });
           notes.forEach(note => {
             const displayTitle = note.title || 'Untitled';
             // 确保文件名有 .md 后缀
@@ -292,7 +292,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
     if (isTestFile) {
       // 存储测试文件内容到内存中（用于验证）
       if (!global.webdavTestFiles) global.webdavTestFiles = {};
-      
+
       if (method === 'PUT') {
         // 存储上传的内容
         let contentStr = '';
@@ -302,24 +302,24 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
           contentStr = req.body;
         }
         global.webdavTestFiles[req.originalUrl] = contentStr;
-        log('INFO', 'WebDAV 测试文件上传', { path: req.originalUrl, contentLength: contentStr.length });
+        log.protocol('WebDAV 测试文件上传', { path: req.originalUrl, contentLength: contentStr.length });
         return res.status(201).end();
       }
-      
+
       if (method === 'GET') {
         // 返回之前上传的内容
         const content = global.webdavTestFiles[req.originalUrl] || '';
-        log('INFO', 'WebDAV 测试文件下载', { path: req.originalUrl, contentLength: content.length });
+        log.protocol('WebDAV 测试文件下载', { path: req.originalUrl, contentLength: content.length });
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Content-Length', Buffer.byteLength(content, 'utf8'));
         return res.status(200).send(content);
       }
-      
+
       if (method === 'DELETE') {
         delete global.webdavTestFiles[req.originalUrl];
         return res.status(204).end();
       }
-      
+
       if (method === 'MKCOL') return res.status(201).end();
 
       if (method === 'PROPFIND') {
@@ -369,7 +369,6 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       if (method === 'PUT') {
         try {
           await fs.writeFile(filePath, req.body);
-          log('INFO', 'WebDAV 上传附件', { username, filename });
           return res.status(201).end();
         } catch (err) {
           log('ERROR', 'WebDAV 上传附件失败', { username, filename, error: err.message });
@@ -380,7 +379,6 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       if (method === 'DELETE') {
         try {
           await fs.unlink(filePath);
-          log('INFO', 'WebDAV 删除附件', { username, filename });
           return res.status(204).end();
         } catch (err) {
           return res.status(404).send('Not Found');
@@ -415,7 +413,7 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
       // 转换附件路径（Web → WebDAV）
       const convertedContent = convertAttachmentPathToWebDAV(note.content || '', username);
       const contentBuffer = Buffer.from(convertedContent, 'utf8');
-      
+
       const timestampMs = note.updatedAt > 10000000000 ? note.updatedAt : note.updatedAt * 1000;
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
       res.setHeader('ETag', `"${Math.floor(timestampMs / 1000)}"`);
@@ -452,7 +450,6 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
         // 通知 WebSocket 客户端
         const updatedNote = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [note.id, username]);
         if (updatedNote) {
-          log('INFO', 'WebDAV 准备广播笔记更新', { noteId: updatedNote.id, title: updatedNote.title });
           broadcastNoteUpdate(username, updatedNote);
         }
         res.setHeader('ETag', `"${effectiveTimestamp}"`);
@@ -463,7 +460,6 @@ router.all('*', basicAuthMiddleware, async (req, res) => {
         // 通知 WebSocket 客户端
         const newNote = await db.queryOne('SELECT * FROM notes WHERE id = ? AND username = ?', [id, username]);
         if (newNote) {
-          log('INFO', 'WebDAV 准备广播新笔记', { noteId: newNote.id, title: newNote.title });
           broadcastNoteUpdate(username, newNote);
         }
         res.setHeader('ETag', `"${effectiveTimestamp}"`);

@@ -13,6 +13,8 @@ const ALLOWED_CDN_HOSTS = new Set([
   'cdnjs.cloudflare.com',
   'unpkg.com'
 ]);
+let allResourcesUpdatePromise = null;
+const resourceUpdatePromises = new Map();
 
 // CDN 资源配置
 const CDN_RESOURCES = [
@@ -100,7 +102,6 @@ const CACHE_DIR = path.join(config.paths.data, 'cdn-cache');
 async function initCacheDir() {
   try {
     await fs.mkdir(CACHE_DIR, { recursive: true });
-    log('INFO', 'CDN 缓存目录已创建', { cacheDir: CACHE_DIR });
   } catch (err) {
     log('ERROR', '创建 CDN 缓存目录失败', { cacheDir: CACHE_DIR, error: err.message, stack: err.stack });
   }
@@ -162,55 +163,109 @@ async function isFileValid(localPath) {
 }
 
 // 更新单个资源
-async function updateResource(resource) {
+async function updateResource(resource, options = {}) {
   const localPath = path.join(CACHE_DIR, resource.localPath);
   const url = typeof resource.url === 'function' ? resource.url() : resource.url;
+  const cacheKey = resource.localPath;
+
+  if (resourceUpdatePromises.has(cacheKey)) {
+    return resourceUpdatePromises.get(cacheKey);
+  }
+
+  const updatePromise = (async () => {
+    await initCacheDir();
+
+    try {
+      // 检查是否需要更新
+      const needsUpdate = options.force === true || !(await isFileValid(localPath));
+      if (!needsUpdate) {
+        return {
+          success: true,
+          updated: false,
+          resource: resource.name
+        };
+      }
+
+      await downloadFile(url, localPath);
+      return {
+        success: true,
+        updated: true,
+        resource: resource.name
+      };
+    } catch (err) {
+      log('ERROR', 'CDN 资源下载失败', { resource: resource.name, url, error: err.message });
+      return {
+        success: false,
+        updated: false,
+        resource: resource.name,
+        error: err.message
+      };
+    }
+  })();
+
+  resourceUpdatePromises.set(cacheKey, updatePromise);
 
   try {
-    // 检查是否需要更新
-    const needsUpdate = !(await isFileValid(localPath));
-    if (!needsUpdate) {
-      log('INFO', 'CDN 资源已是最新，跳过更新', { resource: resource.name, localPath });
-      return true;
-    }
-
-    log('INFO', '开始下载 CDN 资源', { resource: resource.name, url, localPath });
-    await downloadFile(url, localPath);
-    log('INFO', 'CDN 资源下载成功', { resource: resource.name, url, localPath });
-    return true;
-  } catch (err) {
-    log('ERROR', 'CDN 资源下载失败', { resource: resource.name, url, error: err.message });
-    return false;
+    return await updatePromise;
+  } finally {
+    resourceUpdatePromises.delete(cacheKey);
   }
 }
 
 // 更新所有资源
 async function updateAllResources() {
-  log('INFO', '开始更新 CDN 资源');
-  await initCacheDir();
-
-  let successCount = 0;
-  let failCount = 0;
-
-  for (const resource of CDN_RESOURCES) {
-    const success = await updateResource(resource);
-    if (success) {
-      successCount++;
-    } else {
-      failCount++;
-    }
+  if (allResourcesUpdatePromise) {
+    return allResourcesUpdatePromise;
   }
 
-  log('INFO', 'CDN 资源更新完成', { successCount, failCount });
-  return { successCount, failCount };
+  allResourcesUpdatePromise = (async () => {
+    await initCacheDir();
+
+    let successCount = 0;
+    let failCount = 0;
+    let updatedCount = 0;
+    const failureSamples = [];
+
+    for (const resource of CDN_RESOURCES) {
+      const result = await updateResource(resource);
+      if (result.success) {
+        successCount++;
+        if (result.updated) {
+          updatedCount++;
+        }
+        continue;
+      }
+
+      failCount++;
+      if (failureSamples.length < 5) {
+        failureSamples.push({
+          resource: resource.name,
+          error: result.error
+        });
+      }
+    }
+
+    log(failCount > 0 ? 'WARN' : 'INFO', 'CDN 资源更新完成', {
+      successCount,
+      failCount,
+      updatedCount,
+      failureSamples: failureSamples.length > 0 ? failureSamples : undefined
+    });
+
+    return { successCount, failCount, updatedCount };
+  })();
+
+  try {
+    return await allResourcesUpdatePromise;
+  } finally {
+    allResourcesUpdatePromise = null;
+  }
 }
 
 // Express 中间件 - 代理 CDN 请求
 function createProxyMiddleware() {
   return async (req, res, next) => {
     const fileName = req.params.file;
-
-    log('INFO', '收到 CDN 资源请求', { fileName });
 
     // 处理 source map 文件请求
     if (fileName.endsWith('.map')) {
@@ -221,8 +276,6 @@ function createProxyMiddleware() {
         const mapUrl = typeof resource.url === 'function' ? resource.url() + '.map' : resource.url + '.map';
         const protocol = mapUrl.startsWith('https') ? https : http;
 
-        log('INFO', '处理 CDN source map 请求', { fileName, mapUrl });
-
         protocol.get(mapUrl, (mapRes) => {
           if (mapRes.statusCode === 200) {
             res.setHeader('Content-Type', 'application/json');
@@ -231,11 +284,9 @@ function createProxyMiddleware() {
             res.setHeader('Expires', '0');
             mapRes.pipe(res);
           } else {
-            log('ERROR', 'CDN source map 下载失败', { fileName, mapUrl, statusCode: mapRes.statusCode });
             res.status(404).send('Source map not found');
           }
         }).on('error', (err) => {
-          log('ERROR', 'CDN source map 请求错误', { fileName, mapUrl, error: err.message });
           res.status(404).send('Source map not found');
         });
         return;
@@ -245,7 +296,6 @@ function createProxyMiddleware() {
     const resource = CDN_RESOURCES.find(r => r.localPath === fileName);
 
     if (!resource) {
-      log('WARN', 'CDN 资源未找到', { fileName });
       return next();
     }
 
@@ -256,17 +306,22 @@ function createProxyMiddleware() {
       const exists = await fs.access(localPath).then(() => true).catch(() => false);
 
       if (!exists) {
-        log('INFO', 'CDN 本地资源不存在，开始下载', { resource: resource.name, fileName, localPath });
-        await updateResource(resource);
+        const result = await updateResource(resource);
+        if (!result.success) {
+          return res.status(502).json({ error: 'CDN 资源加载失败', file: fileName, message: result.error });
+        }
       }
 
       // 检查文件是否过期
       const valid = await isFileValid(localPath);
-      if (!valid) {
-        log('INFO', 'CDN 本地资源已过期，触发后台更新', { resource: resource.name, fileName, localPath });
+      if (!valid && !resourceUpdatePromises.has(resource.localPath)) {
         // 异步更新，不阻塞请求
-        updateResource(resource).catch(err => {
-          log('ERROR', 'CDN 后台更新失败', { resource: resource.name, fileName, error: err.message });
+        updateResource(resource).then(result => {
+          if (!result.success) {
+            log('ERROR', 'CDN 后台更新失败', { resource: resource.name, fileName, error: result.error });
+          }
+        }).catch(error => {
+          log('ERROR', 'CDN 后台更新失败', { resource: resource.name, fileName, error: error.message });
         });
       }
 
@@ -281,12 +336,6 @@ function createProxyMiddleware() {
       const fileContent = await fs.readFile(localPath);
       res.setHeader('Content-Length', fileContent.length);
       res.send(fileContent);
-
-      log('INFO', 'CDN 资源服务成功', {
-        resource: resource.name,
-        fileName,
-        sizeKB: Number((fileContent.length / 1024).toFixed(2))
-      });
     } catch (err) {
       log('ERROR', 'CDN 资源服务失败', {
         resource: resource.name,
@@ -304,7 +353,6 @@ function setupAutoUpdate() {
   const cron = require('node-cron');
 
   cron.schedule('0 3 * * *', async () => {
-    log('INFO', 'CDN 定时更新任务开始执行');
     await updateAllResources();
   });
 

@@ -98,15 +98,7 @@ import wsManager from './websocket.js';
 
     // 处理笔记更新
     function handleNoteUpdate(note) {
-        const index = ui.notes.findIndex(n => n.id.toString() === note.id.toString());
-
-        if (index !== -1) {
-            // 更新现有笔记
-            ui.notes[index] = note;
-        } else {
-            // 添加新笔记
-            ui.notes.unshift(note);
-        }
+        ui.upsertNote(note, { toTop: true });
 
         // 如果当前正在编辑这篇笔记，更新编辑器内容
         if (ui.activeId && ui.activeId.toString() === note.id.toString()) {
@@ -118,7 +110,7 @@ import wsManager from './websocket.js';
                         cursor = ui.editor.getCursor();
                     }
                     ui.editor.setValue(note.content);
-                    try { 
+                    try {
                         if (ui.editor.setCursor && cursor) ui.editor.setCursor(cursor);
                     } catch (e) {}
                     if (ui.updateStatus) ui.updateStatus('success', '内容已更新');

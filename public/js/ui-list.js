@@ -45,6 +45,11 @@ export function enhanceUIList(UIManager) {
       const filtered = this._getFilteredNotes(q);
       const displayNotes = q ? filtered : filtered.slice(0, limit);
 
+      if (!this.showCategories) {
+        this._renderFlatNotes(list, displayNotes, filtered, limit, q, currentScroll, isLoadMore);
+        return;
+      }
+
       const groups = {};
       const folderMaxTime = {};
 
@@ -62,12 +67,7 @@ export function enhanceUIList(UIManager) {
         }
       }
 
-      if (!isLoadMore) {
-        list.innerHTML = '';
-      } else {
-        const oldMoreBtn = list.querySelector('.load-more-btn');
-        if (oldMoreBtn) oldMoreBtn.remove();
-      }
+      this._prepareListForRender(list, isLoadMore);
 
       const fragment = document.createDocumentFragment();
       const sortedFolders = Object.keys(groups).sort((a, b) => folderMaxTime[b] - folderMaxTime[a]);
@@ -111,32 +111,53 @@ export function enhanceUIList(UIManager) {
         for (const note of groups[folder]) {
           if (list.querySelector(`.note-item[data-id="${note.id}"]`)) continue;
 
-          const element = document.createElement('div');
-          element.className = `note-item ${note.id.toString() === this.activeId?.toString() ? 'active' : ''}`;
-
-          let displayTitle = note.title || '无标题';
-          if (displayTitle.includes('_')) {
-            displayTitle = displayTitle.split('_').slice(1).join('_').trim();
-          }
-
-          element.dataset.id = note.id;
-          element.dataset.title = displayTitle;
-          element.dataset.fullTitle = note.title;
-
-          const checkbox = this.batchMode
-            ? `<input type="checkbox" class="note-checkbox" ${this.selectedIds.has(note.id.toString()) ? 'checked' : ''}>`
-            : '';
-          const actionButtons = !this.batchMode
-            ? '<span class="note-action-share" title="分享">🔗</span><span class="note-action-delete" title="删除">×</span>'
-            : '';
-
-          element.innerHTML = `${checkbox}<div class="note-info" title="双击编辑标题">${displayTitle}</div>${actionButtons}`;
-          content.appendChild(element);
+          content.appendChild(this._createNoteElement(note));
         }
       }
 
       list.appendChild(fragment);
+      this._finishListRender(list, filtered, limit, q, currentScroll, isLoadMore);
+    },
 
+    _prepareListForRender(list, isLoadMore) {
+      if (!isLoadMore) {
+        list.innerHTML = '';
+        return;
+      }
+
+      const oldMoreBtn = list.querySelector('.load-more-btn');
+      if (oldMoreBtn) oldMoreBtn.remove();
+    },
+
+    _getNoteDisplayTitle(note) {
+      let displayTitle = note.title || '无标题';
+      if (displayTitle.includes('_')) {
+        displayTitle = displayTitle.split('_').slice(1).join('_').trim();
+      }
+      return displayTitle || '无标题';
+    },
+
+    _createNoteElement(note) {
+      const element = document.createElement('div');
+      element.className = `note-item ${note.id.toString() === this.activeId?.toString() ? 'active' : ''}`;
+
+      const displayTitle = this._getNoteDisplayTitle(note);
+      element.dataset.id = note.id;
+      element.dataset.title = displayTitle;
+      element.dataset.fullTitle = note.title;
+
+      const checkbox = this.batchMode
+        ? `<input type="checkbox" class="note-checkbox" ${this.selectedIds.has(note.id.toString()) ? 'checked' : ''}>`
+        : '';
+      const actionButtons = !this.batchMode
+        ? '<span class="note-action-share" title="分享">🔗</span><span class="note-action-delete" title="删除">×</span>'
+        : '';
+
+      element.innerHTML = `${checkbox}<div class="note-info" title="双击编辑标题">${displayTitle}</div>${actionButtons}`;
+      return element;
+    },
+
+    _finishListRender(list, filtered, limit, query, currentScroll, isLoadMore) {
       if (!isLoadMore && currentScroll > 0) {
         list.scrollTop = currentScroll;
       }
@@ -148,7 +169,7 @@ export function enhanceUIList(UIManager) {
             </div>`;
       }
 
-      if (filtered.length > limit && !q) {
+      if (filtered.length > limit && !query) {
         const moreBtn = document.createElement('div');
         moreBtn.className = 'load-more-btn';
         moreBtn.textContent = `加载更多 (${filtered.length - limit})...`;
@@ -163,6 +184,21 @@ export function enhanceUIList(UIManager) {
         this._setupListEventDelegation(list);
         this._hasListEventDelegation = true;
       }
+    },
+
+    _renderFlatNotes(list, displayNotes, filtered, limit, query, currentScroll, isLoadMore) {
+      this._prepareListForRender(list, isLoadMore);
+
+      const fragment = document.createDocumentFragment();
+
+      for (const note of displayNotes) {
+        if (list.querySelector(`.note-item[data-id="${note.id}"]`)) continue;
+
+        fragment.appendChild(this._createNoteElement(note));
+      }
+
+      list.appendChild(fragment);
+      this._finishListRender(list, filtered, limit, query, currentScroll, isLoadMore);
     },
 
     _setupListEventDelegation(list) {
@@ -237,17 +273,21 @@ export function enhanceUIList(UIManager) {
       this.render(9999, true);
     },
 
-    toggleAllFolders(expand) {
-      const q = document.getElementById('search').value.toLowerCase();
-      const filtered = this._getFilteredNotes(q);
-      const folders = new Set(filtered.map((note) => this._getNoteFolder(note)));
+    toggleCategoryView() {
+      this.showCategories = !this.showCategories;
 
-      if (expand) {
-        this.collapsedFolders.clear();
+      const toggleBtn = document.getElementById('category-toggle-btn');
+      if (toggleBtn) {
+        toggleBtn.classList.toggle('active', this.showCategories);
+        toggleBtn.setAttribute('aria-pressed', this.showCategories ? 'true' : 'false');
+      }
+
+      if (this.showCategories) {
+        const q = document.getElementById('search').value.toLowerCase();
+        const filtered = this._getFilteredNotes(q);
+        this.collapsedFolders = new Set(filtered.map((note) => this._getNoteFolder(note)));
       } else {
-        folders.forEach((folder) => {
-          this.collapsedFolders.add(folder);
-        });
+        this.collapsedFolders.clear();
       }
 
       this.render(9999, true);

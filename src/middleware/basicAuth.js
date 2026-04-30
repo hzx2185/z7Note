@@ -52,7 +52,7 @@ async function verifyBasicAuth(authHeader) {
       return null;
     }
 
-    log('INFO', 'Basic Auth 验证成功', { username });
+    log.protocol('Basic Auth 验证成功', { username });
     return user;
   } catch (error) {
     log('ERROR', 'Basic Auth 验证失败', { error: error.message });

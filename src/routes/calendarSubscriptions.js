@@ -127,7 +127,7 @@ router.post('/', async (req, res) => {
     );
 
     log('INFO', '添加订阅', { username: req.user, subscriptionId: id, name: name.trim() });
-    
+
     const subscription = await db.queryOne('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [id, req.user]);
     res.json(subscription);
   } catch (e) {
@@ -172,7 +172,7 @@ router.put('/:id', async (req, res) => {
     );
 
     log('INFO', '更新订阅', { username: req.user, subscriptionId: req.params.id });
-    
+
     const subscription = await db.queryOne('SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?', [req.params.id, req.user]);
     res.json(subscription);
   } catch (e) {
@@ -203,7 +203,7 @@ router.delete('/:id', async (req, res) => {
 
       for (const event of events) {
         await tx.execute(
-          'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)', 
+          'INSERT INTO deleted_items (id, username, item_id, type, deletedAt) VALUES (?, ?, ?, ?, ?)',
           [Date.now().toString(36) + Math.random().toString(36).slice(2), req.user, toClientCalendarId(req.user, event.id), 'event', now]
         );
       }
@@ -233,7 +233,7 @@ router.delete('/:id', async (req, res) => {
 /**
  * 核心同步逻辑 (导出供定时任务使用)
  */
-async function syncSubscription(subscriptionId, username) {
+async function syncSubscription(subscriptionId, username, options = {}) {
   const subscription = await db.queryOne(
     'SELECT * FROM calendar_subscriptions WHERE id = ? AND username = ?',
     [subscriptionId, username]
@@ -262,7 +262,12 @@ async function syncSubscription(subscriptionId, username) {
 
   fetchUrl = parsedUrl.toString();
 
-  log('INFO', '开始同步订阅内容', { url: fetchUrl, subscriptionId });
+  if (options.logStart !== false) {
+    log('INFO', '开始同步订阅内容', {
+      subscriptionId,
+      sourceHost: parsedUrl.host
+    });
+  }
 
   // 获取ICS内容
   const icsContent = await fetchIcsContent(fetchUrl);
@@ -276,11 +281,11 @@ async function syncSubscription(subscriptionId, username) {
 
     let importedCount = 0;
     const now = Math.floor(Date.now() / 1000);
-    
+
     for (const event of events) {
       const eventUid = event.uid || `idx_${importedCount}`;
       const id = `sub_${subscriptionId}_${eventUid}`;
-      
+
       await tx.execute(
         `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, subscriptionId, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -315,7 +320,7 @@ async function syncSubscription(subscriptionId, username) {
 router.post('/:id/sync', async (req, res) => {
   try {
     const importedCount = await syncSubscription(req.params.id, req.user);
-    
+
     log('INFO', '手动同步订阅成功', {
       username: req.user,
       subscriptionId: req.params.id,

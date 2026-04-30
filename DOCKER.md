@@ -46,6 +46,9 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Shanghai
+      - JWT_SECRET=please-change-this-long-random-secret
+      - ADMIN_USER=admin
+      - ADMIN_REGISTRATION_TOKEN=please-change-this-admin-bootstrap-token
 EOF
 
 # 2. 设置目录权限
@@ -73,6 +76,9 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   -e TZ=Asia/Shanghai \
+  -e JWT_SECRET=please-change-this-long-random-secret \
+  -e ADMIN_USER=admin \
+  -e ADMIN_REGISTRATION_TOKEN=please-change-this-admin-bootstrap-token \
   --restart unless-stopped \
   hzx2185/z7note:latest
 
@@ -88,10 +94,21 @@ open http://localhost:3000
 |--------|--------|------|
 | `TZ` | `Asia/Shanghai` | 时区设置 |
 | `PORT` | `80` | 容器内端口（通常不需要修改） |
+| `HOST` | `0.0.0.0` | 容器内监听地址 |
 | `ADMIN_USER` | `admin` | 管理员用户名（多个用逗号分隔） |
 | `ADMIN_REGISTRATION_TOKEN` | - | 管理员初始化令牌，生产环境必填，注册 `ADMIN_USER` 时需要提供 |
 | `JWT_SECRET` | - | JWT 签名密钥，生产环境必填 |
 | `DB_DIALECT` | `sqlite` | 数据库方言，当前仅支持 `sqlite` |
+| `DEFAULT_NOTE_LIMIT` | `100` | 默认笔记空间配额，单位 MB |
+| `DEFAULT_FILE_LIMIT` | `500` | 默认附件空间配额，单位 MB |
+| `MAX_FILE_SIZE` | `500` | 单文件上传限制，单位 MB |
+| `CALDAV_ENABLED` | `true` | 是否启用 CalDAV 日历同步 |
+| `CARDDAV_ENABLED` | `true` | 是否启用 CardDAV 通讯录同步 |
+| `DAILY_BACKUP_LIMIT` | `0` | 用户每日备份次数限制，0 表示不限制 |
+| `LOG_LEVEL` | `INFO` | 日志级别：DEBUG / INFO / WARN / ERROR |
+| `LOG_MAX_FILE_SIZE_MB` | `100` | 应用日志单文件轮转大小 |
+| `LOG_MAX_ARCHIVES` | `5` | 应用日志保留归档数量 |
+| `PROTOCOL_DEBUG_LOGS` | `false` | 是否输出 WebDAV / CalDAV / CardDAV 协议调试日志 |
 
 ### 数据卷
 
@@ -107,7 +124,27 @@ open http://localhost:3000
 
 ## 初始配置
 
-### 1. 创建管理员账户
+### 1. 生产环境必填项
+
+生产部署前建议先准备两个随机值：
+
+```bash
+openssl rand -hex 32
+```
+
+然后写入 `docker-compose.yml`：
+
+```yaml
+environment:
+  - TZ=Asia/Shanghai
+  - JWT_SECRET=替换为随机长字符串
+  - ADMIN_USER=admin
+  - ADMIN_REGISTRATION_TOKEN=替换为一次性管理员初始化令牌
+```
+
+`JWT_SECRET` 用于签名登录令牌；`ADMIN_REGISTRATION_TOKEN` 用于保护首次管理员注册。不要在公开仓库提交真实值。
+
+### 2. 创建管理员账户
 
 部署前请先确认管理员用户名配置：
 - 默认值为 `admin`
@@ -120,7 +157,7 @@ open http://localhost:3000
 - 使用预先配置好的管理员用户名完成注册
 - 在“管理员初始化令牌”输入框中填写 `ADMIN_REGISTRATION_TOKEN`
 
-### 2. 配置 SMTP 邮件服务
+### 3. 配置 SMTP 邮件服务
 
 **重要：SMTP 配置已迁移到管理后台数据库存储**
 
@@ -200,6 +237,26 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
+## DAV 客户端配置
+
+z7Note 暴露三个同步入口，均使用 z7Note 用户名和密码登录：
+
+| 协议 | 地址 | 用途 |
+|------|------|------|
+| WebDAV | `https://your-domain.com/webdav/` | 笔记 Markdown 文件与附件同步 |
+| CalDAV | `https://your-domain.com/caldav/` | 日历事件与待办同步 |
+| CardDAV | `https://your-domain.com/carddav/` | 系统通讯录同步 |
+
+### iPhone / macOS 通讯录
+
+1. 设置 > 通讯录 > 账户 > 添加账户 > 其他
+2. 选择“添加 CardDAV 账户”
+3. 服务器填写你的域名或 `https://your-domain.com/carddav/`
+4. 输入 z7Note 用户名和密码
+5. 保存后等待系统通讯录同步
+
+当前版本已兼容 iOS / macOS 通讯录写入的 Apple 分组字段，例如 `item1.TEL;type=pref:13800000000`，可以正常同步电话号码。
+
 ## 故障排查
 
 ### 权限错误
@@ -228,6 +285,21 @@ docker-compose logs -f
 
 # 查看应用日志
 tail -f logs/app-*.log
+```
+
+### 清理旧日志和缓存
+
+日志和缓存属于运行数据，建议按需清理，不要删除数据库和上传目录：
+
+```bash
+# 删除 30 天前的应用日志
+find logs -name 'app-*.log' -mtime +30 -delete
+
+# 清理 CDN 缓存，后续访问会自动重建
+rm -rf data/cdn-cache/*
+
+# 查看数据目录体积
+du -sh data/* logs/*
 ```
 
 ### 重启容器

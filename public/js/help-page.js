@@ -20,9 +20,16 @@ const GUIDE_FALLBACK = [
   {
     icon: '👥',
     title: '管理联系人',
-    summary: '掌握添加联系人、导入导出名片、查重和分组管理的技巧。',
+    summary: '掌握添加联系人、导入导出名片、查重、合并和 CardDAV 多端同步。',
     href: '/contacts.html',
     module: 'contacts'
+  },
+  {
+    icon: '🔄',
+    title: '连接 DAV 客户端',
+    summary: '使用 WebDAV 同步笔记文件，用 CalDAV 同步日历待办，用 CardDAV 同步系统通讯录。',
+    href: '/member',
+    module: 'workspace'
   }
 ];
 
@@ -46,6 +53,14 @@ const FAQ_FALLBACK = [
   {
     title: '如何实现多设备同步？',
     summary: '登录同一账号后，你的笔记、日历和联系人会自动在所有设备间同步。也可以使用 WebDAV 或 CalDAV 连接外部客户端。'
+  },
+  {
+    title: 'iPhone 通讯录同步只看到姓名怎么办？',
+    summary: '新版已兼容 iOS / macOS 通讯录的 Apple 分组 vCard 字段，例如 item1.TEL。升级后重新同步即可同步电话号码。'
+  },
+  {
+    title: '笔记列表为什么默认不显示分类？',
+    summary: '笔记列表默认按最后修改时间倒序显示，便于快速回到最近内容。需要分类视图时点击顶部“分类”按钮，再点分类名展开。'
   }
 ];
 
@@ -130,11 +145,19 @@ async function initHelpPage() {
         icon: '👥',
         title: '管理联系人',
         summary: sharedCapabilities.importExport
-          ? `通讯录支持导入导出、查重和批量治理；当前最高可配置 ${Number(teamPlan.contactLimit || 0).toLocaleString('zh-CN')} 位联系人。`
-          : '通讯录支持结构化联系人管理，导入导出和批量治理能力可按套餐开启。',
+          ? `通讯录支持导入导出、查重、合并和 CardDAV 同步；当前最高可配置 ${Number(teamPlan.contactLimit || 0).toLocaleString('zh-CN')} 位联系人。`
+          : '通讯录支持结构化联系人管理和 CardDAV 同步，导入导出与批量治理能力可按套餐开启。',
         href: '/contacts.html',
         module: 'contacts',
         linkLabel: '进入通讯录 →'
+      },
+      {
+        icon: '🔄',
+        title: '连接 DAV 客户端',
+        summary: '外部客户端统一使用账户密码登录：WebDAV 连接笔记文件，CalDAV 连接系统日历，CardDAV 连接系统通讯录。',
+        href: '/member',
+        module: 'workspace',
+        linkLabel: '查看入口 →'
       }
     ];
 
@@ -152,8 +175,16 @@ async function initHelpPage() {
       {
         title: '如何实现多设备同步？',
         summary: sharedCapabilities.webdavEnabled || sharedCapabilities.caldavEnabled || sharedCapabilities.carddavEnabled
-          ? '如果套餐已开启 DAV 能力，可以通过 WebDAV、CalDAV、CardDAV 接入外部客户端；未开启时相关入口会自动隐藏。'
+          ? '如果套餐已开启 DAV 能力，可以通过 WebDAV、CalDAV、CardDAV 接入外部客户端；推荐路径分别是 /webdav/、/caldav/、/carddav/。'
           : '多端同步能力由套餐配置控制；管理员可以在后台单独开启 WebDAV、CalDAV、CardDAV。'
+      },
+      {
+        title: 'iPhone 通讯录同步只看到姓名怎么办？',
+        summary: '请先升级到包含 2026-04-30 修复的版本。系统已兼容 iOS / macOS 通讯录的 item1.TEL 分组电话字段，升级后重新同步即可。'
+      },
+      {
+        title: '笔记分类按钮如何使用？',
+        summary: '笔记列表默认只显示最近修改内容。点击顶部“分类”按钮会显示分类列表，分类默认折叠；再次点击“分类”按钮可回到普通列表。'
       },
       {
         title: '分享功能是否所有套餐都支持？',
@@ -173,6 +204,7 @@ async function initHelpPage() {
       { label: '🚀 打开应用', href: '/app', module: 'notes' },
       { label: '📅 日历入口', href: '/calendar.html', module: 'calendar' },
       { label: '👥 通讯录入口', href: '/contacts.html', module: 'contacts' },
+      { label: '🔄 DAV 同步', href: '/member', module: 'workspace' },
       { label: '👤 会员中心', href: '/member' }
     ];
 

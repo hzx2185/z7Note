@@ -17,6 +17,15 @@ const LOGS_DIR = process.env.LOGS_DIR
   ? path.resolve(process.env.LOGS_DIR)
   : path.join(ROOT_DIR, 'logs');
 const isProduction = process.env.NODE_ENV === 'production';
+const normalizedLogLevel = (process.env.LOG_LEVEL || 'INFO').trim().toUpperCase();
+const logLevel = ['DEBUG', 'INFO', 'WARN', 'ERROR'].includes(normalizedLogLevel)
+  ? normalizedLogLevel
+  : 'INFO';
+
+function getPositiveIntEnv(name, fallback) {
+  const value = parseInt(process.env[name], 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 // 确保日志目录存在
 nodeFs.mkdirSync(LOGS_DIR, { recursive: true });
@@ -97,13 +106,30 @@ const config = {
   // 每日备份限制 (默认不限制: 0)
   dailyBackupLimit: process.env.DAILY_BACKUP_LIMIT !== undefined ? parseInt(process.env.DAILY_BACKUP_LIMIT) : 0,
 
+  // 日志轮转配置
+  logRotation: {
+    maxFileSizeMB: parseInt(process.env.LOG_MAX_FILE_SIZE_MB, 10) || 100,
+    maxArchives: parseInt(process.env.LOG_MAX_ARCHIVES, 10) || 5
+  },
+
+  logging: {
+    level: logLevel,
+    protocolDebugLogs: process.env.PROTOCOL_DEBUG_LOGS === 'true',
+    maxLineBytes: getPositiveIntEnv('LOG_MAX_LINE_BYTES', 16 * 1024),
+    maxStringLength: getPositiveIntEnv('LOG_MAX_STRING_LENGTH', 2048),
+    maxArrayLength: getPositiveIntEnv('LOG_MAX_ARRAY_LENGTH', 20),
+    maxObjectKeys: getPositiveIntEnv('LOG_MAX_OBJECT_KEYS', 50),
+    maxDepth: getPositiveIntEnv('LOG_MAX_DEPTH', 4),
+    dedupeWindowMs: getPositiveIntEnv('LOG_DEDUPE_WINDOW_MS', 5000)
+  },
+
   // 限流配置
   rateLimit: {
     windowMs: 60000,
     maxRequests: 1000,
     uploadMax: parseInt(process.env.UPLOAD_RATE_LIMIT) || 20
   },
-  
+
   // CalDAV配置
   caldav: {
     enabled: process.env.CALDAV_ENABLED !== 'false',
@@ -121,7 +147,7 @@ const config = {
     secret: process.env.JWT_SECRET || require('crypto').randomBytes(64).toString('hex'),
     expiresIn: '2h'
   },
-  
+
   // 路径配置
   paths: {
     root: ROOT_DIR,
@@ -132,7 +158,7 @@ const config = {
     logs: LOGS_DIR,
     database: path.join(DATA_DIR, 'z7note.db')
   },
-  
+
   // 验证必需的环境变量
   validateEnv() {
     if (!['sqlite'].includes(this.database.dialect)) {

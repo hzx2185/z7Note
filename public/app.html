@@ -19,7 +19,7 @@
 
     <!-- CSS - 关键样式立即加载 -->
     <link rel="stylesheet" href="/cdn/codemirror.min.css">
-    <link rel="stylesheet" href="/css/app.css?v=20250312-FINAL-FIX">
+    <link rel="stylesheet" href="/css/app.css?v=20260430-split-app-css">
 
     <!-- 非关键样式延迟加载 -->
     <link rel="stylesheet" href="/cdn/highlight-dark.min.css" media="print" onload="this.media='all'">
@@ -107,8 +107,7 @@
                     <button onclick="ui.create(); if(window.innerWidth <= 768) ui.toggleSidebar();" class="tool-btn sidebar-action-btn">新建</button>
                     <button onclick="ui.toggleBatchMode()" class="tool-btn sidebar-action-btn">批量</button>
                     <button onclick="ui.checkDuplicates()" class="tool-btn sidebar-action-btn" title="查找并删除重复笔记">去重</button>
-                    <button onclick="ui.toggleAllFolders(false)" class="tool-btn sidebar-action-btn" title="折叠所有">折叠</button>
-                    <button onclick="ui.toggleAllFolders(true)" class="tool-btn sidebar-action-btn" title="展开所有">展开</button>
+                    <button id="category-toggle-btn" onclick="ui.toggleCategoryView()" class="tool-btn sidebar-action-btn" title="显示或隐藏分类" aria-pressed="false">分类</button>
                 </div>
             </div>
             <div id="list"></div>
@@ -347,7 +346,7 @@
     </div>
 
     <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
-    <script type="module" src="/js/app-entry.js?v=20250312-FINAL-FIX"></script>
+    <script type="module" src="/js/app-entry.js?v=20260430-no-touch-save"></script>
 
     <!-- 修改密码模态框 -->
     <div id="change-password-modal" class="modal workspace-brand-modal hidden-by-default">

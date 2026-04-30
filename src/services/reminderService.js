@@ -178,128 +178,110 @@ function isQuietTime(settings) {
  * 发送邮件提醒
  */
 async function sendEmailReminder(username, type, item, settings) {
-  try {
-    const user = await db.queryOne(
-      'SELECT email FROM users WHERE username = ?',
-      [username]
-    );
+  const user = await db.queryOne(
+    'SELECT email FROM users WHERE username = ?',
+    [username]
+  );
 
-    if (!user || !user.email) {
-      throw new Error('用户未设置邮箱');
-    }
-
-    const isEvent = type === 'event';
-    const title = item.title;
-    const startTime = isEvent ? item.startTime : item.dueDate;
-    const timeStr = new Date(startTime * 1000).toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-
-    const subject = isEvent
-      ? `[z7Note] 事件提醒: ${title}`
-      : `[z7Note] 待办提醒: ${title}`;
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #2563eb; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-          .content { background: #f8fafc; padding: 20px; border-radius: 0 0 8px 8px; }
-          .title { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
-          .time { color: #64748b; margin-bottom: 15px; }
-          .description { color: #334155; line-height: 1.6; }
-          .footer { margin-top: 20px; text-align: center; color: #94a3b8; font-size: 12px; }
-          .button { display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin-top: 15px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h2>z7Note 提醒</h2>
-          </div>
-          <div class="content">
-            <div class="title">${isEvent ? '📅 事件提醒' : '✅ 待办提醒'}</div>
-            <div class="title">${title}</div>
-            <div class="time">⏰ 时间: ${timeStr}</div>
-            ${item.description ? `<div class="description">${item.description}</div>` : ''}
-            <a href="${process.env.APP_URL || 'http://localhost:3000'}/calendar.html" class="button">查看日历</a>
-          </div>
-          <div class="footer">
-            此邮件由 z7Note 自动发送，请勿回复
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
-    await sendMail({
-      to: user.email,
-      subject,
-      html
-    });
-
-    log('INFO', '邮件提醒发送成功', { username, type, itemId: item.id });
-    return true;
-  } catch (e) {
-    log('ERROR', '邮件提醒发送失败', { username, type, itemId: item.id, error: e.message });
-    throw e;
+  if (!user || !user.email) {
+    throw new Error('用户未设置邮箱');
   }
+
+  const isEvent = type === 'event';
+  const title = item.title;
+  const startTime = isEvent ? item.startTime : item.dueDate;
+  const timeStr = new Date(startTime * 1000).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const subject = isEvent
+    ? `[z7Note] 事件提醒: ${title}`
+    : `[z7Note] 待办提醒: ${title}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2563eb; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f8fafc; padding: 20px; border-radius: 0 0 8px 8px; }
+        .title { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+        .time { color: #64748b; margin-bottom: 15px; }
+        .description { color: #334155; line-height: 1.6; }
+        .footer { margin-top: 20px; text-align: center; color: #94a3b8; font-size: 12px; }
+        .button { display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin-top: 15px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h2>z7Note 提醒</h2>
+        </div>
+        <div class="content">
+          <div class="title">${isEvent ? '📅 事件提醒' : '✅ 待办提醒'}</div>
+          <div class="title">${title}</div>
+          <div class="time">⏰ 时间: ${timeStr}</div>
+          ${item.description ? `<div class="description">${item.description}</div>` : ''}
+          <a href="${process.env.APP_URL || 'http://localhost:3000'}/calendar.html" class="button">查看日历</a>
+        </div>
+        <div class="footer">
+          此邮件由 z7Note 自动发送，请勿回复
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await sendMail({
+    to: user.email,
+    subject,
+    html
+  });
+
+  return true;
 }
 
 /**
  * 发送浏览器通知（通过WebSocket）
  */
 async function sendBrowserReminder(username, type, item, settings) {
-  try {
-    const isEvent = type === 'event';
-    const startTime = isEvent ? item.startTime : item.dueDate;
-    const timeStr = new Date(startTime * 1000).toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const isEvent = type === 'event';
+  const startTime = isEvent ? item.startTime : item.dueDate;
+  const timeStr = new Date(startTime * 1000).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 
-    const notification = {
-      type: 'reminder',
-      itemType: type,
-      item: {
-        id: item.id,
-        title: item.title,
-        description: item.description,
-        startTime: startTime,
-        timeStr: timeStr
-      }
-    };
+  const notification = {
+    type: 'reminder',
+    itemType: type,
+    item: {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      startTime: startTime,
+      timeStr: timeStr
+    }
+  };
 
-    broadcast('reminder', notification, { username });
-    log('INFO', '浏览器提醒发送成功', { username, type, itemId: item.id });
-    return true;
-  } catch (e) {
-    log('ERROR', '浏览器提醒发送失败', { username, type, itemId: item.id, error: e.message });
-    return false;
-  }
+  broadcast('reminder', notification, { username });
+  return true;
 }
 
 /**
  * 发送日历应用同步提醒（通过CalDAV VALARM）
  */
 async function sendCaldavReminder(username, type, item, settings) {
-  try {
-    log('INFO', 'CalDAV提醒标记', { username, type, itemId: item.id });
-    return true;
-  } catch (e) {
-    log('ERROR', 'CalDAV提醒标记失败', { username, type, itemId: item.id, error: e.message });
-    return false;
-  }
+  return true;
 }
 
 /**
@@ -363,6 +345,32 @@ async function sendReminder(username, type, item, settings) {
   return results;
 }
 
+function accumulateReminderResults(summary, username, type, item, results) {
+  if (!Array.isArray(results) || results.length === 0) {
+    return;
+  }
+
+  summary.triggeredCount += 1;
+
+  for (const result of results) {
+    if (result.status === 'success') {
+      summary.sentCount += 1;
+      continue;
+    }
+
+    summary.failedCount += 1;
+    if (summary.failureSamples.length < 5) {
+      summary.failureSamples.push({
+        username,
+        type,
+        itemId: item.id,
+        method: result.method,
+        error: result.error
+      });
+    }
+  }
+}
+
 function getEventReminderCutoff(event) {
   if (event && event.allDay && event.endTime) {
     return event.endTime;
@@ -381,11 +389,27 @@ function getTodoReminderCutoff(todo) {
  * 检查并发送待处理的提醒
  */
 async function checkAndSendPendingReminders() {
-  if (isChecking) return;
+  if (isChecking) {
+    return {
+      skipped: true,
+      reason: 'running'
+    };
+  }
   isChecking = true;
 
   try {
     const now = Math.floor(Date.now() / 1000);
+    const summary = {
+      skipped: false,
+      usersChecked: 0,
+      quietUsers: 0,
+      eventCandidates: 0,
+      todoCandidates: 0,
+      triggeredCount: 0,
+      sentCount: 0,
+      failedCount: 0,
+      failureSamples: []
+    };
 
     // 获取所有启用了提醒的用户设置
     const usersSettings = await db.queryAll(
@@ -396,7 +420,12 @@ async function checkAndSendPendingReminders() {
       const username = settings.username;
 
       // 检查免打扰时间
-      if (isQuietTime(settings)) continue;
+      if (isQuietTime(settings)) {
+        summary.quietUsers += 1;
+        continue;
+      }
+
+      summary.usersChecked += 1;
 
       // 检查事件提醒
       if (settings.event_reminder_enabled) {
@@ -414,6 +443,7 @@ async function checkAndSendPendingReminders() {
            )`,
           [username, now, username]
         );
+        summary.eventCandidates += events.length;
 
         for (const event of events) {
           const reminderTime = calculateReminderTime(event.startTime, settings, event);
@@ -423,7 +453,8 @@ async function checkAndSendPendingReminders() {
           }
           // 全天事件允许在事件结束前补发，避免“当天 09:00”或免打扰错过后被永久跳过。
           if (reminderCutoff && reminderTime <= now && reminderCutoff > now) {
-            await sendReminder(username, 'event', event, settings);
+            const results = await sendReminder(username, 'event', event, settings);
+            accumulateReminderResults(summary, username, 'event', event, results);
           }
         }
       }
@@ -442,6 +473,7 @@ async function checkAndSendPendingReminders() {
            )`,
           [username, now, username]
         );
+        summary.todoCandidates += todos.length;
 
         for (const todo of todos) {
           const reminderTime = calculateReminderTime(todo.dueDate, settings, todo);
@@ -450,13 +482,17 @@ async function checkAndSendPendingReminders() {
             continue;
           }
           if (reminderCutoff && reminderTime <= now && reminderCutoff > now) {
-            await sendReminder(username, 'todo', todo, settings);
+            const results = await sendReminder(username, 'todo', todo, settings);
+            accumulateReminderResults(summary, username, 'todo', todo, results);
           }
         }
       }
     }
+
+    return summary;
   } catch (e) {
     log('ERROR', '检查并发送提醒失败', { error: e.message });
+    throw e;
   } finally {
     isChecking = false;
   }

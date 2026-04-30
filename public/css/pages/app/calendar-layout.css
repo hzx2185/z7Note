@@ -1,0 +1,396 @@
+.calendar-page .sidebar-header,
+.calendar-page .stats-panel,
+.calendar-page .calendar-action-strip,
+.calendar-page .sidebar-search,
+.calendar-page .sidebar-tabs,
+.calendar-page .sidebar-subfilters,
+.calendar-page .batch-actions-bar {
+    flex: 0 0 auto;
+}
+
+.calendar-page .sidebar-search {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--control-border);
+    flex: 0 0 auto;
+    background: color-mix(in srgb, var(--surface-toolbar) 88%, transparent);
+}
+
+.calendar-page .sidebar-search input {
+    width: 100%;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--control-border);
+    border-radius: 4px;
+    background: var(--surface-input-bg);
+    color: var(--text);
+    font-size: 12px;
+    outline: none;
+}
+
+.calendar-page .sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--control-border);
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--surface-toolbar) 88%, transparent);
+}
+
+.calendar-page .sidebar-tab {
+    position: relative;
+    flex: 1;
+    padding: 8px;
+    color: var(--calendar-muted);
+    font-size: 12px;
+    text-align: center;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+    border: 1px solid transparent;
+}
+
+.calendar-page .sidebar-tab:hover {
+    background: var(--table-row-hover);
+    border-color: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.calendar-page .sidebar-tab.active {
+    border-bottom: 2px solid transparent;
+    color: var(--calendar-accent);
+    font-weight: 700;
+    background: var(--accent-soft);
+    border-color: var(--accent-soft-strong);
+}
+
+.calendar-page .sidebar-subfilters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--control-border);
+    color: var(--calendar-muted);
+    font-size: 12px;
+    background: color-mix(in srgb, var(--surface-toolbar) 88%, transparent);
+}
+
+.calendar-page .sidebar-subfilters.hidden {
+    display: none !important;
+}
+
+.calendar-page .sidebar-subfilters label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.calendar-page .sidebar-subfilters input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    accent-color: var(--accent);
+}
+
+.calendar-page .sidebar-content {
+    display: block;
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+    padding: 0;
+}
+
+.calendar-page .date-group-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--control-border);
+    background: color-mix(in srgb, var(--surface-toolbar) 90%, transparent);
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.calendar-page .stats-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--control-border);
+    background: color-mix(in srgb, var(--surface-toolbar) 88%, transparent);
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.calendar-page .calendar-stats-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.calendar-page .calendar-stats-line .tool-btn {
+    width: 24px;
+    min-width: 24px;
+    height: 22px;
+    min-height: 22px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 18px;
+}
+
+.calendar-page .batch-actions-bar {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--control-border);
+    background: color-mix(in srgb, var(--surface-toolbar) 90%, transparent);
+    font-size: 11px;
+}
+
+.calendar-page .batch-btn {
+    padding: 2px 5px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.calendar-page .batch-btn.format {
+    border-color: var(--focus-soft);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.calendar-page .batch-btn.cleanup {
+    border-color: color-mix(in srgb, var(--green) 22%, transparent);
+    background: var(--success-soft);
+    color: var(--green);
+}
+
+.calendar-page .batch-btn.delete {
+    border-color: color-mix(in srgb, var(--red) 22%, transparent);
+    background: var(--danger-soft);
+    color: var(--red);
+}
+
+.calendar-page .batch-btn.cancel {
+    border-color: var(--control-border);
+    background: var(--surface-panel);
+    color: var(--text);
+}
+
+.calendar-page .todo-item,
+.calendar-page .event-item,
+.calendar-page .note-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--control-border);
+    background: color-mix(in srgb, var(--surface-panel) 94%, var(--bg) 6%);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.calendar-page .note-item:hover {
+    background: var(--table-row-hover);
+}
+
+.calendar-page .todo-item {
+    background: color-mix(in srgb, var(--calendar-todo-bg) 58%, var(--surface-panel) 42%);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--calendar-todo-text) 42%, transparent);
+}
+
+.calendar-page .event-item {
+    background: color-mix(in srgb, var(--calendar-event-bg) 58%, var(--surface-panel) 42%);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--calendar-event-text) 42%, transparent);
+}
+
+.calendar-page .todo-item:hover {
+    background: color-mix(in srgb, var(--calendar-todo-bg) 66%, var(--surface-hover) 34%);
+}
+
+.calendar-page .event-item:hover {
+    background: color-mix(in srgb, var(--calendar-event-bg) 66%, var(--surface-hover) 34%);
+}
+
+.calendar-page .todo-checkbox {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.calendar-page .batch-checkbox {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+}
+
+.calendar-page .todo-content,
+.calendar-page .event-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.calendar-page .todo-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.calendar-page .todo-time {
+    margin-left: 8px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.calendar-page .todo-title,
+.calendar-page .event-title,
+.calendar-page .note-title {
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--calendar-text);
+}
+
+.calendar-page .todo-title {
+    color: var(--calendar-todo-text);
+}
+
+.calendar-page .event-title {
+    color: var(--calendar-event-text);
+}
+
+.calendar-page .todo-title.completed {
+    color: color-mix(in srgb, var(--calendar-todo-text) 38%, var(--text-muted) 62%);
+    text-decoration: line-through;
+}
+
+.calendar-page .todo-meta,
+.calendar-page .event-time {
+    margin-top: 2px;
+    color: var(--calendar-muted);
+    font-size: 10px;
+}
+
+.calendar-page .todo-actions,
+.calendar-page .event-actions {
+    display: none;
+    gap: 4px;
+}
+
+.calendar-page .todo-item:hover .todo-actions,
+.calendar-page .event-item:hover .event-actions {
+    display: flex;
+}
+
+.calendar-page .edit-btn,
+.calendar-page .delete-btn {
+    width: auto;
+    height: auto;
+    padding: 2px 4px;
+    border: none;
+    border-radius: 3px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.calendar-page .edit-btn:hover {
+    background: var(--surface-hover);
+    color: var(--accent);
+}
+
+.calendar-page .delete-btn:hover {
+    background: var(--danger-soft);
+    color: var(--red);
+}
+
+.calendar-page .load-more-indicator {
+    padding: 10px;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.calendar-page .empty-state {
+    padding: 40px 20px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.calendar-page .subscription-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 10px;
+    border: 1px solid var(--control-border);
+    border-radius: 6px;
+    background: linear-gradient(180deg, var(--surface-panel), color-mix(in srgb, var(--surface-toolbar) 24%, var(--surface-panel) 76%));
+}
+
+.calendar-page .subscription-swatch {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 4px;
+}
+
+.calendar-page .subscription-copy {
+    flex: 1;
+    min-width: 0;
+}
+
+.calendar-page .subscription-name {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.calendar-page .subscription-url {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendar-page .subscription-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.calendar-page .subscription-btn {
+    padding: 4px 8px;
+    border: 1px solid var(--control-border);
+    border-radius: 4px;
+    background: var(--surface-toolbar);
+    color: var(--text);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.calendar-page .subscription-btn.sync-sub-btn {
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--text-on-accent);
+}
+
+.calendar-page .subscription-btn.delete-sub-btn {
+    border-color: transparent;
+    background: var(--danger-soft);
+    color: var(--red);
+}

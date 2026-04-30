@@ -25,83 +25,179 @@ function stopScheduledTasks(tasks) {
   }
 }
 
-function createReminderTask() {
-  const task = nodeCron.schedule('* * * * *', async () => {
-    try {
-      await checkAndSendPendingReminders();
-    } catch (error) {
-      log('ERROR', '提醒检查失败', { task: 'reminders', error: error.message, stack: error.stack });
+function createTaskRunner(taskName) {
+  let running = false;
+  let overlapWarned = false;
+
+  return async (handler) => {
+    if (running) {
+      if (!overlapWarned) {
+        log('WARN', '定时任务仍在运行，跳过重复触发', { task: taskName });
+        overlapWarned = true;
+      }
+      return { skipped: true, reason: 'running' };
     }
+
+    running = true;
+    overlapWarned = false;
+
+    try {
+      return await handler();
+    } finally {
+      running = false;
+    }
+  };
+}
+
+function createReminderTask() {
+  const runReminderTask = createTaskRunner('reminders');
+  const task = nodeCron.schedule('* * * * *', async () => {
+    await runReminderTask(async () => {
+      try {
+        const summary = await checkAndSendPendingReminders();
+        if (!summary || summary.skipped) {
+          return summary;
+        }
+
+        if (summary.failedCount > 0) {
+          log('WARN', '提醒检查完成，存在发送失败', {
+            task: 'reminders',
+            usersChecked: summary.usersChecked,
+            quietUsers: summary.quietUsers,
+            eventCandidates: summary.eventCandidates,
+            todoCandidates: summary.todoCandidates,
+            triggeredCount: summary.triggeredCount,
+            sentCount: summary.sentCount,
+            failedCount: summary.failedCount,
+            failureSamples: summary.failureSamples.length > 0 ? summary.failureSamples : undefined
+          });
+          return summary;
+        }
+
+        if (summary.sentCount > 0) {
+          log('INFO', '提醒检查完成', {
+            task: 'reminders',
+            usersChecked: summary.usersChecked,
+            quietUsers: summary.quietUsers,
+            triggeredCount: summary.triggeredCount,
+            sentCount: summary.sentCount
+          });
+        }
+
+        return summary;
+      } catch (error) {
+        log('ERROR', '提醒检查失败', { task: 'reminders', error: error.message, stack: error.stack });
+        return { error: error.message };
+      }
+    });
   });
   log('INFO', '提醒服务已启动', { task: 'reminders', schedule: '* * * * *' });
   return task;
 }
 
 function createUploadCleanupTask() {
+  const runCleanupTask = createTaskRunner('cleanup_upload_sessions');
   return nodeCron.schedule('0 * * * *', async () => {
-    try {
-      const count = await cleanupExpiredSessions();
-      log('INFO', '清理过期上传会话完成', { task: 'cleanup_upload_sessions', count });
-    } catch (error) {
-      log('ERROR', '清理过期上传会话失败', { task: 'cleanup_upload_sessions', error: error.message, stack: error.stack });
-    }
+    await runCleanupTask(async () => {
+      try {
+        const count = await cleanupExpiredSessions();
+        if (count > 0) {
+          log('INFO', '清理过期上传会话完成', { task: 'cleanup_upload_sessions', count });
+        }
+        return { count };
+      } catch (error) {
+        log('ERROR', '清理过期上传会话失败', { task: 'cleanup_upload_sessions', error: error.message, stack: error.stack });
+        return { error: error.message };
+      }
+    });
   });
 }
 
 function createCalendarSyncTask() {
+  const runCalendarSyncTask = createTaskRunner('calendar_subscription_sync');
   const task = nodeCron.schedule('0 */12 * * *', async () => {
-    log('INFO', '开始自动同步日历订阅', { task: 'calendar_subscription_sync' });
-    try {
-      const connection = getConnection();
-      const subscriptions = await connection.all('SELECT id, username, name FROM calendar_subscriptions WHERE enabled = 1');
-      for (const subscription of subscriptions) {
-        try {
-          const count = await syncSubscription(subscription.id, subscription.username);
-          log('INFO', '订阅同步成功', {
-            task: 'calendar_subscription_sync',
-            subscriptionId: subscription.id,
-            subscriptionName: subscription.name,
-            username: subscription.username,
-            importedCount: count
-          });
-        } catch (error) {
-          log('ERROR', '订阅同步失败', {
-            task: 'calendar_subscription_sync',
-            subscriptionId: subscription.id,
-            subscriptionName: subscription.name,
-            username: subscription.username,
-            error: error.message
-          });
+    await runCalendarSyncTask(async () => {
+      try {
+        const connection = getConnection();
+        const subscriptions = await connection.all('SELECT id, username, name FROM calendar_subscriptions WHERE enabled = 1');
+        const summary = {
+          processedCount: subscriptions.length,
+          successCount: 0,
+          failCount: 0,
+          importedCount: 0,
+          failureSamples: []
+        };
+
+        for (const subscription of subscriptions) {
+          try {
+            const count = await syncSubscription(subscription.id, subscription.username, { logStart: false });
+            summary.successCount += 1;
+            summary.importedCount += count;
+          } catch (error) {
+            summary.failCount += 1;
+            if (summary.failureSamples.length < 5) {
+              summary.failureSamples.push({
+                subscriptionId: subscription.id,
+                subscriptionName: subscription.name,
+                username: subscription.username,
+                error: error.message
+              });
+            }
+          }
         }
+
+        if (summary.processedCount === 0) {
+          return summary;
+        }
+
+        const logLevel = summary.failCount > 0 ? 'WARN' : 'INFO';
+        log(logLevel, '自动同步日历订阅完成', {
+          task: 'calendar_subscription_sync',
+          processedCount: summary.processedCount,
+          successCount: summary.successCount,
+          failCount: summary.failCount,
+          importedCount: summary.importedCount,
+          failureSamples: summary.failureSamples.length > 0 ? summary.failureSamples : undefined
+        });
+
+        return summary;
+      } catch (error) {
+        log('ERROR', '自动同步订阅全局错误', {
+          task: 'calendar_subscription_sync',
+          error: error.message,
+          stack: error.stack
+        });
+        return { error: error.message };
       }
-    } catch (error) {
-      log('ERROR', '自动同步订阅全局错误', {
-        task: 'calendar_subscription_sync',
-        error: error.message,
-        stack: error.stack
-      });
-    }
+    });
   });
   log('INFO', '日历订阅同步服务已启动', { task: 'calendar_subscription_sync', schedule: '0 */12 * * *' });
   return task;
 }
 
 function createMembershipNoticeTask() {
+  const runMembershipTask = createTaskRunner('membership_expiry_notice');
   const task = nodeCron.schedule('0 9 * * *', async () => {
-    try {
-      const result = await sendMembershipExpiryNotices();
-      log('INFO', '会员到期提醒任务执行完成', {
-        task: 'membership_expiry_notice',
-        expiringCount: result.expiringCount,
-        expiredCount: result.expiredCount
-      });
-    } catch (error) {
-      log('ERROR', '会员到期提醒任务失败', {
-        task: 'membership_expiry_notice',
-        error: error.message,
-        stack: error.stack
-      });
-    }
+    await runMembershipTask(async () => {
+      try {
+        const result = await sendMembershipExpiryNotices();
+        if (result.expiringCount > 0 || result.expiredCount > 0) {
+          log('INFO', '会员到期提醒任务执行完成', {
+            task: 'membership_expiry_notice',
+            expiringCount: result.expiringCount,
+            expiredCount: result.expiredCount
+          });
+        }
+        return result;
+      } catch (error) {
+        log('ERROR', '会员到期提醒任务失败', {
+          task: 'membership_expiry_notice',
+          error: error.message,
+          stack: error.stack
+        });
+        return { error: error.message };
+      }
+    });
   });
   log('INFO', '会员到期提醒任务已启动', { task: 'membership_expiry_notice', schedule: '0 9 * * *' });
   return task;
@@ -229,6 +325,11 @@ async function startServer(app, options = {}) {
 
 function registerProcessHandlers(runtimeGetter) {
   process.on('uncaughtException', error => {
+    if (error && error.code === 'EPIPE') {
+      log.setReallyExiting();
+      process.reallyExit(1);
+    }
+
     log('ERROR', '未捕获异常', { phase: 'uncaughtException', error: error.message, stack: error.stack });
     const runtime = runtimeGetter();
     if (runtime) {

@@ -1,0 +1,321 @@
+@media (max-width: 768px) {
+    body.calendar-page {
+        overflow-y: auto;
+    }
+
+    .workspace-actions {
+        gap: 2px;
+    }
+
+    .workspace-main-padded {
+        padding: 4px 4px calc(12px + env(safe-area-inset-bottom));
+    }
+
+    .workspace-main-stack {
+        min-height: calc(100dvh - 40px);
+    }
+
+    .workspace-pagination {
+        gap: 4px;
+        width: 100%;
+    }
+
+    .workspace-page-select {
+        height: 24px;
+        padding: 0 4px;
+        font-size: 11px;
+    }
+
+    .workspace-page-btn {
+        min-width: 24px;
+        padding: 2px 4px;
+    }
+
+    .workspace-page-input {
+        width: 38px;
+        height: 24px;
+        padding: 0 4px;
+        font-size: 11px;
+    }
+
+    .workspace-cell-check {
+        width: 50px;
+        min-width: 50px;
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    .workspace-table-shell {
+        flex: 1 1 auto;
+        min-height: 240px;
+    }
+
+    .reminder-main-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .reminder-history-col {
+        position: static;
+    }
+
+    .reminder-history-card {
+        height: auto;
+        max-height: none;
+    }
+
+    .calendar-page .header {
+        padding: 0 4px;
+    }
+
+    .calendar-page #jump-btn {
+        padding: 0 6px;
+    }
+
+    .workspace-action-divider {
+        display: none;
+    }
+
+    .calendar-page .calendar-jump-group {
+        width: 100%;
+    }
+
+    .calendar-page .calendar-jump-group .date-input {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .calendar-page .main {
+        flex-direction: column;
+        overflow: visible;
+        min-height: calc(100dvh - 40px);
+        height: auto;
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+
+    .calendar-page .sidebar {
+        width: 100%;
+        height: auto;
+        flex-shrink: 0;
+        border-top: 1px solid var(--border);
+    }
+
+    .calendar-page .month-view {
+        position: relative;
+        display: flex;
+        flex: none !important;
+        flex-direction: column;
+        height: 420px !important;
+        overflow: hidden;
+        background: var(--bg);
+        transition: height 0.3s ease;
+    }
+
+    .calendar-page .month-view.collapsed {
+        min-height: 0 !important;
+        height: 30px !important;
+    }
+
+    .calendar-page .month-view-grid {
+        grid-auto-rows: minmax(60px, auto);
+    }
+
+    .calendar-page .month-day {
+        min-height: 60px !important;
+        height: auto !important;
+        padding: 1px;
+    }
+
+    .calendar-page .modal-content {
+        width: 100vw;
+        max-width: 100% !important;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    .calendar-page .modal-body {
+        padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+
+    .calendar-page .form-row {
+        gap: 6px;
+    }
+
+    .calendar-page .field-hint {
+        font-size: 10px;
+    }
+
+    .calendar-page .checkbox-row {
+        gap: 6px;
+    }
+
+    .calendar-page .field-inline {
+        gap: 6px;
+    }
+
+    .calendar-page .checkbox-row.compact {
+        gap: 4px;
+    }
+
+    .calendar-page .checkbox-row.compact label {
+        padding: 2px 5px;
+        font-size: 10px;
+    }
+
+    .calendar-page .form-row input[type="date"],
+    .calendar-page .form-row input[type="datetime-local"] {
+        padding-left: 4px;
+        padding-right: 4px;
+        font-size: 12px;
+    }
+
+    .calendar-page #confirm-modal .modal-content {
+        width: 85vw !important;
+        max-width: 320px !important;
+        height: auto !important;
+        max-height: 80vh !important;
+        margin: auto;
+        border-radius: 12px !important;
+    }
+
+    .calendar-page #mobile-calendar-toggle {
+        z-index: 10;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 30px;
+        min-height: 30px;
+        border-bottom: 1px solid var(--border);
+        background: var(--side);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+}
+
+@media (max-width: 720px) {
+    .contacts-page #batch-edit-modal .modal-content {
+        width: calc(100vw - 16px) !important;
+        max-width: calc(100vw - 16px) !important;
+    }
+}
+
+@media (max-width: 600px) {
+    body.contacts-page {
+        overflow-y: auto;
+    }
+
+    .contacts-page .col-tel {
+        width: auto;
+    }
+
+    .contacts-page .header b span {
+        display: none;
+    }
+
+    .contacts-toolbar-shell {
+        flex-wrap: wrap;
+        align-items: stretch;
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .contacts-page .toolbar {
+        flex-wrap: wrap;
+        align-items: stretch;
+    }
+
+    .workspace-action-strip {
+        padding: 10px;
+        gap: 6px;
+    }
+
+    .calendar-action-strip,
+    .contacts-action-strip {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: stretch;
+        white-space: normal;
+        overflow: visible;
+        width: 100%;
+        padding: 0;
+    }
+
+    .calendar-action-strip .workspace-action-group {
+        width: auto;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .calendar-action-strip .calendar-nav-buttons {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        width: 100%;
+    }
+
+    .calendar-action-strip .tool-btn,
+    .calendar-action-strip a.tool-btn,
+    .contacts-action-strip .tool-btn,
+    .contacts-action-strip a.tool-btn {
+        width: 28px;
+        min-width: 28px;
+        padding-inline: 6px;
+        font-size: 12px;
+        flex: 0 0 28px;
+    }
+
+    .calendar-page .sidebar-search-bar {
+        padding: 6px 8px;
+    }
+
+    .calendar-page .sidebar-search-bar .sidebar-search {
+        flex: 1;
+    }
+
+    .contacts-page .search-wrap {
+        flex: 1 1 100%;
+    }
+
+    .contacts-pagination {
+        width: 100%;
+    }
+
+    .contacts-page .header-actions {
+        gap: 2px;
+        max-width: calc(100vw - 118px);
+    }
+
+    .workspace-top-nav {
+        gap: 2px;
+        padding-right: 2px;
+    }
+
+    .workspace-nav-btn {
+        min-width: 34px;
+        padding: 0 7px;
+        font-size: 12px;
+    }
+
+    .contacts-page .header-actions .tool-btn {
+        min-width: 20px;
+        padding: 2px 4px;
+        font-size: 12px;
+    }
+
+    .sidebar-footer-row {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .contacts-page .modal-content {
+        width: min(100vw - 16px, 440px) !important;
+        max-height: calc(100dvh - 16px);
+    }
+
+    .contacts-page .modal-body {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+}

@@ -1,0 +1,723 @@
+.calendar-page .field-hint {
+    margin-top: 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.calendar-page .form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 8px;
+}
+
+.calendar-page .form-row > .form-group {
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.calendar-page .field-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.calendar-page .field-inline > select,
+.calendar-page .field-inline > input,
+.calendar-page .field-inline > textarea {
+    flex: 1;
+    min-width: 0;
+}
+
+.calendar-page .field-inline-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.calendar-page .checkbox-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.calendar-page .checkbox-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    font-size: 11px;
+}
+
+.calendar-page .reminder-group select {
+    margin-bottom: 2px !important;
+}
+
+.calendar-page .checkbox-row.compact {
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.calendar-page .checkbox-row.compact label {
+    padding: 2px 6px;
+    border: 1px solid var(--control-border);
+    border-radius: 999px;
+    background: var(--surface-panel);
+    font-size: 10px;
+}
+
+.calendar-page .checkbox-row.compact input[type="checkbox"] {
+    margin: 0;
+}
+
+.calendar-page .confirm-choice-list {
+    display: block !important;
+    margin-bottom: 16px !important;
+}
+
+.calendar-page .confirm-choice-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: var(--surface-panel);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+}
+
+.calendar-page .confirm-choice-item input[type="radio"],
+.calendar-page .confirm-choice-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    flex: none;
+    accent-color: var(--accent);
+}
+
+.calendar-page .confirm-choice-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+}
+
+.calendar-page .confirm-choice-title {
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+}
+
+.calendar-page .confirm-choice-meta {
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.calendar-page #login-required {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+}
+
+.calendar-page #login-required.show {
+    display: flex;
+}
+
+.calendar-page #mobile-calendar-toggle {
+    display: none;
+}
+
+body.contacts-page {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.contacts-page {
+    --row-h: 32px;
+}
+
+.contacts-page .workspace-list-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: calc(100dvh - 40px);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.contacts-page .workspace-table-shell {
+    flex: 1 1 auto;
+    min-height: 240px;
+    overflow-y: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--control-border);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface-panel) 96%, transparent), color-mix(in srgb, var(--surface-toolbar) 24%, var(--surface-panel) 76%));
+    box-shadow: var(--shadow-sm);
+}
+
+.contacts-toolbar-shell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface-toolbar) 94%, transparent), color-mix(in srgb, var(--surface-panel) 88%, transparent));
+    border: 1px solid var(--control-border);
+    box-shadow: var(--shadow-sm);
+}
+
+.contacts-toolbar-primary {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.contacts-search-wrap {
+    flex: 1 1 200px;
+    min-width: 160px;
+}
+
+.contacts-toolbar-shell .workspace-search-input,
+.contacts-toolbar-shell .workspace-page-select,
+.contacts-toolbar-shell .workspace-page-input,
+.contacts-toolbar-shell .tool-btn {
+    min-height: 28px !important;
+    height: 28px !important;
+    line-height: 24px;
+    box-sizing: border-box;
+}
+
+.contacts-toolbar-shell .workspace-search-input {
+    padding-inline: 10px;
+    font-size: 12px;
+}
+
+.contacts-pagination {
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 4px;
+}
+
+.contacts-action-strip {
+    margin: 0;
+    padding: 0;
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.contacts-action-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.workspace-action-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    background: color-mix(in srgb, var(--surface-toolbar) 92%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.workspace-action-strip .tool-btn {
+    min-height: 34px;
+}
+
+.workspace-action-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.workspace-action-divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--line);
+}
+
+.calendar-action-strip {
+    margin: 8px 0 10px;
+}
+
+.calendar-action-strip .tool-btn,
+.calendar-action-strip a.tool-btn,
+.contacts-action-strip .tool-btn,
+.contacts-action-strip a.tool-btn {
+    min-width: 28px;
+    padding: 2px 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.contacts-page .header-actions {
+    gap: 3px;
+}
+
+.contacts-pagination .workspace-page-select,
+.contacts-pagination .workspace-page-input {
+    min-width: 0;
+    min-height: 28px !important;
+    height: 28px !important;
+    padding-inline: 5px;
+    font-size: 12px;
+}
+
+.contacts-pagination .workspace-page-select {
+    width: 66px;
+}
+
+.contacts-pagination .workspace-page-input {
+    width: 34px;
+}
+
+.contacts-pagination .workspace-page-btn {
+    min-width: 28px;
+    min-height: 28px !important;
+    height: 28px !important;
+    padding: 2px 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.contacts-action-strip .tool-btn,
+.contacts-action-strip a.tool-btn {
+    width: 28px;
+    flex: 0 0 28px;
+    overflow: hidden;
+}
+
+.contacts-pagination #page-info {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.contacts-page .col-name { width: 100px; color: var(--accent); font-weight: 500; }
+.contacts-page .col-family { width: 88px; }
+.contacts-page .col-given { width: 96px; }
+.contacts-page .col-tel { width: 120px; }
+.contacts-page .col-email { width: 150px; }
+.contacts-page .col-org { width: 120px; }
+.contacts-page .col-title { width: 110px; }
+.contacts-page .col-nickname { width: 100px; }
+.contacts-page .col-bday { width: 110px; }
+.contacts-page .col-url { width: 180px; }
+.contacts-page .col-note { width: 220px; }
+.contacts-page .col-created { width: 150px; }
+.contacts-page .col-updated { width: 150px; }
+
+.contacts-page .multi-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.contacts-page .multi-item select {
+    width: 80px;
+    height: 30px;
+    padding: 0 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.contacts-page .multi-item input {
+    flex: 1;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.contacts-page .btn-xs {
+    min-width: auto;
+    height: 26px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.contacts-page .contact-name-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.contacts-page .contact-name-row .form-group {
+    margin-bottom: 0;
+}
+
+.contacts-page .contact-name-row .name-family { flex: 1; }
+.contacts-page .contact-name-row .name-given { flex: 1; }
+.contacts-page .contact-name-row .name-full { flex: 1.4; }
+
+.contacts-page .contact-advanced {
+    margin-bottom: 10px;
+    border: 1px solid var(--control-border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--surface-toolbar) 88%, transparent);
+    overflow: hidden;
+}
+
+.contacts-page .contact-advanced summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    background: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+}
+
+.contacts-page .contact-advanced summary::-webkit-details-marker {
+    display: none;
+}
+
+.contacts-page .contact-advanced summary::after {
+    content: "展开";
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.contacts-page .contact-advanced[open] summary::after {
+    content: "收起";
+}
+
+.contacts-page .contact-advanced-body {
+    padding: 12px 12px 12px;
+    border-top: 1px solid var(--control-border);
+}
+
+.contacts-page .compact-row {
+    display: flex;
+    gap: 6px;
+}
+
+.contacts-page .compact-row .form-group {
+    flex: 1;
+}
+
+.contacts-page .compact-textarea {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    resize: vertical;
+}
+
+.contacts-page .contact-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 10px 0 0;
+    border: none;
+}
+
+.contacts-page .contact-actions .btn {
+    flex: 1;
+    min-width: 0;
+}
+
+.contacts-page .item-card {
+    margin-bottom: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    font-size: 13px;
+}
+
+.contacts-page .dup-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+.contacts-page .dup-card {
+    margin-bottom: 12px;
+    background: linear-gradient(180deg, var(--surface-toolbar), var(--surface-panel));
+    border: 1px solid var(--control-border);
+    box-shadow: var(--shadow-sm);
+    border-radius: 12px;
+    padding: 10px 12px;
+}
+
+.contacts-page .dup-group-title {
+    margin-bottom: 4px;
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.contacts-page .dup-contact-row {
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.contacts-page .dup-indent {
+    width: 20px;
+    flex-shrink: 0;
+}
+
+.contacts-page .dup-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.contacts-page .hl {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.contacts-page .col-sel {
+    width: 28px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.contacts-page .table-empty-row,
+.contacts-page .empty-message {
+    padding: 20px;
+    color: var(--gray);
+    text-align: center;
+}
+
+.contacts-page .history-meta {
+    color: var(--gray);
+    font-size: 11px;
+}
+
+.contacts-page .history-detail {
+    margin-top: 2px;
+}
+
+.contacts-page #import-modal .modal-content {
+    max-width: 340px;
+}
+
+.contacts-page #import-modal .modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.contacts-page #import-modal .form-hint {
+    margin: 0;
+    color: var(--gray);
+    font-size: 12px;
+}
+
+.contacts-page #vcard-text {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 220px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+}
+
+.contacts-page #vcard-text:focus {
+    border-color: var(--accent);
+}
+
+.contacts-page #import-file {
+    width: 100%;
+    color: var(--gray);
+    font-size: 12px;
+}
+
+.contacts-page #confirm-modal {
+    z-index: 10020 !important;
+}
+
+.contacts-page #confirm-modal .modal-content {
+    position: relative;
+    z-index: 10021;
+}
+
+.contacts-page #confirm-modal .modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.contacts-page #confirm-modal .modal-actions .btn {
+    flex: 1;
+    min-width: 0;
+}
+
+.contacts-page .batch-edit-table {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.contacts-page .batch-edit-table-wrap {
+    overflow-x: auto;
+    padding-bottom: 4px;
+    border: 1px solid var(--control-border);
+    border-radius: 14px;
+    background: var(--surface-panel);
+}
+
+.contacts-page .batch-edit-head,
+.contacts-page .batch-edit-row {
+    display: grid;
+    grid-template-columns: 32px 76px 76px minmax(138px, 1fr) minmax(138px, 1fr) 36px;
+    align-items: center;
+    gap: 5px;
+    min-width: 540px;
+}
+
+.contacts-page .batch-edit-head {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 10px 8px 2px;
+    background: linear-gradient(180deg, var(--table-head-bg), color-mix(in srgb, var(--surface-toolbar) 40%, var(--table-head-bg) 60%));
+}
+
+.contacts-page .batch-edit-row {
+    padding: 8px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface-toolbar) 84%, transparent);
+}
+
+.contacts-page .batch-edit-row input[type="text"],
+.contacts-page .batch-edit-row select {
+    min-width: 0;
+    width: 100%;
+    min-height: 34px;
+}
+
+.contacts-page .batch-edit-row .tool-btn {
+    width: 36px;
+    min-width: 36px;
+    height: 34px;
+    padding: 0;
+}
+
+.contacts-page .batch-edit-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.contacts-page #batch-edit-modal .modal-content {
+    width: min(760px, calc(100vw - 16px)) !important;
+    max-width: 760px !important;
+}
+
+.contacts-page .column-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.contacts-page .column-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--control-border);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--surface-toolbar) 86%, transparent);
+    font-size: 13px;
+}
+
+.contacts-page .column-item input {
+    margin: 0;
+}
+
+.contacts-page #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    z-index: 1200;
+    max-width: min(90vw, 420px);
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--text);
+    color: var(--text-on-accent);
+    font-size: 12px;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-50%);
+    transition: opacity 0.2s ease;
+}
+
+.contacts-page #toast.show {
+    opacity: 1;
+}
+
+.contacts-page #toast.error {
+    background: var(--red);
+}

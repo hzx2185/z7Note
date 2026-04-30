@@ -127,18 +127,18 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let itemsXml = '';
 
     const contacts = await db.queryAll('SELECT id, fn, updatedAt FROM contacts WHERE username = ?', [username]);
-    
+
     // 计算最新的 updatedAt 作为 ctag
     if (contacts.length > 0) {
       ctag = Math.max(...contacts.map(c => c.updatedAt || 0));
     }
-    
+
     if (depth === '1') {
-      log('INFO', 'CardDAV PROPFIND depth=1', {
+      log.protocol('CardDAV PROPFIND depth=1', {
         username,
         contactsCount: contacts.length
       });
-      
+
       contacts.forEach(item => {
         itemsXml += `
     <D:response>
@@ -190,14 +190,14 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
 // MKCOL /:username/ - 创建地址簿
 router.mkcol('/:username/', basicAuthMiddleware, (req, res) => {
   if (req.params.username !== req.user) return res.status(403).send();
-  log('INFO', 'CardDAV MKCOL 请求 (虚拟成功)', { username: req.params.username });
+  log.protocol('CardDAV MKCOL 请求 (虚拟成功)', { username: req.params.username });
   res.status(201).send();
 });
 
 // PROPPATCH /:username/ - 更新地址簿属性
 router.proppatch('/:username/', basicAuthMiddleware, (req, res) => {
   if (req.params.username !== req.user) return res.status(403).send();
-  log('INFO', 'CardDAV PROPPATCH 请求 (虚拟成功)', { username: req.params.username });
+  log.protocol('CardDAV PROPPATCH 请求 (虚拟成功)', { username: req.params.username });
   const xml = `<?xml version="1.0" encoding="utf-8" ?>
 <D:multistatus xmlns:D="DAV:">
   <D:response>
@@ -221,7 +221,7 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
     if (username !== req.user) return res.status(403).send();
 
     const body = (typeof req.body === 'string' ? req.body : '') || '';
-    log('INFO', 'CardDAV REPORT 请求', { username, bodyLength: body.length });
+    log.protocol('CardDAV REPORT 请求', { username, bodyLength: body.length });
 
     let contacts = [];
     if (body.includes('addressbook-multiget')) {
@@ -326,7 +326,7 @@ router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
     } catch (e) {}
 
     const body = (typeof req.body === 'string' ? req.body : '') || '';
-    log('INFO', 'CardDAV PUT 请求', { username, id, bodyLength: body.length });
+    log.protocol('CardDAV PUT 请求', { username, id, bodyLength: body.length });
 
     // 解析 vCard
     const contactData = VCardParser.parse(body);
@@ -341,7 +341,7 @@ router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
     if (existing) {
       // 更新
       await db.execute(
-        `UPDATE contacts SET 
+        `UPDATE contacts SET
           fn = ?, n_family = ?, n_given = ?, n_middle = ?, n_prefix = ?, n_suffix = ?,
           tel = ?, email = ?, adr = ?, org = ?, title = ?, url = ?, photo = ?, note = ?,
           bday = ?, nickname = ?, vcard = ?, updatedAt = ?
@@ -369,7 +369,7 @@ router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
           username
         ]
       );
-      log('INFO', 'CardDAV 联系人已更新', { username, id, fn: contactData.fn });
+      log.protocol('CardDAV 联系人已更新', { username, id, fn: contactData.fn });
     } else {
       // 创建
       const uid = contactData.uid || id;
@@ -404,7 +404,7 @@ router.put('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) => 
           now
         ]
       );
-      log('INFO', 'CardDAV 联系人已创建', { username, id, fn: contactData.fn });
+      log.protocol('CardDAV 联系人已创建', { username, id, fn: contactData.fn });
     }
 
     res.setHeader('ETag', `"${now}"`);
@@ -435,7 +435,7 @@ router.delete('/:username/:filename.vcf', basicAuthMiddleware, async (req, res) 
       return res.status(404).send();
     }
 
-    log('INFO', 'CardDAV 联系人已删除', { username, id });
+    log.protocol('CardDAV 联系人已删除', { username, id });
     res.status(204).send();
   } catch (error) {
     log('ERROR', 'CardDAV DELETE 失败', { error: error.message });
