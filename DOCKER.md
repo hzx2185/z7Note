@@ -35,31 +35,42 @@
 # 1. 创建 docker-compose.yml 文件
 cat > docker-compose.yml << 'EOF'
 services:
-  z7note-app:
+  z7note:
     image: hzx2185/z7note:latest
     container_name: z7note
+    restart: unless-stopped
+    ports:
+      - "3000:80"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-    ports:
-      - "3000:80"
-    restart: unless-stopped
     environment:
-      - TZ=Asia/Shanghai
-      - JWT_SECRET=please-change-this-long-random-secret
-      - ADMIN_USER=admin
-      - ADMIN_REGISTRATION_TOKEN=please-change-this-admin-bootstrap-token
+      # 必配：生产部署请替换为自己的值
+      NODE_ENV: production
+      TZ: Asia/Shanghai
+      JWT_SECRET: "replace-with-a-long-random-secret"
+      ADMIN_REGISTRATION_TOKEN: "replace-with-admin-bootstrap-token"
+
+      # 选配：不需要可删除
+      # ADMIN_USER: "admin"
+      # LOG_LEVEL: "INFO"
 EOF
 
-# 2. 设置目录权限
+# 2. 创建持久化目录
 mkdir -p data logs
-chown -R 1001:1001 data/ logs/
 
 # 3. 启动服务
-docker-compose up -d
+docker compose up -d
 
 # 4. 访问应用
 open http://localhost:3000
+```
+
+如果只安装了 Docker Compose v1，可将 `docker compose` 替换为 `docker-compose`。如需从当前源码构建镜像，可把 `image` 改为：
+
+```yaml
+    build: .
+    image: z7note:local
 ```
 
 ### 使用 Docker 命令
@@ -67,7 +78,6 @@ open http://localhost:3000
 ```bash
 # 1. 创建数据目录
 mkdir -p data logs
-chown -R 1001:1001 data/ logs/
 
 # 2. 启动容器
 docker run -d \
@@ -75,10 +85,10 @@ docker run -d \
   -p 3000:80 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
+  -e NODE_ENV=production \
   -e TZ=Asia/Shanghai \
-  -e JWT_SECRET=please-change-this-long-random-secret \
-  -e ADMIN_USER=admin \
-  -e ADMIN_REGISTRATION_TOKEN=please-change-this-admin-bootstrap-token \
+  -e JWT_SECRET=replace-with-a-long-random-secret \
+  -e ADMIN_REGISTRATION_TOKEN=replace-with-admin-bootstrap-token \
   --restart unless-stopped \
   hzx2185/z7note:latest
 
@@ -88,27 +98,46 @@ open http://localhost:3000
 
 ## 配置说明
 
-### 环境变量
+### 必配参数
+
+生产部署建议在 `docker-compose.yml` 中显式配置以下环境变量。真实密钥不要提交到公开仓库。
+
+| 变量名 | 推荐值 | 说明 |
+|--------|--------|------|
+| `NODE_ENV` | `production` | 启用生产环境校验，缺少安全密钥时会阻止启动 |
+| `TZ` | `Asia/Shanghai` | 容器时区，影响日历、提醒和日志时间 |
+| `JWT_SECRET` | 随机长字符串 | JWT 签名密钥，生产环境必须设置 |
+| `ADMIN_REGISTRATION_TOKEN` | 随机长字符串 | 管理员初始化令牌，首次注册管理员账号时需要填写 |
+
+推荐用下面的命令生成随机值：
+
+```bash
+openssl rand -hex 32
+```
+
+### 选配参数
+
+以下参数按需添加到 Compose 的 `environment` 中；未列出的配置通常保持默认即可。
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `TZ` | `Asia/Shanghai` | 时区设置 |
-| `PORT` | `80` | 容器内端口（通常不需要修改） |
+| `ADMIN_USER` | `admin` | 管理员用户名，多个用户名用逗号分隔 |
+| `PORT` | `80` | 容器内监听端口，通常只改 Compose 的 `ports` 映射 |
 | `HOST` | `0.0.0.0` | 容器内监听地址 |
-| `ADMIN_USER` | `admin` | 管理员用户名（多个用逗号分隔） |
-| `ADMIN_REGISTRATION_TOKEN` | - | 管理员初始化令牌，生产环境必填，注册 `ADMIN_USER` 时需要提供 |
-| `JWT_SECRET` | - | JWT 签名密钥，生产环境必填 |
-| `DB_DIALECT` | `sqlite` | 数据库方言，当前仅支持 `sqlite` |
 | `DEFAULT_NOTE_LIMIT` | `100` | 默认笔记空间配额，单位 MB |
 | `DEFAULT_FILE_LIMIT` | `500` | 默认附件空间配额，单位 MB |
 | `MAX_FILE_SIZE` | `500` | 单文件上传限制，单位 MB |
 | `CALDAV_ENABLED` | `true` | 是否启用 CalDAV 日历同步 |
 | `CARDDAV_ENABLED` | `true` | 是否启用 CardDAV 通讯录同步 |
-| `DAILY_BACKUP_LIMIT` | `0` | 用户每日备份次数限制，0 表示不限制 |
-| `LOG_LEVEL` | `INFO` | 日志级别：DEBUG / INFO / WARN / ERROR |
+| `DAILY_BACKUP_LIMIT` | `0` | 用户每日备份次数限制，`0` 表示不限制 |
+| `LOG_LEVEL` | `INFO` | 日志级别：`DEBUG` / `INFO` / `WARN` / `ERROR` |
 | `LOG_MAX_FILE_SIZE_MB` | `100` | 应用日志单文件轮转大小 |
 | `LOG_MAX_ARCHIVES` | `5` | 应用日志保留归档数量 |
 | `PROTOCOL_DEBUG_LOGS` | `false` | 是否输出 WebDAV / CalDAV / CardDAV 协议调试日志 |
+| `COOKIE_SECURE` | `false` | HTTPS 反向代理部署时可设为 `true` |
+| `COOKIE_DOMAIN` | - | 多子域共享登录态时设置 Cookie 域 |
+
+SMTP 邮件服务已迁移到管理后台配置，通常不需要写入 `docker-compose.yml`。
 
 ### 数据卷
 
@@ -126,20 +155,20 @@ open http://localhost:3000
 
 ### 1. 生产环境必填项
 
-生产部署前建议先准备两个随机值：
+生产部署前请确认 Compose 模板里的必配项都已经替换为自己的值，尤其是 `JWT_SECRET` 和 `ADMIN_REGISTRATION_TOKEN`。这两个值建议分别生成，不要复用：
 
 ```bash
 openssl rand -hex 32
 ```
 
-然后写入 `docker-compose.yml`：
+示例：
 
 ```yaml
 environment:
-  - TZ=Asia/Shanghai
-  - JWT_SECRET=替换为随机长字符串
-  - ADMIN_USER=admin
-  - ADMIN_REGISTRATION_TOKEN=替换为一次性管理员初始化令牌
+  NODE_ENV: production
+  TZ: Asia/Shanghai
+  JWT_SECRET: "替换为随机长字符串"
+  ADMIN_REGISTRATION_TOKEN: "替换为一次性管理员初始化令牌"
 ```
 
 `JWT_SECRET` 用于签名登录令牌；`ADMIN_REGISTRATION_TOKEN` 用于保护首次管理员注册。不要在公开仓库提交真实值。
@@ -209,7 +238,7 @@ cp data/z7note.db z7note-backup-$(date +%Y%m%d).db
 
 ```bash
 # 1. 停止容器
-docker-compose down
+docker compose down
 
 # 2. 恢复数据
 tar -xzf z7note-backup-20260312.tar.gz
@@ -218,7 +247,7 @@ tar -xzf z7note-backup-20260312.tar.gz
 chown -R 1001:1001 data/ logs/
 
 # 4. 重启容器
-docker-compose up -d
+docker compose up -d
 ```
 
 ## 更新镜像
@@ -228,13 +257,13 @@ docker-compose up -d
 docker pull hzx2185/z7note:latest
 
 # 2. 停止并删除旧容器
-docker-compose down
+docker compose down
 
 # 3. 启动新容器
-docker-compose up -d
+docker compose up -d
 
 # 4. 查看日志确认启动成功
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ## DAV 客户端配置
@@ -281,7 +310,7 @@ ports:
 
 ```bash
 # 查看容器日志
-docker-compose logs -f
+docker compose logs -f
 
 # 查看应用日志
 tail -f logs/app-*.log
@@ -306,11 +335,11 @@ du -sh data/* logs/*
 
 ```bash
 # 重启容器
-docker-compose restart
+docker compose restart
 
 # 完全重建
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ## 安全建议

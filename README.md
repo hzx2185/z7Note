@@ -304,35 +304,43 @@
 # 1. 创建 docker-compose.yml 文件
 cat > docker-compose.yml << 'EOF'
 services:
-  z7note-app:
+  z7note:
     image: hzx2185/z7note:latest
     container_name: z7note
+    restart: unless-stopped
+    ports:
+      - "3000:80"
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-    ports:
-      - "3000:80"
-    restart: unless-stopped
     environment:
-      - TZ=Asia/Shanghai
+      # 必配：生产部署请替换为自己的值
+      NODE_ENV: production
+      TZ: Asia/Shanghai
+      JWT_SECRET: "replace-with-a-long-random-secret"
+      ADMIN_REGISTRATION_TOKEN: "replace-with-admin-bootstrap-token"
+
+      # 选配：不需要可删除
+      # ADMIN_USER: "admin"
+      # LOG_LEVEL: "INFO"
 EOF
 
-# 2. 设置目录权限（重要！）
+# 2. 创建持久化目录
 mkdir -p data logs
-chown -R 1001:1001 data/ logs/
 
 # 3. 启动服务
-docker-compose up -d
+docker compose up -d
 
 # 4. 完成！访问 http://localhost:3000
 ```
+
+如果只安装了 Docker Compose v1，可将 `docker compose` 替换为 `docker-compose`。完整参数说明见 [DOCKER.md](./DOCKER.md)。
 
 #### 方式二：使用 Docker 命令
 
 ```bash
 # 1. 创建数据目录
 mkdir -p data logs
-chown -R 1001:1001 data/ logs/
 
 # 2. 启动容器
 docker run -d \
@@ -340,7 +348,10 @@ docker run -d \
   -p 3000:80 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
+  -e NODE_ENV=production \
   -e TZ=Asia/Shanghai \
+  -e JWT_SECRET=replace-with-a-long-random-secret \
+  -e ADMIN_REGISTRATION_TOKEN=replace-with-admin-bootstrap-token \
   --restart unless-stopped \
   hzx2185/z7note:latest
 
@@ -349,8 +360,10 @@ docker run -d \
 
 **注意事项：**
 - 容器以 UID 1001 运行（非 root 用户，提高安全性）
-- 必须设置 `data/` 和 `logs/` 目录的权限为 1001:1001
-- 如果遇到权限错误，请运行：`chown -R 1001:1001 data/ logs/`
+- 启动脚本会自动修复 `/app/data` 和 `/app/logs` 的权限
+- 如果遇到权限错误，可手动运行：`chown -R 1001:1001 data/ logs/`
+- **必配参数**：`NODE_ENV`、`TZ`、`JWT_SECRET`、`ADMIN_REGISTRATION_TOKEN`
+- **选配参数**：`ADMIN_USER`、`LOG_LEVEL`、配额、日志轮转、DAV 开关等，详见 [DOCKER.md](./DOCKER.md)
 - **SMTP 邮件配置**：启动后访问管理后台（`/admin`）进行配置，无需在 docker-compose.yml 中设置
 
 ### 本地运行（不使用 Docker）
@@ -364,7 +377,7 @@ npm install
 # 例如：
 # export PORT=3000
 # export ADMIN_USER=admin
-# export JWT_SECRET=change-this-in-production
+# export JWT_SECRET=replace-with-a-long-random-secret
 # export ADMIN_REGISTRATION_TOKEN=one-time-admin-bootstrap-token
 
 # 4. 启动服务
@@ -449,13 +462,13 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 
 ```bash
 # 1. 停止服务
-docker-compose down
+docker compose down
 
 # 2. 解压备份文件
 tar -xzf backup-20250101.tar.gz
 
 # 3. 重启服务
-docker-compose up -d
+docker compose up -d
 ```
 
 ### 备份策略建议
@@ -537,7 +550,7 @@ docker-compose up -d
 ├── package.json              # Node.js 项目配置
 ├── package-lock.json         # 依赖锁定文件
 ├── Dockerfile                # Docker 镜像定义
-└── docker-compose.yml        # Docker Compose 部署配置
+└── DOCKER.md                 # Docker 部署说明
 ```
 
 ## ⌨️ 前端快捷键
@@ -578,7 +591,7 @@ docker-compose up -d
 ## ❓ 常见问题
 
 ### Q: 需要注册 Docker 账号吗？
-**A:** 不需要！使用本地构建，无需任何账号。
+**A:** 不需要登录 Docker Hub。默认拉取公开镜像，也可以按需本地构建。
 
 ### Q: 如何修改端口？
 **A:** Docker 部署通常修改 `docker-compose.yml` 里的端口映射，例如：
@@ -602,7 +615,7 @@ tar -czf backup-$(date +%Y%m%d).tar.gz data/
 **A:** 运行更新命令：
 ```bash
 git pull origin main
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### Q: 数据库在哪里？
@@ -817,11 +830,11 @@ sudo certbot --nginx -d your-domain.com
 
 ## 📝 注意事项
 
-1. **首次启动需要几分钟** - 需要下载依赖和构建镜像
+1. **首次启动需要几分钟** - 默认需要拉取镜像；本地构建时还需要安装依赖和构建镜像
 2. **确保端口 3000 未被占用** - 或修改 `docker-compose.yml` 中的端口映射
 3. **定期备份数据** - 使用内置备份功能或手动备份 `data/` 目录
-4. **查看日志排查问题** - 使用 `docker-compose logs -f`
-5. **目录权限设置** - 确保 `data/` 和 `logs/` 目录权限为 1001:1001
+4. **查看日志排查问题** - 使用 `docker compose logs -f`
+5. **目录权限设置** - 启动脚本会自动修复挂载目录权限；异常时可手动执行 `chown -R 1001:1001 data/ logs/`
 6. **定期清理备份** - 建议配置备份保留数量，避免占用过多磁盘空间
 7. **CDN缓存管理** - `data/cdn-cache/` 目录会自动缓存CDN资源，可定期清理
 
@@ -855,26 +868,26 @@ du -sh data/*
 
 ```bash
 # 停止容器
-docker-compose down
+docker compose down
 
 # 修复目录权限
 chown -R 1001:1001 data/ logs/
 
 # 重新启动
-docker-compose up -d
+docker compose up -d
 ```
 
 ### 容器无法启动
 
 ```bash
 # 查看容器日志
-docker-compose logs -f
+docker compose logs -f
 
 # 检查容器状态
-docker-compose ps
+docker compose ps
 
 # 重新构建镜像
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 端口被占用
@@ -888,7 +901,7 @@ lsof -i :3000
 #   - "3001:80"
 
 # 重新启动容器
-docker-compose up -d
+docker compose up -d
 ```
 
 ## 🚀 功能路线图
