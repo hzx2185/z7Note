@@ -3,6 +3,10 @@
 [简体中文] 知其种种，记其始末。一个基于 Node.js 和 SQLite 的全功能个人效率平台。
 [English] A full-featured personal productivity platform built with Node.js and SQLite.
 
+> **文档定位**：本文是公开 Docker 镜像说明，面向直接使用 `hzx2185/z7note:latest` 部署 z7Note 的用户。这里主要维护功能介绍、镜像信息、部署方式、环境变量、数据持久化、备份恢复和常见运维说明。
+>
+> **维护提醒**：请不要把源码开发、贡献流程、本地调试、测试命令等开发者内容写到本文；这些内容应维护在 [README.md](./README.md)。修改文档前请先确认受众，避免把公开镜像说明和源码开发说明混在一起。
+
 ---
 
 ## ✨ 核心功能 / Features
