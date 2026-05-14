@@ -151,6 +151,59 @@
     text-align: right;
 }
 
+.app-icon-sprite {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.tool-icon {
+    width: 1.1em;
+    height: 1.1em;
+    display: block;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+}
+
+.sidebar-footer-btn .tool-icon,
+.quick-tool-group .tool-icon {
+    width: 15px;
+    height: 15px;
+}
+
+.note-meta-action .tool-icon,
+.share-action-icon .tool-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.share-col-name .tool-icon {
+    width: 13px;
+    height: 13px;
+    display: inline-block;
+    vertical-align: -2px;
+    margin-right: 6px;
+}
+
+.note-item .note-action-share .tool-icon,
+.note-item .note-action-delete .tool-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.preview-header-btn .tool-icon {
+    width: 18px;
+    height: 18px;
+}
+
 .share-action-icon {
     display: inline-flex;
     align-items: center;
@@ -407,7 +460,9 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
     display: flex;
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
+    row-gap: 6px;
     width: 100%;
     padding: 10px 16px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--surface-toolbar) 96%, transparent), color-mix(in srgb, var(--surface-panel) 90%, transparent));
@@ -419,9 +474,18 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
     z-index: 10;
     box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 4%, transparent);
 }
+.note-title-meta-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 0 1 auto;
+    max-width: 100%;
+    margin-left: auto;
+}
 .note-title-input {
     display: block;
-    flex: 1;
+    flex: 1 1 240px;
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
@@ -443,13 +507,116 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
     color: var(--text-muted);
     line-height: 1.2;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 0;
-    max-width: min(42%, 280px);
+    overflow: visible;
+    text-overflow: clip;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: none;
     text-align: right;
 }
 .note-meta:empty { display: none; }
+.note-meta-action {
+    min-width: 24px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--surface-1) 86%, transparent);
+    box-shadow: none;
+}
+.note-meta-action:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--surface-hover) 88%, transparent);
+    box-shadow: var(--shadow-sm);
+}
+
+.modal-content-history {
+    width: min(980px, 94vw);
+    height: min(720px, 86vh);
+}
+
+.history-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 32%) minmax(0, 1fr);
+    min-height: 0;
+    flex: 1;
+    border-bottom: 1px solid var(--control-border);
+}
+
+.history-list {
+    overflow-y: auto;
+    border-right: 1px solid var(--control-border);
+    background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+}
+
+.history-version-item {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 11px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--control-border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.history-version-item:hover,
+.history-version-item.active {
+    background: var(--surface-hover);
+}
+
+.history-version-item.active {
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.history-version-title {
+    max-width: 100%;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-version-meta {
+    max-width: 100%;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-preview-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--surface-modal-bg);
+}
+
+.history-preview {
+    height: 100%;
+    margin: 0;
+    padding: 14px 16px;
+    overflow: auto;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.history-actions {
+    justify-content: flex-end;
+    border-bottom: 0;
+}
 
 #2fa-modal .compact-modal { width: min(460px, 92vw); overflow-x: hidden; }
 #2fa-modal .compact-form-body { padding: 16px; overflow-x: hidden; }
@@ -537,9 +704,16 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
 }
 
 @media (max-width: 640px) {
-  .note-title-wrapper { padding: 8px 12px; gap: 8px; }
-  .note-title-input { font-size: 13px; line-height: 1.05; }
-  .note-meta { font-size: 11px; max-width: 44%; }
+  .note-title-wrapper { padding: 8px 12px; gap: 6px; row-gap: 0; align-items: center; flex-wrap: nowrap; }
+  .note-title-meta-row { gap: 0; width: auto; max-width: none; flex: 0 0 auto; margin-left: auto; justify-content: flex-end; align-items: center; }
+  .note-title-input { font-size: 13px; line-height: 1.05; flex: 1 1 auto; }
+  .note-meta { display: none; }
+  .note-meta-action { min-width: 22px; width: 22px; height: 22px; font-size: 11px; }
+  .modal-content-history { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .history-layout { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 34%) minmax(0, 1fr); }
+  .history-list { border-right: 0; border-bottom: 1px solid var(--control-border); }
+  .history-actions { justify-content: stretch; }
+  .history-actions .btn { flex: 1; min-width: 0; }
   #2fa-modal .compact-modal { width: min(96vw, 460px); }
   #2fa-modal .compact-form-body { padding: 14px; }
   #2fa-modal .twofa-actions { flex-direction: column; }

@@ -1,3 +1,6 @@
+const NOTE_SHARE_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-share"></use></svg>';
+const NOTE_DELETE_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trash"></use></svg>';
+
 export function enhanceUIList(UIManager) {
   Object.assign(UIManager, {
     _getNoteFolder(note) {
@@ -150,7 +153,7 @@ export function enhanceUIList(UIManager) {
         ? `<input type="checkbox" class="note-checkbox" ${this.selectedIds.has(note.id.toString()) ? 'checked' : ''}>`
         : '';
       const actionButtons = !this.batchMode
-        ? '<span class="note-action-share" title="分享">🔗</span><span class="note-action-delete" title="删除">×</span>'
+        ? `<span class="note-action-share" title="分享">${NOTE_SHARE_ICON}</span><span class="note-action-delete" title="删除">${NOTE_DELETE_ICON}</span>`
         : '';
 
       element.innerHTML = `${checkbox}<div class="note-info" title="双击编辑标题">${displayTitle}</div>${actionButtons}`;
@@ -164,7 +167,7 @@ export function enhanceUIList(UIManager) {
 
       if (filtered.length === 0 && !isLoadMore) {
         list.innerHTML = `<div class="empty-state-illustrated">
-                <div class="empty-state-icon">📝</div>
+                <div class="empty-state-icon">✎</div>
                 <div class="empty-state-title">没有找到笔记</div>
             </div>`;
       }
@@ -226,13 +229,13 @@ export function enhanceUIList(UIManager) {
           return;
         }
 
-        if (e.target.classList.contains('note-action-share')) {
+        if (e.target.closest('.note-action-share')) {
           e.stopPropagation();
           api.shareNoteById(noteId);
           return;
         }
 
-        if (e.target.classList.contains('note-action-delete')) {
+        if (e.target.closest('.note-action-delete')) {
           e.stopPropagation();
           ui.del(noteId);
           return;

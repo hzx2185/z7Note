@@ -116,7 +116,7 @@ window.createCalendarUtils = function createCalendarUtils({ state, elements }) {
       if (!ts && ts !== 0) return '';
       const d = new Date(ts * 1000);
       if (isNaN(d.getTime())) return '';
-      return utils.formatUTCDate(d);
+      return this.formatUTCDate(d);
     },
 
     setLunarOptionVisibility(visible) {
@@ -179,7 +179,7 @@ window.createCalendarUtils = function createCalendarUtils({ state, elements }) {
       }
 
       baseDate.setUTCFullYear(baseDate.getUTCFullYear() + 1);
-      return utils.formatUTCDate(baseDate);
+      return this.formatUTCDate(baseDate);
     },
 
     formatDisplayDate(date) {

@@ -109,13 +109,14 @@ window.createCalendarSidebarLoader = function createCalendarSidebarLoader(depend
       }
     },
 
-    // 加载初始数据（只加载选中日期当天）
+    // 加载初始数据（选中日期前后各预载数天）
     async loadInitialData() {
       const selectedDate = state.selectedDate;
-      const preloadDays = 7;
+      const preloadDays = state.sidebar.visibleDays || 7;
 
       state.sidebar.dataByDate.clear();
-      state.sidebar.loadedDays = preloadDays;
+      state.sidebar.rangeBeforeDays = 0;
+      state.sidebar.rangeAfterDays = 0;
       state.sidebar.hasMoreBefore = true;
       state.sidebar.hasMoreAfter = true;
 
@@ -225,32 +226,16 @@ window.createCalendarSidebarLoader = function createCalendarSidebarLoader(depend
       }
     },
 
-    // 处理滚动加载
-    async handleScroll() {
-      if (state.sidebar.isLoadingMore) return;
-
-      const container = document.scrollingElement || document.documentElement;
-      if (!container) return;
-      const scrollTop = container.scrollTop;
-      const scrollHeight = container.scrollHeight;
-      const clientHeight = container.clientHeight;
-
-      // 检测是否滚动到顶部附近 - 加载更早的数据
-      if (scrollTop < 100 && state.sidebar.hasMoreBefore) {
-        await this.loadMoreData('before');
-      }
-      // 检测是否滚动到底部附近 - 加载更晚的数据
-      else if (scrollHeight - scrollTop - clientHeight < 100 && state.sidebar.hasMoreAfter) {
-        await this.loadMoreData('after');
-      }
-    },
-
-    // 加载更多数据
+    // 加载更多数据（仅由点击“加载更早/更多”触发）
     async loadMoreData(direction) {
       if (state.sidebar.isLoadingMore) return;
 
       state.sidebar.isLoadingMore = true;
-      if (state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') {
+      if (state.sidebar.currentTab !== 'todo') {
+        if (!state.sidebar.expandedRangeTabs[state.sidebar.currentTab]) {
+          state.sidebar.rangeBeforeDays = 0;
+          state.sidebar.rangeAfterDays = 0;
+        }
         state.sidebar.expandedRangeTabs[state.sidebar.currentTab] = true;
       }
       this.showLoadingIndicator(direction);
@@ -258,38 +243,24 @@ window.createCalendarSidebarLoader = function createCalendarSidebarLoader(depend
       try {
         const selectedDate = state.selectedDate;
 
-        let targetDate;
+        const targetDate = new Date(selectedDate);
+        let nextRangeDays;
         if (direction === 'before') {
-          // 找到当前最早日期的前一天
-          const dates = Array.from(state.sidebar.dataByDate.keys()).sort();
-          if (dates.length > 0) {
-            const earliestDate = new Date(dates[0]);
-            targetDate = new Date(earliestDate);
-            targetDate.setDate(earliestDate.getDate() - 1);
-          } else {
-            targetDate = new Date(selectedDate);
-            targetDate.setDate(selectedDate.getDate() - 1);
-          }
-          state.sidebar.loadedDays++;
+          nextRangeDays = (state.sidebar.rangeBeforeDays || 0) + 1;
+          state.sidebar.rangeBeforeDays = nextRangeDays;
+          targetDate.setDate(selectedDate.getDate() - nextRangeDays);
         } else {
-          // 找到当前最晚日期的后一天
-          const dates = Array.from(state.sidebar.dataByDate.keys()).sort();
-          if (dates.length > 0) {
-            const latestDate = new Date(dates[dates.length - 1]);
-            targetDate = new Date(latestDate);
-            targetDate.setDate(latestDate.getDate() + 1);
-          } else {
-            targetDate = new Date(selectedDate);
-            targetDate.setDate(selectedDate.getDate() + 1);
-          }
-          state.sidebar.loadedDays++;
+          nextRangeDays = (state.sidebar.rangeAfterDays || 0) + 1;
+          state.sidebar.rangeAfterDays = nextRangeDays;
+          targetDate.setDate(selectedDate.getDate() + nextRangeDays);
         }
 
         const dateStr = utils.formatDate(targetDate);
-        await this.loadDayData(dateStr);
+        if (!state.sidebar.dataByDate.has(dateStr)) {
+          await this.loadDayData(dateStr);
+        }
 
-        // 检查是否还有更多数据（限制最多加载前后各90天）
-        if (state.sidebar.loadedDays >= 90) {
+        if (nextRangeDays >= 90) {
           if (direction === 'before') {
             state.sidebar.hasMoreBefore = false;
           } else {
@@ -306,7 +277,6 @@ window.createCalendarSidebarLoader = function createCalendarSidebarLoader(depend
       }
     },
 
-    // 显示加载指示器
     showLoadingIndicator(direction) {
       const indicator = document.createElement('div');
       indicator.className = 'load-more-indicator loading';
@@ -314,6 +284,7 @@ window.createCalendarSidebarLoader = function createCalendarSidebarLoader(depend
       indicator.textContent = direction === 'before' ? '↑ 加载中...' : '↓ 加载中...';
 
       const container = elements.sidebarContent;
+      if (!container) return;
       if (direction === 'before') {
         container.insertBefore(indicator, container.firstChild);
       } else {
@@ -321,7 +292,6 @@ window.createCalendarSidebarLoader = function createCalendarSidebarLoader(depend
       }
     },
 
-    // 隐藏加载指示器
     hideLoadingIndicator(direction) {
       const indicator = document.getElementById(`loading-${direction}`);
       if (indicator) {

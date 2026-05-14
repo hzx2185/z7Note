@@ -3,7 +3,7 @@ import { fetchWithTimeout } from './utils.js';
 import { createAttachmentApi } from './api-attachments.js?v=1.0.16';
 import { createAttachmentAuditApi } from './api-attachment-audit.js?v=1.0.16';
 import { createUploadApi } from './api-upload.js?v=1.0.16';
-import { createShareApi } from './api-shares.js?v=1.0.16';
+import { createShareApi } from './api-shares.js?v=1.0.18';
 
 const APIManager = {
     // 存储附件列表用于筛选

@@ -8,6 +8,62 @@ const { getAllowedFileTypes } = require('./systemConfig');
 const { inferMimeTypeFromFilename, validateStoredFile } = require('../utils/uploadValidation');
 
 const CHUNKS_DIR = path.join(config.paths.data, 'upload_chunks');
+const MERGE_BUFFER_SIZE = 64 * 1024;
+
+function getTotalChunks(session) {
+  const totalSize = Number(session.totalSize);
+  const chunkSize = Number(session.chunkSize);
+  if (!Number.isSafeInteger(totalSize) || totalSize <= 0 ||
+      !Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
+    throw new Error('INVALID_UPLOAD_SESSION');
+  }
+  return Math.ceil(totalSize / chunkSize);
+}
+
+function normalizeChunkIndex(chunkIndex, totalChunks) {
+  const index = Number(chunkIndex);
+  if (!Number.isInteger(index) || index < 0 || index >= totalChunks) {
+    throw new Error('INVALID_CHUNK_INDEX');
+  }
+  return index;
+}
+
+function getExpectedChunkSize(session, chunkIndex, totalChunks) {
+  const totalSize = Number(session.totalSize);
+  const chunkSize = Number(session.chunkSize);
+  if (chunkIndex === totalChunks - 1) {
+    return totalSize - (chunkSize * chunkIndex);
+  }
+  return chunkSize;
+}
+
+function hasCompleteChunkSet(uploadedChunks, totalChunks) {
+  return uploadedChunks.length === totalChunks &&
+    uploadedChunks.every((chunkIndex, index) => chunkIndex === index);
+}
+
+async function appendFileToHandle(sourcePath, targetHandle, targetOffset) {
+  const sourceHandle = await fs.open(sourcePath, 'r');
+  const buffer = Buffer.allocUnsafe(MERGE_BUFFER_SIZE);
+  let readOffset = 0;
+  let writeOffset = targetOffset;
+
+  try {
+    while (true) {
+      const { bytesRead } = await sourceHandle.read(buffer, 0, buffer.length, readOffset);
+      if (bytesRead === 0) {
+        break;
+      }
+      await targetHandle.write(buffer, 0, bytesRead, writeOffset);
+      readOffset += bytesRead;
+      writeOffset += bytesRead;
+    }
+  } finally {
+    await sourceHandle.close();
+  }
+
+  return writeOffset - targetOffset;
+}
 
 /**
  * 初始化分片上传目录
@@ -20,6 +76,11 @@ async function initChunksDir() {
  * 创建分片上传会话
  */
 async function createUploadSession(username, filename, totalSize, chunkSize) {
+  if (!Number.isSafeInteger(totalSize) || totalSize <= 0 ||
+      !Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
+    throw new Error('INVALID_UPLOAD_SESSION');
+  }
+
   const uploadId = genToken(32);
 
   await db.execute(
@@ -65,14 +126,21 @@ async function uploadChunk(uploadId, username, chunkIndex, chunkData) {
     throw new Error('上传会话已过期');
   }
 
+  const totalChunks = getTotalChunks(session);
+  const normalizedChunkIndex = normalizeChunkIndex(chunkIndex, totalChunks);
+  const expectedChunkSize = getExpectedChunkSize(session, normalizedChunkIndex, totalChunks);
+  if (chunkData.length !== expectedChunkSize) {
+    throw new Error('INVALID_CHUNK_SIZE');
+  }
+
   // 保存分片文件
-  const chunkPath = path.join(CHUNKS_DIR, uploadId, `${chunkIndex}.chunk`);
+  const chunkPath = path.join(CHUNKS_DIR, uploadId, `${normalizedChunkIndex}.chunk`);
   await fs.writeFile(chunkPath, chunkData);
 
   // 更新已上传分片列表
   const uploadedChunks = JSON.parse(session.uploadedChunks || '[]');
-  if (!uploadedChunks.includes(chunkIndex)) {
-    uploadedChunks.push(chunkIndex);
+  if (!uploadedChunks.includes(normalizedChunkIndex)) {
+    uploadedChunks.push(normalizedChunkIndex);
     uploadedChunks.sort((a, b) => a - b);
 
     await db.execute(
@@ -82,9 +150,9 @@ async function uploadChunk(uploadId, username, chunkIndex, chunkData) {
   }
 
   return {
-    chunkIndex,
+    chunkIndex: normalizedChunkIndex,
     uploaded: uploadedChunks.length,
-    total: Math.ceil(session.totalSize / session.chunkSize)
+    total: totalChunks
   };
 }
 
@@ -99,7 +167,7 @@ async function getUploadStatus(uploadId, username) {
   }
 
   const uploadedChunks = JSON.parse(session.uploadedChunks || '[]');
-  const totalChunks = Math.ceil(session.totalSize / session.chunkSize);
+  const totalChunks = getTotalChunks(session);
 
   return {
     uploadId,
@@ -128,9 +196,9 @@ async function mergeChunks(uploadId, username) {
   }
 
   const uploadedChunks = JSON.parse(session.uploadedChunks || '[]');
-  const totalChunks = Math.ceil(session.totalSize / session.chunkSize);
+  const totalChunks = getTotalChunks(session);
 
-  if (uploadedChunks.length !== totalChunks) {
+  if (!hasCompleteChunkSet(uploadedChunks, totalChunks)) {
     throw new Error('分片不完整');
   }
 
@@ -142,27 +210,43 @@ async function mergeChunks(uploadId, username) {
   const finalPath = path.join(userUploadDir, finalFilename);
 
   // 合并分片
-  const writeStream = await fs.open(finalPath, 'w');
+  let writtenBytes = 0;
+  try {
+    const writeHandle = await fs.open(finalPath, 'w');
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkPath = path.join(CHUNKS_DIR, uploadId, `${i}.chunk`);
+        const stats = await fs.stat(chunkPath);
+        const expectedChunkSize = getExpectedChunkSize(session, i, totalChunks);
+        if (stats.size !== expectedChunkSize) {
+          throw new Error('INVALID_CHUNK_SIZE');
+        }
+        writtenBytes += await appendFileToHandle(chunkPath, writeHandle, writtenBytes);
+      }
+    } finally {
+      await writeHandle.close();
+    }
 
-  for (let i = 0; i < totalChunks; i++) {
-    const chunkPath = path.join(CHUNKS_DIR, uploadId, `${i}.chunk`);
-    const chunkData = await fs.readFile(chunkPath);
-    await writeStream.write(chunkData, 0, chunkData.length, i * session.chunkSize);
-  }
+    if (writtenBytes !== Number(session.totalSize)) {
+      throw new Error('INVALID_CHUNK_SIZE');
+    }
 
-  await writeStream.close();
+    const allowedTypes = await getAllowedFileTypes();
+    const fileTypeValidation = await validateStoredFile(finalPath, {
+      filename: session.filename,
+      mimeType: inferMimeTypeFromFilename(session.filename),
+      allowedTypes
+    });
 
-  const allowedTypes = await getAllowedFileTypes();
-  const fileTypeValidation = await validateStoredFile(finalPath, {
-    filename: session.filename,
-    mimeType: inferMimeTypeFromFilename(session.filename),
-    allowedTypes
-  });
-
-  if (!fileTypeValidation.ok) {
+    if (!fileTypeValidation.ok) {
+      throw new Error(fileTypeValidation.error);
+    }
+  } catch (error) {
     await fs.unlink(finalPath).catch(() => {});
-    await cleanupUploadSession(uploadId, username);
-    throw new Error(fileTypeValidation.error);
+    if (error.message !== 'INVALID_CHUNK_SIZE') {
+      await cleanupUploadSession(uploadId, username);
+    }
+    throw error;
   }
 
   // 清理临时文件
@@ -242,7 +326,7 @@ async function getUserUploadSessions(username) {
 
   return sessions.map(session => {
     const uploadedChunks = JSON.parse(session.uploadedChunks || '[]');
-    const totalChunks = Math.ceil(session.totalSize / session.chunkSize);
+    const totalChunks = getTotalChunks(session);
 
     return {
       uploadId: session.id,

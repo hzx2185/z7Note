@@ -39,9 +39,13 @@ function sanitizePath(inputPath, allowTraversal = false) {
  */
 function validatePath(inputPath, basePath) {
   try {
-    const resolved = path.resolve(basePath, inputPath);
     const baseResolved = path.resolve(basePath);
-    return resolved.startsWith(baseResolved);
+    const resolved = path.isAbsolute(inputPath)
+      ? path.resolve(inputPath)
+      : path.resolve(baseResolved, inputPath);
+    const relative = path.relative(baseResolved, resolved);
+    return relative === '' ||
+      (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
   } catch (error) {
     return false;
   }

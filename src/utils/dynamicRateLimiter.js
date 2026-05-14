@@ -4,6 +4,14 @@ const { getSystemConfig } = require('../services/systemConfig');
 const limiters = new Map();
 let cleanupTimer = null;
 
+function parsePositiveInteger(value) {
+  if (value === undefined || value === null || value === '') {
+    return 0;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
 /**
  * 获取适合的限流值
  * @param {number} fileSize - 文件大小（字节）
@@ -121,7 +129,7 @@ async function dynamicUploadRateLimit(req, res, next) {
   const ip = req.ip || req.connection.remoteAddress;
 
   // 从请求头获取文件大小（用于预估）
-  const fileSize = parseInt(req.headers['x-file-size']) || 0;
+  const fileSize = parsePositiveInteger(req.headers['x-file-size']);
 
   // 获取适合的限流值
   const maxRequests = await getUploadLimit(fileSize);
@@ -158,11 +166,11 @@ function createFileBasedUploadLimitMiddleware() {
 
     // 1. 从请求头获取
     if (req.headers['x-file-size']) {
-      fileSize = parseInt(req.headers['x-file-size']) || 0;
+      fileSize = parsePositiveInteger(req.headers['x-file-size']);
     }
     // 2. 从 Content-Length 获取
     else if (req.headers['content-length']) {
-      fileSize = parseInt(req.headers['content-length']) || 0;
+      fileSize = parsePositiveInteger(req.headers['content-length']);
     }
     // 3. 从 req.file 获取（multer处理后）
     else if (req.file && req.file.size) {
@@ -171,7 +179,7 @@ function createFileBasedUploadLimitMiddleware() {
 
     // 如果是分片上传，从请求体获取
     if (!fileSize && req.body && req.body.totalSize) {
-      fileSize = parseInt(req.body.totalSize) || 0;
+      fileSize = parsePositiveInteger(req.body.totalSize);
     }
 
     // 获取适合的限流值
@@ -253,5 +261,6 @@ module.exports = {
   dynamicUploadRateLimit,
   createFileBasedUploadLimitMiddleware,
   createChunkUploadLimitMiddleware,
+  parsePositiveInteger,
   cleanupAllLimiters
 };

@@ -1,13 +1,32 @@
 class RateLimiter {
-  constructor(windowMs = 60000, maxRequests = 100) {
+  constructor(windowMs = 60000, maxRequests = 100, options = {}) {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
     this.requests = new Map();
+    this.now = typeof options.now === 'function' ? options.now : () => Date.now();
+    this.lastCleanupAt = this.now();
+  }
+
+  cleanup(now = this.now()) {
+    const windowStart = now - this.windowMs;
+    for (const [key, timestamps] of this.requests.entries()) {
+      const validTimestamps = timestamps.filter(t => t > windowStart);
+      if (validTimestamps.length === 0) {
+        this.requests.delete(key);
+      } else {
+        this.requests.set(key, validTimestamps);
+      }
+    }
+    this.lastCleanupAt = now;
   }
 
   isAllowed(ip) {
-    const now = Date.now();
+    const now = this.now();
     const windowStart = now - this.windowMs;
+
+    if (now - this.lastCleanupAt >= this.windowMs) {
+      this.cleanup(now);
+    }
 
     if (!this.requests.has(ip)) {
       this.requests.set(ip, []);
@@ -28,6 +47,10 @@ class RateLimiter {
 
   reset(ip) {
     this.requests.delete(ip);
+  }
+
+  size() {
+    return this.requests.size;
   }
 }
 

@@ -2,11 +2,12 @@
 import { fetchWithTimeout } from './utils.js';
 import { enhanceUIAccount } from './ui-account.js';
 import { enhanceUIAccountPanel } from './ui-account-panel.js';
-import { enhanceUIList } from './ui-list.js?v=1.0.15';
+import { enhanceUIList } from './ui-list.js?v=1.0.18';
 import { enhanceUIMarker } from './ui-marker.js';
 import { enhanceUIPreview } from './ui-preview.js';
 import { enhanceUIPreviewRenderer } from './ui-preview-renderer.js?v=1.0.15';
-import { enhanceUISave } from './ui-save.js?v=1.0.16';
+import { enhanceUISave } from './ui-save.js?v=1.0.20';
+import { enhanceUIHistory } from './ui-history.js?v=1.0.17';
 
 const UIManager = {
     notes: [],
@@ -864,6 +865,7 @@ enhanceUIAccountPanel(UIManager);
 enhanceUIList(UIManager);
 enhanceUIMarker(UIManager);
 enhanceUISave(UIManager, fetchWithTimeout);
+enhanceUIHistory(UIManager, fetchWithTimeout);
 enhanceUIPreviewRenderer(UIManager);
 enhanceUIPreview(UIManager);
 

@@ -36,9 +36,7 @@ const PUBLIC_EXACT_PATHS = new Set([
   '/',
   '/login.html',
   '/share.html',
-  '/user.html',
   '/health',
-  '/test-backup.html',
   '/favicon.ico',
   '/caldav',
   '/carddav',
@@ -66,17 +64,13 @@ const NO_CACHE_PAGES = [
   ['/login.html', 'login.html'],
   ['/share.html', 'share.html'],
   ['/shares.html', 'shares.html'],
-  ['/user.html', 'user.html'],
   ['/calendar.html', 'calendar.html'],
   ['/reminder-settings.html', 'reminder-settings.html'],
-  ['/timeline.html', 'timeline.html'],
   ['/contacts.html', 'contacts.html'],
   ['/pricing', 'pricing.html'],
   ['/member', 'member.html'],
   ['/changelog', 'changelog.html'],
-  ['/help', 'help.html'],
-  ['/blog-settings.html', 'blog-settings.html'],
-  ['/clear-cache.html', 'clear-cache.html']
+  ['/help', 'help.html']
 ];
 
 function ensureWebDavMethods() {

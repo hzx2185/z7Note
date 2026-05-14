@@ -1,4 +1,11 @@
 // 分享和公开链接相关 API
+const SHARE_COPY_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-copy"></use></svg>';
+const SHARE_OPEN_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-popout"></use></svg>';
+const SHARE_DELETE_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trash"></use></svg>';
+const SHARE_NOTE_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-file-text"></use></svg>';
+const SHARE_FOLDER_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-folder"></use></svg>';
+const SHARE_ATTACHMENT_ICON = '<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-paperclip"></use></svg>';
+
 export function createShareApi(fetchWithTimeout) {
     return {
     // 加载分享列表
@@ -97,13 +104,13 @@ export function createShareApi(fetchWithTimeout) {
             if (s.targetType === 'note') {
                 const note = notesMap.get(s.target);
                 title = note ? (note.title || '无标题') : s.target;
-                typeLabel = '📝';
+                typeLabel = SHARE_NOTE_ICON;
             } else if (s.targetType === 'category') {
                 title = s.target;
-                typeLabel = '📁';
+                typeLabel = SHARE_FOLDER_ICON;
             } else {
                 title = s.target.split('_').pop() || s.target;
-                typeLabel = '📎';
+                typeLabel = SHARE_ATTACHMENT_ICON;
             }
 
             const expiresText = s.expiresAt ? this.formatDate(s.expiresAt) : '永久';
@@ -118,9 +125,9 @@ export function createShareApi(fetchWithTimeout) {
                     <span class="share-cell share-col-name" title="${escapedTitle}">${typeLabel} ${title}</span>
                     <span class="share-cell share-col-expires">${expiresText}</span>
                     <span class="share-cell share-col-actions">
-                        <button onclick="api.showShareLink('${s.token}', '${escapedTitle}')" title="复制" class="share-action-icon">🔗</button>
-                        <button onclick="window.open('${shareUrl}')" title="打开" class="share-action-icon">👁</button>
-                        <button onclick="api.revokeShare('${s.token}', '${escapedTitle}')" title="删除" class="share-action-icon btn-del">🗑</button>
+                        <button onclick="api.showShareLink('${s.token}', '${escapedTitle}')" title="复制" aria-label="复制" class="share-action-icon">${SHARE_COPY_ICON}</button>
+                        <button onclick="window.open('${shareUrl}')" title="打开" aria-label="打开" class="share-action-icon">${SHARE_OPEN_ICON}</button>
+                        <button onclick="api.revokeShare('${s.token}', '${escapedTitle}')" title="删除" aria-label="删除" class="share-action-icon btn-del">${SHARE_DELETE_ICON}</button>
                     </span>
                 </div>
             `;

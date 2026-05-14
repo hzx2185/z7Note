@@ -19,7 +19,7 @@
 
     <!-- CSS - 关键样式立即加载 -->
     <link rel="stylesheet" href="/cdn/codemirror.min.css">
-    <link rel="stylesheet" href="/css/app.css?v=20260430-split-app-css">
+    <link rel="stylesheet" href="/css/app.css?v=20260512-title-icon-mobile">
 
     <!-- 非关键样式延迟加载 -->
     <link rel="stylesheet" href="/cdn/highlight-dark.min.css" media="print" onload="this.media='all'">
@@ -39,6 +39,107 @@
     <script src="/js/app-bootstrap.js?v=20250312-FINAL-FIX"></script>
 </head>
 <body data-ms-editor="false" data-ui-surface="app" data-theme="default">
+    <svg class="app-icon-sprite" aria-hidden="true" focusable="false">
+        <symbol id="icon-trash" viewBox="0 0 24 24">
+            <path d="M4 7h16"></path>
+            <path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"></path>
+            <path d="M6.5 7 7.4 18.2A2 2 0 0 0 9.4 20h5.2a2 2 0 0 0 2-1.8L17.5 7"></path>
+            <path d="M10 10.5v6"></path>
+            <path d="M14 10.5v6"></path>
+        </symbol>
+        <symbol id="icon-upload" viewBox="0 0 24 24">
+            <path d="M12 16V5"></path>
+            <path d="m8 9 4-4 4 4"></path>
+            <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
+        </symbol>
+        <symbol id="icon-download" viewBox="0 0 24 24">
+            <path d="M12 8v11"></path>
+            <path d="m8 15 4 4 4-4"></path>
+            <path d="M4 8V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2"></path>
+        </symbol>
+        <symbol id="icon-archive" viewBox="0 0 24 24">
+            <path d="M3 6h18v4H3z"></path>
+            <path d="M5 10v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"></path>
+            <path d="M10 14h4"></path>
+        </symbol>
+        <symbol id="icon-share" viewBox="0 0 24 24">
+            <circle cx="18" cy="5" r="2.5"></circle>
+            <circle cx="6" cy="12" r="2.5"></circle>
+            <circle cx="18" cy="19" r="2.5"></circle>
+            <path d="m8.2 13.3 7.1 4.1"></path>
+            <path d="m15.3 6.6-7.1 4.1"></path>
+        </symbol>
+        <symbol id="icon-help" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M9.9 9a2.5 2.5 0 0 1 4.7 1.2c0 1.7-2.1 2.4-2.6 3.4"></path>
+            <path d="M12 17h.01"></path>
+        </symbol>
+        <symbol id="icon-undo" viewBox="0 0 24 24">
+            <path d="M9 14 4 9l5-5"></path>
+            <path d="M4 9h8a8 8 0 0 1 8 8v3"></path>
+        </symbol>
+        <symbol id="icon-redo" viewBox="0 0 24 24">
+            <path d="m15 14 5-5-5-5"></path>
+            <path d="M20 9h-8a8 8 0 0 0-8 8v3"></path>
+        </symbol>
+        <symbol id="icon-columns" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+            <path d="M12 5v14"></path>
+        </symbol>
+        <symbol id="icon-popout" viewBox="0 0 24 24">
+            <path d="M14 4h6v6"></path>
+            <path d="m20 4-8 8"></path>
+            <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"></path>
+        </symbol>
+        <symbol id="icon-paperclip" viewBox="0 0 24 24">
+            <path d="m21.4 11.2-9.4 9.4a5 5 0 1 1-7.1-7.1l9.2-9.2a3.5 3.5 0 1 1 5 5l-9.4 9.4a2 2 0 1 1-2.8-2.8l8-8"></path>
+        </symbol>
+        <symbol id="icon-folder" viewBox="0 0 24 24">
+            <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h4.2l1.8 2h9A1.5 1.5 0 0 1 21 10.5v7A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path>
+        </symbol>
+        <symbol id="icon-list-ordered" viewBox="0 0 24 24">
+            <path d="M10 6h10"></path>
+            <path d="M10 12h10"></path>
+            <path d="M10 18h10"></path>
+            <path d="M4 6h1v4"></path>
+            <path d="M4 10h2"></path>
+            <path d="M4 14h2l-2 3h2"></path>
+        </symbol>
+        <symbol id="icon-wrap" viewBox="0 0 24 24">
+            <path d="M4 6h12a4 4 0 1 1 0 8h-4"></path>
+            <path d="m12 18-4-4 4-4"></path>
+            <path d="M4 18h4"></path>
+        </symbol>
+        <symbol id="icon-search" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="6"></circle>
+            <path d="m20 20-4.2-4.2"></path>
+        </symbol>
+        <symbol id="icon-file-text" viewBox="0 0 24 24">
+            <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9z"></path>
+            <path d="M14 3v6h6"></path>
+            <path d="M10 13h6"></path>
+            <path d="M10 17h4"></path>
+        </symbol>
+        <symbol id="icon-eraser" viewBox="0 0 24 24">
+            <path d="m7 13 5 5"></path>
+            <path d="M16 4 20 8a2 2 0 0 1 0 2.8l-6.4 6.4a2 2 0 0 1-2.8 0l-4-4a2 2 0 0 1 0-2.8L13.2 4a2 2 0 0 1 2.8 0Z"></path>
+            <path d="M5 19h10"></path>
+        </symbol>
+        <symbol id="icon-history" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8"></circle>
+            <path d="M12 8v5l3 2"></path>
+        </symbol>
+        <symbol id="icon-print" viewBox="0 0 24 24">
+            <path d="M7 9V4h10v5"></path>
+            <rect x="6" y="14" width="12" height="6" rx="1.5"></rect>
+            <path d="M6 17H4a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"></path>
+            <path d="M17 12h.01"></path>
+        </symbol>
+        <symbol id="icon-copy" viewBox="0 0 24 24">
+            <rect x="9" y="9" width="10" height="10" rx="2"></rect>
+            <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+        </symbol>
+    </svg>
     <div id="overlay" onclick="ui.toggleSidebar()"></div>
 
     <!-- 邮箱绑定模态框 -->
@@ -128,13 +229,13 @@
             <!-- 侧边栏底部 -->
             <div class="sidebar-footer">
                 <div class="sidebar-footer-row">
-                    <button onclick="ui.showTrash()" class="tool-btn sidebar-footer-btn" title="回收站">♻</button>
-                    <button id="notes-export-btn" onclick="ui.exportData()" class="tool-btn sidebar-footer-btn" title="导出">↑</button>
+                    <button onclick="ui.showTrash()" class="tool-btn sidebar-footer-btn" title="回收站" aria-label="回收站"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trash"></use></svg></button>
+                    <button id="notes-export-btn" onclick="ui.exportData()" class="tool-btn sidebar-footer-btn" title="导出" aria-label="导出"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-upload"></use></svg></button>
                     <input type="file" id="importFile" class="hidden-file-input" onchange="ui.importData(event)">
-                    <button id="notes-import-btn" onclick="document.getElementById('importFile').click()" class="tool-btn sidebar-footer-btn" title="导入">↓</button>
-                    <button id="backup-config-btn" onclick="tools.openBackupConfig()" class="tool-btn sidebar-footer-btn" title="备份">⛁</button>
-                    <button id="shares-link" onclick="ui.loadShares()" class="tool-btn sidebar-footer-btn" title="分享">⇪</button>
-                    <a href="/help" class="tool-btn sidebar-footer-btn" title="帮助">?</a>
+                    <button id="notes-import-btn" onclick="document.getElementById('importFile').click()" class="tool-btn sidebar-footer-btn" title="导入" aria-label="导入"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-download"></use></svg></button>
+                    <button id="backup-config-btn" onclick="tools.openBackupConfig()" class="tool-btn sidebar-footer-btn" title="备份" aria-label="备份"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-archive"></use></svg></button>
+                    <button id="shares-link" onclick="ui.loadShares()" class="tool-btn sidebar-footer-btn" title="分享" aria-label="分享"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-share"></use></svg></button>
+                    <a href="/help" class="tool-btn sidebar-footer-btn" title="帮助" aria-label="帮助"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-help"></use></svg></a>
                 </div>
             </div>
 
@@ -164,11 +265,11 @@
         <div id="main">
             <!-- 快捷工具栏 -->
             <div class="quick-tools workspace-brand-toolbar">
-                <div class="quick-tool-group" aria-label="历史与视图">
-                    <button class="tool-btn" onclick="ui.undo()" title="撤销 (Ctrl+Z)">↩️</button>
-                    <button class="tool-btn" onclick="ui.redo()" title="重做 (Ctrl+Y)">↪️</button>
-                    <button class="tool-btn" onclick="ui.toggleSplit()" title="分屏预览">↔️</button>
-                    <button id="btn-preview" class="tool-btn" onclick="ui.openDedicatedPreview()" title="弹出预览窗口">🖼️</button>
+                <div class="quick-tool-group" aria-label="编辑与视图">
+                    <button class="tool-btn" onclick="ui.undo()" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-undo"></use></svg></button>
+                    <button class="tool-btn" onclick="ui.redo()" title="重做 (Ctrl+Y)" aria-label="重做 (Ctrl+Y)"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-redo"></use></svg></button>
+                    <button class="tool-btn" onclick="ui.toggleSplit()" title="分屏预览" aria-label="分屏预览"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-columns"></use></svg></button>
+                    <button id="btn-preview" class="tool-btn" onclick="ui.openDedicatedPreview()" title="弹出预览窗口" aria-label="弹出预览窗口"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-popout"></use></svg></button>
                 </div>
                 <div class="divider"></div>
                 <div class="quick-tool-group" aria-label="定位与选择">
@@ -193,17 +294,17 @@
                     <button class="tool-btn" onclick="tools.insertTodo(true)" title="完成事项">☑</button>
                     <button class="tool-btn" onclick="tools.insertSymbol('```\n', '\n```')" title="代码块">块</button>
                     <button class="tool-btn" onclick="tools.insertSymbol('[', '](url)')" title="超链接">链</button>
-                    <button id="attachment-manager-btn" class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理">📂</button>
-                    <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号">🔢</button>
-                    <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行">↩️</button>
+                    <button id="attachment-manager-btn" class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理" aria-label="附件管理"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-paperclip"></use></svg></button>
+                    <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号" aria-label="显示或隐藏行号"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-list-ordered"></use></svg></button>
+                    <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行" aria-label="自动换行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-wrap"></use></svg></button>
                     <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">「</button>
                     <button onclick="ui.setMarkerEnd()" class="tool-btn" title="标记终 (Alt+])">」</button>
                 </div>
                 <div class="divider"></div>
                 <div class="quick-tool-group" aria-label="搜索与导出">
-                    <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换">🔍</button>
-                    <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT">📃</button>
-                    <button class="tool-btn" onclick="tools.cleanFormat()" title="清理格式 (去除行末空格、多余空行)">🧹</button>
+                    <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换" aria-label="查找替换"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-search"></use></svg></button>
+                    <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT" aria-label="导出 TXT"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-file-text"></use></svg></button>
+                    <button class="tool-btn" onclick="tools.cleanFormat()" title="清理格式 (去除行末空格、多余空行)" aria-label="清理格式"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-eraser"></use></svg></button>
                 </div>
             </div>
 
@@ -226,7 +327,10 @@
                     <div id="editor-scroller">
 <div id="note-title-wrapper" class="note-title-wrapper workspace-brand-titlebar">
     <input type="text" id="note-title-input" placeholder="分类_标题" class="note-title-input" oninput="ui.handleTitleInput(this.value)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-bwignore="true" data-1p-ignore="true">
-    <div id="note-meta" class="note-meta">创建：- · 修改：-</div>
+    <div class="note-title-meta-row">
+        <div id="note-meta" class="note-meta">创建：- · 修改：-</div>
+        <button id="note-history-btn" class="tool-btn note-meta-action" type="button" onclick="ui.showHistory()" title="历史版本" aria-label="历史版本"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-history"></use></svg></button>
+    </div>
 </div>
                         <div id="editor-container" data-ms-editor="false" class="editor-container-fill"></div>
                     </div>
@@ -234,6 +338,28 @@
                 <div id="preview-wrapper">
                     <iframe id="preview-frame"></iframe>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史版本模态框 -->
+    <div id="history-modal" class="modal workspace-brand-modal">
+        <div class="modal-content modal-content-history">
+            <div class="modal-header">
+                <h3>历史版本</h3>
+                <button onclick="ui.closeHistory()">×</button>
+            </div>
+            <div class="history-layout">
+                <div id="history-list" class="history-list">
+                    <div class="empty-state-inline">加载中...</div>
+                </div>
+                <div class="history-preview-panel">
+                    <pre id="history-preview" class="history-preview">选择一个历史版本查看内容</pre>
+                </div>
+            </div>
+            <div class="modal-actions history-actions">
+                <button class="btn" type="button" onclick="ui.showHistory()">刷新</button>
+                <button class="btn btn-green" id="history-restore-btn" type="button" onclick="ui.restoreSelectedHistory()" disabled>恢复此版本</button>
             </div>
         </div>
     </div>
@@ -346,7 +472,7 @@
     </div>
 
     <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
-    <script type="module" src="/js/app-entry.js?v=20260430-no-touch-save"></script>
+    <script type="module" src="/js/app-entry.js?v=20260512-title-icon-mobile"></script>
 
     <!-- 修改密码模态框 -->
     <div id="change-password-modal" class="modal workspace-brand-modal hidden-by-default">
@@ -397,7 +523,7 @@
     <div id="backup-modal" class="modal workspace-brand-modal">
         <div class="modal-content modal-content-narrow">
             <div class="modal-header modal-header-compact">
-                <h2 class="form-section-title">💾 自动备份</h2>
+                <h2 class="form-section-title">自动备份</h2>
                 <button class="modal-close modal-close-lg" onclick="document.getElementById('backup-modal').classList.remove('show')">×</button>
             </div>
             <div class="modal-body modal-body-padded">
@@ -418,7 +544,7 @@
                                 <option value="0 */6 * * *">每6小时</option>
                                 <option value="0 */12 * * *">每12小时</option>
                             </select>
-                            <span class="form-hint-inline">⏰ UTC+8</span>
+                            <span class="form-hint-inline">UTC+8</span>
                         </div>
                     </div>
 
@@ -458,19 +584,19 @@
                         <div class="form-grid-2">
                             <div class="form-check-row">
                                 <input type="checkbox" id="backup-include-calendar" class="checkbox-auto" checked>
-                                <span class="form-label-sm">📅 日历事件</span>
+                                <span class="form-label-sm">日历事件</span>
                             </div>
                             <div class="form-check-row">
                                 <input type="checkbox" id="backup-include-todos" class="checkbox-auto" checked>
-                                <span class="form-label-sm">✓ 待办事项</span>
+                                <span class="form-label-sm">待办事项</span>
                             </div>
                             <div class="form-check-row">
                                 <input type="checkbox" id="backup-include-contacts" class="checkbox-auto" checked>
-                                <span class="form-label-sm">👤 联系人</span>
+                                <span class="form-label-sm">联系人</span>
                             </div>
                             <div class="form-check-row">
                                 <input type="checkbox" id="backup-include-reminders" class="checkbox-auto" checked>
-                                <span class="form-label-sm">🔔 提醒设置</span>
+                                <span class="form-label-sm">提醒设置</span>
                             </div>
                         </div>
                     </div>
@@ -496,7 +622,7 @@
             <div class="modal-header">
                 <h3 class="preview-header-title">文档预览</h3>
                 <div class="preview-header-actions">
-                    <button onclick="ui.printPreviewFromModal()" title="打印" class="preview-header-btn preview-header-btn-print">🖨️</button>
+                    <button onclick="ui.printPreviewFromModal()" title="打印" aria-label="打印" class="preview-header-btn preview-header-btn-print"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-print"></use></svg></button>
                     <button onclick="ui.closeDedicatedPreview()" class="preview-header-btn preview-header-btn-close">×</button>
                 </div>
             </div>

@@ -49,11 +49,6 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
         });
       }
 
-      // 绑定滚动加载事件
-      window.addEventListener('scroll', utils.debounce(() => {
-        this.handleScroll();
-      }, 100), { passive: true });
-
       // 初始加载
       this.loadInitialData();
       this.loadStats();
@@ -62,8 +57,12 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
     // 切换标签
     async switchTab(tab) {
       state.sidebar.currentTab = tab;
-      if (tab === 'all' || tab === 'event') {
+      if (tab !== 'todo') {
         state.sidebar.expandedRangeTabs[tab] = false;
+        state.sidebar.rangeBeforeDays = 0;
+        state.sidebar.rangeAfterDays = 0;
+        state.sidebar.hasMoreBefore = true;
+        state.sidebar.hasMoreAfter = true;
       }
       elements.sidebarTabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tab);
@@ -162,12 +161,24 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
       // 全天事件，使用UTC时间避免时区偏差
       let renderDates = dates;
       if (selectedIndex >= 0) {
-        if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') && !state.sidebar.expandedRangeTabs[state.sidebar.currentTab]) {
+        if (state.sidebar.currentTab !== 'todo' && !state.sidebar.expandedRangeTabs[state.sidebar.currentTab]) {
           renderDates = dates.slice(selectedIndex, selectedIndex + 1);
+        } else if (state.sidebar.currentTab !== 'todo') {
+          const rangeBeforeDays = state.sidebar.rangeBeforeDays || 0;
+          const rangeAfterDays = state.sidebar.rangeAfterDays || 0;
+          renderDates = [];
+          for (let offset = -rangeBeforeDays; offset <= rangeAfterDays; offset++) {
+            const date = new Date(state.selectedDate);
+            date.setDate(state.selectedDate.getDate() + offset);
+            const dateStr = utils.formatDate(date);
+            if (state.sidebar.dataByDate.has(dateStr)) {
+              renderDates.push(dateStr);
+            }
+          }
         } else if (state.sidebar.currentTab !== 'incomplete') {
-          // 其他标签渲染选中日期前后各 loadedDays 天
-          const startIndex = Math.max(0, selectedIndex - state.sidebar.loadedDays);
-          const endIndex = Math.min(dates.length, selectedIndex + state.sidebar.loadedDays + 1);
+          const visibleDays = state.sidebar.visibleDays || 7;
+          const startIndex = Math.max(0, selectedIndex - visibleDays);
+          const endIndex = Math.min(dates.length, selectedIndex + visibleDays + 1);
           renderDates = dates.slice(startIndex, endIndex);
         }
       }
@@ -357,7 +368,7 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
         });
       }
 
-      // 显示加载更多提示（待办全量列表标签除外）
+      // 手动加载入口（不绑定滚动触发）
       if (state.sidebar.currentTab !== 'todo') {
         if (state.sidebar.hasMoreBefore) {
           const loadMoreBefore = document.createElement('div');
@@ -711,7 +722,7 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
       `;
 
       item.addEventListener('click', () => {
-        window.open(`/?id=${note.id}`, '_blank');
+        window.open(`/app?id=${encodeURIComponent(note.id)}`, '_blank');
       });
 
       return item;

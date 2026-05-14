@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs').promises;
 
+const MIME_DETECTION_SAMPLE_BYTES = 4096;
+
 const MIME_EXTENSION_MAP = {
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
@@ -212,7 +214,16 @@ async function validateStoredFile(filePath, { filename, mimeType, allowedTypes }
     return requested;
   }
 
-  const fileBuffer = await fs.readFile(filePath);
+  const fileHandle = await fs.open(filePath, 'r');
+  let fileBuffer;
+  try {
+    const sampleBuffer = Buffer.alloc(MIME_DETECTION_SAMPLE_BYTES);
+    const { bytesRead } = await fileHandle.read(sampleBuffer, 0, sampleBuffer.length, 0);
+    fileBuffer = sampleBuffer.subarray(0, bytesRead);
+  } finally {
+    await fileHandle.close();
+  }
+
   const detectedMimeType = detectMimeTypeFromBuffer(fileBuffer, filename);
 
   if (!detectedMimeType) {

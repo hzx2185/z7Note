@@ -1,6 +1,6 @@
 /**
  * z7Note Calendar Application
- * 重构版本 - 支持搜索、标签过滤、滚动加载
+ * 重构版本 - 支持搜索、标签过滤
  */
 
 const CalendarApp = (function() {
@@ -22,17 +22,17 @@ const CalendarApp = (function() {
       onlyRecurring: false,
       expandedRangeTabs: {
         all: false,
-        event: false
+        event: false,
+        note: false
       },
-      // 滚动加载相关
-      loadedDays: 0, // 已加载的天数（前后各多少天）
+      visibleDays: 7, // 初始预载天数
+      rangeBeforeDays: 0, // 手动向前展开显示的天数
+      rangeAfterDays: 0, // 手动向后展开显示的天数
       isLoadingMore: false,
       hasMoreBefore: true,
       hasMoreAfter: true,
       // 数据缓存 - 按日期分组
       dataByDate: new Map(), // key: 'YYYY-MM-DD', value: { todos: [], events: [], notes: [] }
-      // 渲染顺序
-      renderedDates: [], // 已渲染的日期列表
       futureRecurringEvents: []
     }
       ,
@@ -144,12 +144,26 @@ const CalendarApp = (function() {
     today() {
       state.currentDate = new Date();
       state.selectedDate = new Date();
+      state.sidebar.expandedRangeTabs.all = false;
+      state.sidebar.expandedRangeTabs.event = false;
+      state.sidebar.expandedRangeTabs.note = false;
+      state.sidebar.rangeBeforeDays = 0;
+      state.sidebar.rangeAfterDays = 0;
+      state.sidebar.hasMoreBefore = true;
+      state.sidebar.hasMoreAfter = true;
       render.calendar();
       sidebarRenderer.refresh();
     },
 
     selectDate(dateStr) {
       state.selectedDate = new Date(dateStr);
+      state.sidebar.expandedRangeTabs.all = false;
+      state.sidebar.expandedRangeTabs.event = false;
+      state.sidebar.expandedRangeTabs.note = false;
+      state.sidebar.rangeBeforeDays = 0;
+      state.sidebar.rangeAfterDays = 0;
+      state.sidebar.hasMoreBefore = true;
+      state.sidebar.hasMoreAfter = true;
       elements.sidebarDate.textContent = utils.formatSidebarDate(state.selectedDate);
 
       // 更新农历和宜忌

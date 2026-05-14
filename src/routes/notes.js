@@ -8,6 +8,11 @@ const { getSystemConfig } = require('../services/systemConfig');
 const {
   sanitizeTitle,
   normalizeNoteTimestamp,
+  recordNoteVersion,
+  hasMeaningfulNoteChange,
+  listNoteVersions,
+  getNoteVersion,
+  restoreNoteVersion,
   restoreNote,
   permanentlyDeleteNote,
   softDeleteNote,
@@ -314,6 +319,54 @@ router.post('/api/notes/deduplicate', async (req, res) => {
   }
 });
 
+// 获取笔记历史版本列表 - 必须在 /api/notes/:id 之前
+router.get('/api/notes/:id/versions', async (req, res) => {
+  try {
+    const note = await db.queryOne(
+      'SELECT id FROM notes WHERE id = ? AND username = ?',
+      [req.params.id, req.user]
+    );
+    if (!note) return res.status(404).json({ error: '笔记不存在' });
+
+    res.json(await listNoteVersions(req.params.id, req.user));
+  } catch (e) {
+    log('ERROR', '获取笔记历史失败', { username: req.user, noteId: req.params.id, error: e.message });
+    res.status(500).json({ error: '获取历史失败' });
+  }
+});
+
+// 获取笔记历史版本详情 - 必须在 /api/notes/:id 之前
+router.get('/api/notes/:id/versions/:versionId', async (req, res) => {
+  try {
+    const version = await getNoteVersion(req.params.id, req.params.versionId, req.user);
+    if (!version) return res.status(404).json({ error: '历史版本不存在' });
+    res.json(version);
+  } catch (e) {
+    log('ERROR', '获取笔记历史详情失败', { username: req.user, noteId: req.params.id, versionId: req.params.versionId, error: e.message });
+    res.status(500).json({ error: '获取历史失败' });
+  }
+});
+
+// 恢复笔记历史版本 - 必须在 /api/notes/:id 之前
+router.post('/api/notes/:id/versions/:versionId/restore', async (req, res) => {
+  try {
+    const note = await restoreNoteVersion(req.params.id, req.params.versionId, req.user);
+    if (!note) return res.status(404).json({ error: '历史版本不存在' });
+
+    res.json({ status: 'ok', note });
+
+    try {
+      broadcastNoteUpdate(req.user, req.params.id, note);
+      wsBroadcastNoteUpdate(req.user, note);
+    } catch (e) {
+      log('ERROR', '广播笔记历史恢复失败', { username: req.user, noteId: req.params.id, error: e.message });
+    }
+  } catch (e) {
+    log('ERROR', '恢复笔记历史失败', { username: req.user, noteId: req.params.id, versionId: req.params.versionId, error: e.message });
+    res.status(500).json({ error: '恢复历史失败' });
+  }
+});
+
 // 获取单个笔记
 router.get('/api/notes/:id', async (req, res) => {
   try {
@@ -362,6 +415,11 @@ router.post('/api/notes', async (req, res) => {
 router.put('/api/notes/:id', async (req, res) => {
   try {
     const { content, title } = req.body;
+    const existingNote = await db.queryOne(
+      'SELECT * FROM notes WHERE id = ? AND username = ?',
+      [req.params.id, req.user]
+    );
+    if (!existingNote) return res.status(404).json({ error: "笔记不存在" });
 
     // 验证内容不为空白（仅当content存在时才验证）
     // 如果用户主动清空内容,则标记为删除而非拒绝更新
@@ -382,10 +440,21 @@ router.put('/api/notes/:id', async (req, res) => {
 
     const updatedAt = Math.floor(Date.now() / 1000);
     const cleanTitle = sanitizeTitle(title) || '未命名';
-    await db.execute(
-      'UPDATE notes SET content = COALESCE(?, content), title = ?, updatedAt = ? WHERE id = ? AND username = ?',
-      [content !== undefined ? content : null, cleanTitle, updatedAt, req.params.id, req.user]
-    );
+    await db.withTransaction(async (tx) => {
+      const nextNote = {
+        title: cleanTitle,
+        content: content !== undefined ? content : existingNote.content
+      };
+
+      if (hasMeaningfulNoteChange(existingNote, nextNote)) {
+        await recordNoteVersion(tx, existingNote, { now: updatedAt, source: 'edit' });
+      }
+
+      await tx.execute(
+        'UPDATE notes SET content = COALESCE(?, content), title = ?, updatedAt = ? WHERE id = ? AND username = ?',
+        [content !== undefined ? content : null, cleanTitle, updatedAt, req.params.id, req.user]
+      );
+    });
 
     // 获取更新后的笔记
     const note = await db.queryOne(
@@ -448,10 +517,19 @@ router.post('/api/notes/batch-delete', async (req, res) => {
       // 优化：使用IN子句批量更新，而不是循环
       const placeholders = ids.map(() => '?').join(',');
       const params = [...ids, req.user];
+      const now = Math.floor(Date.now() / 1000);
+
+      const notesToDelete = await tx.queryAll(
+        `SELECT * FROM notes WHERE id IN (${placeholders}) AND username = ? AND deleted = 0`,
+        params
+      );
+      for (const note of notesToDelete) {
+        await recordNoteVersion(tx, note, { now, source: 'batch-delete' });
+      }
 
       const result = await tx.execute(
         `UPDATE notes SET deleted = 1, updatedAt = ? WHERE id IN (${placeholders}) AND username = ?`,
-        [Math.floor(Date.now() / 1000), ...params]
+        [now, ...params]
       );
 
       // 同步删除这些笔记的分享链接
@@ -604,6 +682,12 @@ router.post('/api/files', async (req, res) => {
         continue;
       }
 
+      const existingNote = await db.queryOne(
+        'SELECT id, username, title, content, createdAt, updatedAt, deleted, LENGTH(content) as size FROM notes WHERE id = ? AND username = ?',
+        [item.id, req.user]
+      );
+      existingNotesById.set(item.id, existingNote || null);
+
       // 分类处理删除和更新操作
       if (item.deleted) {
         deletedItems.push(item);
@@ -621,13 +705,6 @@ router.post('/api/files', async (req, res) => {
 
       // 计算每条笔记的大小
       const itemSize = item.content ? Buffer.byteLength(item.content, 'utf8') : 0;
-
-      // 检查是否已有该笔记，计算容量变化
-      const existingNote = await db.queryOne(
-        'SELECT LENGTH(content) as size, createdAt FROM notes WHERE id = ? AND username = ?',
-        [item.id, req.user]
-      );
-      existingNotesById.set(item.id, existingNote || null);
 
       if (existingNote) {
         // 已有笔记，计算增量
@@ -662,6 +739,15 @@ router.post('/api/files', async (req, res) => {
           item.createdAt,
           existingNote?.createdAt || updatedAt || now
         );
+        const nextNote = {
+          title: item.title || '未命名',
+          content: item.content || '',
+          deleted: item.deleted ? 1 : 0
+        };
+
+        if (existingNote && hasMeaningfulNoteChange(existingNote, nextNote)) {
+          await recordNoteVersion(tx, existingNote, { now, source: item.deleted ? 'sync-delete' : 'sync' });
+        }
 
         await tx.upsert('notes', {
           id: item.id,

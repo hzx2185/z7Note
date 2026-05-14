@@ -44,6 +44,18 @@ async function createBaseTables(db) {
     deleted INTEGER DEFAULT 0
   )`);
 
+  await db.exec(`CREATE TABLE IF NOT EXISTS note_versions (
+    id TEXT PRIMARY KEY,
+    noteId TEXT NOT NULL,
+    username TEXT NOT NULL,
+    title TEXT,
+    content TEXT,
+    contentHash TEXT,
+    source TEXT DEFAULT 'auto',
+    noteUpdatedAt INTEGER DEFAULT 0,
+    createdAt INTEGER NOT NULL
+  )`);
+
   await db.exec(`CREATE TABLE IF NOT EXISTS reset_tokens (
     email TEXT,
     token TEXT,
@@ -166,6 +178,8 @@ async function createBaseIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes(updatedAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_username_deleted ON notes(username, deleted)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_notes_username_updated ON notes(username, updatedAt)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_note_versions_note ON note_versions(username, noteId, createdAt)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_note_versions_created ON note_versions(createdAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_public ON shares(public)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_expires_at ON shares(expiresAt)`);

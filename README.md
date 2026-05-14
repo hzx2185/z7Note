@@ -524,8 +524,6 @@ docker-compose up -d
 │   ├── reminder-settings.html # 提醒设置页面
 │   ├── share.html           # 分享页面
 │   └── *.html              # 其他页面模板
-├── scripts/                  # 维护脚本
-│   └── cleanup-duplicates.js # 清理重复联系人
 ├── src/                      # 后端源代码
 │   ├── server.js            # Express 主入口
 │   ├── config/              # 配置管理
@@ -695,24 +693,6 @@ sudo certbot --nginx -d your-domain.com
 - 待办事项截止提醒
 - 系统通知提醒
 
-### Q: 如何使用维护脚本？
-**A:** 项目提供了一些维护脚本用于数据清理：
-
-**清理重复联系人：**
-```bash
-# 进入项目目录
-cd z7Note
-
-# 运行清理脚本
-node scripts/cleanup-duplicates.js
-
-# 脚本会自动查找并删除重复的联系人
-# 保留每组重复联系人中的第一个，删除其余的
-```
-
-**注意事项：**
-- 运行脚本前建议先备份数据
-- 脚本会显示详细的清理过程
 - 清理操作不可逆，请谨慎使用
 
 ### Q: 如何使用 CalDAV？

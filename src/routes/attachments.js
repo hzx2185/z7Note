@@ -251,6 +251,16 @@ router.post('/api/upload/create-session', async (req, res) => {
     const session = await attachmentService.createChunkUploadSession(req.user, filename, totalSize, mimeType);
     res.json(session);
   } catch (error) {
+    if (error.message === 'INVALID_TOTAL_SIZE') {
+      return res.status(400).json({ error: '文件大小参数无效' });
+    }
+    if (error.message === 'ZERO_QUOTA') {
+      return res.status(403).json({ error: '上传失败：您的附件配额为 0MB' });
+    }
+    if (error.message.startsWith('QUOTA_EXCEEDED:')) {
+      const [, usedMB, limitMB] = error.message.split(':');
+      return res.status(403).json({ error: `超出附件配额 (已用:${usedMB}MB / 上限:${limitMB}MB)` });
+    }
     if (error.message.startsWith('FILE_TOO_LARGE:')) {
       const [, maxFileSize] = error.message.split(':');
       return res.status(400).json({ error: `文件大小超出限制 (最大: ${Number(maxFileSize) / 1024 / 1024}MB)` });
@@ -278,9 +288,18 @@ router.post('/api/upload/chunk', createChunkUploadLimitMiddleware((uploadId, use
       return res.status(400).json({ error: '分片数据为空' });
     }
 
-    const result = await chunkUploadService.uploadChunk(uploadId, req.user, parseInt(chunkIndex, 10), req.body);
+    const result = await chunkUploadService.uploadChunk(uploadId, req.user, chunkIndex, req.body);
     res.json(result);
   } catch (error) {
+    if (error.message === 'INVALID_CHUNK_INDEX') {
+      return res.status(400).json({ error: '无效的分片序号' });
+    }
+    if (error.message === 'INVALID_CHUNK_SIZE') {
+      return res.status(400).json({ error: '分片大小与上传会话不匹配' });
+    }
+    if (error.message === 'INVALID_UPLOAD_SESSION') {
+      return res.status(400).json({ error: '上传会话参数无效' });
+    }
     log('ERROR', '上传分片失败', { username: req.user, error: error.message });
     res.status(500).json({ error: error.message });
   }

@@ -83,6 +83,13 @@ export function enhanceUISave(UIManager, fetchWithTimeout) {
         return `${month}-${day} ${hours}:${minutes}`;
     },
 
+    buildNoteMetaText(note) {
+        if (!note) return '';
+        const createdCompact = this.formatCompactTimestamp(note.createdAt);
+        const updatedCompact = this.formatCompactTimestamp(note.updatedAt);
+        return `创 ${createdCompact} · 改 ${updatedCompact}`;
+    },
+
     updateNoteMeta(note) {
         const metaEl = document.getElementById('note-meta');
         if (!metaEl) return;
@@ -93,12 +100,16 @@ export function enhanceUISave(UIManager, fetchWithTimeout) {
         }
         const createdFull = this.formatTimestamp(note.createdAt);
         const updatedFull = this.formatTimestamp(note.updatedAt);
-        const createdCompact = this.formatCompactTimestamp(note.createdAt);
-        const updatedCompact = this.formatCompactTimestamp(note.updatedAt);
         metaEl.title = `创建：${createdFull} · 修改：${updatedFull}`;
-        metaEl.textContent = window.innerWidth <= 640
-            ? `改 ${updatedCompact}`
-            : `创 ${createdCompact} · 改 ${updatedCompact}`;
+        metaEl.textContent = this.buildNoteMetaText(note);
+    },
+
+    refreshNoteMetaForViewport() {
+        if (!this.activeId) return;
+        const note = this.notes.find(x => x.id?.toString() === this.activeId.toString());
+        if (note) {
+            this.updateNoteMeta(note);
+        }
     },
 
     _captureActiveNoteSnapshot() {
@@ -356,4 +367,17 @@ export function enhanceUISave(UIManager, fetchWithTimeout) {
         }
     },
     });
+
+    if (!UIManager._noteMetaResizeBound) {
+        UIManager._noteMetaResizeBound = true;
+        UIManager._noteMetaResizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(UIManager._noteMetaResizeTimer);
+            UIManager._noteMetaResizeTimer = setTimeout(() => {
+                if (typeof UIManager.refreshNoteMetaForViewport === 'function') {
+                    UIManager.refreshNoteMetaForViewport();
+                }
+            }, 80);
+        });
+    }
 }

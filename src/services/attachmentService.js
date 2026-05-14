@@ -6,6 +6,7 @@ const { getUserFileSize, formatSize } = require('../utils/helpers');
 const { getSystemConfig, getAllowedFileTypes, getMaxFileSize } = require('./systemConfig');
 const { compressImage } = require('./imageCompression');
 const chunkUploadService = require('./chunkUpload');
+const { validatePath } = require('../utils/path');
 const {
   inferMimeTypeFromFilename,
   validateRequestedFileType,
@@ -217,9 +218,27 @@ async function purgeUnusedAttachments(username) {
 }
 
 async function createChunkUploadSession(username, filename, totalSize, mimeType) {
+  const normalizedTotalSize = Number(totalSize);
+  if (!Number.isSafeInteger(normalizedTotalSize) || normalizedTotalSize <= 0) {
+    throw new Error('INVALID_TOTAL_SIZE');
+  }
+
   const maxFileSize = await getMaxFileSize();
-  if (totalSize > maxFileSize) {
+  if (normalizedTotalSize > maxFileSize) {
     throw new Error(`FILE_TOO_LARGE:${maxFileSize}`);
+  }
+
+  const user = await db.queryOne('SELECT fileLimit FROM users WHERE username = ?', [username]);
+  const limitMB = parseFloat(user?.fileLimit || 0);
+  if (limitMB <= 0) {
+    throw new Error('ZERO_QUOTA');
+  }
+
+  const currentSizeBytes = await getUserFileSize(username);
+  const limitBytes = limitMB * 1024 * 1024;
+  if (currentSizeBytes + normalizedTotalSize > limitBytes) {
+    const usedMB = (currentSizeBytes / 1024 / 1024).toFixed(2);
+    throw new Error(`QUOTA_EXCEEDED:${usedMB}:${limitMB}`);
   }
 
   const allowedTypes = await getAllowedFileTypes();
@@ -234,7 +253,7 @@ async function createChunkUploadSession(username, filename, totalSize, mimeType)
 
   const chunkSizeMB = parseInt(await getSystemConfig('chunkSize'), 10) || config.chunkUpload.chunkSize;
   const chunkSize = chunkSizeMB * 1024 * 1024;
-  return chunkUploadService.createUploadSession(username, filename, totalSize, chunkSize);
+  return chunkUploadService.createUploadSession(username, filename, normalizedTotalSize, chunkSize);
 }
 
 function resolveRawAttachment(username, filename) {
@@ -247,7 +266,7 @@ function resolveRawAttachment(username, filename) {
   }
 
   const filePath = path.join(getUserUploadDir(username), safeFilename.normalized);
-  if (!path.resolve(filePath).startsWith(path.resolve(config.paths.uploads))) {
+  if (!validatePath(filePath, config.paths.uploads)) {
     throw new Error('BAD_PATH');
   }
 
