@@ -45,15 +45,8 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
-      # 必配：生产部署请替换为自己的值
-      NODE_ENV: production
       TZ: Asia/Shanghai
-      JWT_SECRET: "replace-with-a-long-random-secret"
-      ADMIN_REGISTRATION_TOKEN: "replace-with-admin-bootstrap-token"
-
-      # 选配：不需要可删除
-      # ADMIN_USER: "admin"
-      # LOG_LEVEL: "INFO"
+      ADMIN_USER: "admin"
 EOF
 
 # 2. 创建持久化目录
@@ -65,6 +58,8 @@ docker compose up -d
 # 4. 访问应用
 open http://localhost:3000
 ```
+
+上面是最简模板。`JWT_SECRET` 和 `ADMIN_REGISTRATION_TOKEN` 会在容器首次启动时自动生成，并保存到 `./data/secrets/`；如果你显式传入同名环境变量，则优先使用手动配置的值。
 
 如果只安装了 Docker Compose v1，可将 `docker compose` 替换为 `docker-compose`。如需从当前源码构建镜像，可把 `image` 改为：
 
@@ -85,10 +80,8 @@ docker run -d \
   -p 3000:80 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
-  -e NODE_ENV=production \
   -e TZ=Asia/Shanghai \
-  -e JWT_SECRET=replace-with-a-long-random-secret \
-  -e ADMIN_REGISTRATION_TOKEN=replace-with-admin-bootstrap-token \
+  -e ADMIN_USER=admin \
   --restart unless-stopped \
   hzx2185/z7note:latest
 
@@ -96,20 +89,29 @@ docker run -d \
 open http://localhost:3000
 ```
 
+`docker run` 首次启动时也会自动生成并持久化 `JWT_SECRET` 和 `ADMIN_REGISTRATION_TOKEN`。
+
 ## 配置说明
 
-### 必配参数
+### 基础参数
 
-生产部署建议在 `docker-compose.yml` 中显式配置以下环境变量。真实密钥不要提交到公开仓库。
+最简模板只保留时区和管理员用户名。`TZ` 不写时也会默认使用 `Asia/Shanghai`，`ADMIN_USER` 不写时默认使用 `admin`，但显式配置更直观。
 
 | 变量名 | 推荐值 | 说明 |
 |--------|--------|------|
-| `NODE_ENV` | `production` | 启用生产环境校验，缺少安全密钥时会阻止启动 |
 | `TZ` | `Asia/Shanghai` | 容器时区，影响日历、提醒和日志时间 |
-| `JWT_SECRET` | 随机长字符串 | JWT 签名密钥，生产环境必须设置 |
-| `ADMIN_REGISTRATION_TOKEN` | 随机长字符串 | 管理员初始化令牌，首次注册管理员账号时需要填写 |
+| `ADMIN_USER` | `admin` | 管理员用户名，多个用户名用逗号分隔 |
 
-推荐用下面的命令生成随机值：
+### 生产安全参数
+
+默认会在容器首次启动时自动生成以下密钥，并保存到 `./data/secrets/`。如需迁移部署，请一起备份 `data/` 目录；如需完全手动管理，也可以通过环境变量覆盖。真实密钥不要提交到公开仓库。
+
+| 变量名 | 推荐值 | 说明 |
+|--------|--------|------|
+| `JWT_SECRET` | 自动生成，或随机长字符串 | JWT 签名密钥 |
+| `ADMIN_REGISTRATION_TOKEN` | 自动生成，或随机长字符串 | 管理员初始化令牌，首次注册管理员账号时需要填写 |
+
+如果要手动生成随机值，可使用：
 
 ```bash
 openssl rand -hex 32
@@ -121,7 +123,7 @@ openssl rand -hex 32
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `ADMIN_USER` | `admin` | 管理员用户名，多个用户名用逗号分隔 |
+| `NODE_ENV` | `production` | 容器镜像默认启用生产环境 |
 | `PORT` | `80` | 容器内监听端口，通常只改 Compose 的 `ports` 映射 |
 | `HOST` | `0.0.0.0` | 容器内监听地址 |
 | `DEFAULT_NOTE_LIMIT` | `100` | 默认笔记空间配额，单位 MB |
@@ -153,9 +155,9 @@ SMTP 邮件服务已迁移到管理后台配置，通常不需要写入 `docker-
 
 ## 初始配置
 
-### 1. 生产环境必填项
+### 1. 生产安全参数
 
-生产部署前请确认 Compose 模板里的必配项都已经替换为自己的值，尤其是 `JWT_SECRET` 和 `ADMIN_REGISTRATION_TOKEN`。这两个值建议分别生成，不要复用：
+`JWT_SECRET` 和 `ADMIN_REGISTRATION_TOKEN` 默认会在首次启动时自动生成，存放在 `./data/secrets/`。如果你希望手动指定，也可以自行生成后写入 `docker-compose.yml`，这两个值建议分别生成，不要复用：
 
 ```bash
 openssl rand -hex 32
@@ -165,8 +167,8 @@ openssl rand -hex 32
 
 ```yaml
 environment:
-  NODE_ENV: production
   TZ: Asia/Shanghai
+  ADMIN_USER: "admin"
   JWT_SECRET: "替换为随机长字符串"
   ADMIN_REGISTRATION_TOKEN: "替换为一次性管理员初始化令牌"
 ```
@@ -178,13 +180,19 @@ environment:
 部署前请先确认管理员用户名配置：
 - 默认值为 `admin`
 - 可通过 `ADMIN_USER` 修改（支持多个用户名，逗号分隔）
-- 生产环境必须同时设置 `ADMIN_REGISTRATION_TOKEN`
+- `ADMIN_REGISTRATION_TOKEN` 可手动设置；未设置时容器首次启动会自动生成并保存到 `./data/secrets/admin-registration-token`
 
-首次注册时，与 `ADMIN_USER` 中某个用户名完全匹配的账户会拥有管理员权限；生产环境还必须提供管理员初始化令牌：
+首次注册时，与 `ADMIN_USER` 中某个用户名完全匹配的账户会拥有管理员权限；注册时需要提供管理员初始化令牌：
 - 访问 `http://localhost:3000`
 - 点击"注册"按钮
 - 使用预先配置好的管理员用户名完成注册
-- 在“管理员初始化令牌”输入框中填写 `ADMIN_REGISTRATION_TOKEN`
+- 在“管理员初始化令牌”输入框中填写 `ADMIN_REGISTRATION_TOKEN`，自动生成时可查看 `./data/secrets/admin-registration-token`
+
+如果宿主机当前用户没有权限直接读取该文件，也可以通过容器查看：
+
+```bash
+docker compose exec z7note cat /app/data/secrets/admin-registration-token
+```
 
 ### 3. 配置 SMTP 邮件服务
 

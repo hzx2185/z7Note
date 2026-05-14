@@ -314,15 +314,8 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
-      # 必配：生产部署请替换为自己的值
-      NODE_ENV: production
       TZ: Asia/Shanghai
-      JWT_SECRET: "replace-with-a-long-random-secret"
-      ADMIN_REGISTRATION_TOKEN: "replace-with-admin-bootstrap-token"
-
-      # 选配：不需要可删除
-      # ADMIN_USER: "admin"
-      # LOG_LEVEL: "INFO"
+      ADMIN_USER: "admin"
 EOF
 
 # 2. 创建持久化目录
@@ -334,7 +327,7 @@ docker compose up -d
 # 4. 完成！访问 http://localhost:3000
 ```
 
-如果只安装了 Docker Compose v1，可将 `docker compose` 替换为 `docker-compose`。完整参数说明见 [DOCKER.md](./DOCKER.md)。
+`JWT_SECRET` 和 `ADMIN_REGISTRATION_TOKEN` 会在首次启动时自动生成，并保存到 `./data/secrets/`；完整说明见 [DOCKER.md](./DOCKER.md)。如果只安装了 Docker Compose v1，可将 `docker compose` 替换为 `docker-compose`。
 
 #### 方式二：使用 Docker 命令
 
@@ -348,10 +341,8 @@ docker run -d \
   -p 3000:80 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
-  -e NODE_ENV=production \
   -e TZ=Asia/Shanghai \
-  -e JWT_SECRET=replace-with-a-long-random-secret \
-  -e ADMIN_REGISTRATION_TOKEN=replace-with-admin-bootstrap-token \
+  -e ADMIN_USER=admin \
   --restart unless-stopped \
   hzx2185/z7note:latest
 
@@ -362,8 +353,9 @@ docker run -d \
 - 容器以 UID 1001 运行（非 root 用户，提高安全性）
 - 启动脚本会自动修复 `/app/data` 和 `/app/logs` 的权限
 - 如果遇到权限错误，可手动运行：`chown -R 1001:1001 data/ logs/`
-- **必配参数**：`NODE_ENV`、`TZ`、`JWT_SECRET`、`ADMIN_REGISTRATION_TOKEN`
-- **选配参数**：`ADMIN_USER`、`LOG_LEVEL`、配额、日志轮转、DAV 开关等，详见 [DOCKER.md](./DOCKER.md)
+- **基础参数**：最简模板保留 `TZ` 和 `ADMIN_USER`
+- **生产安全参数**：`JWT_SECRET`、`ADMIN_REGISTRATION_TOKEN` 会首次启动自动生成，也可手动覆盖
+- **选配参数**：`LOG_LEVEL`、配额、日志轮转、DAV 开关等，详见 [DOCKER.md](./DOCKER.md)
 - **SMTP 邮件配置**：启动后访问管理后台（`/admin`）进行配置，无需在 docker-compose.yml 中设置
 
 ### 本地运行（不使用 Docker）

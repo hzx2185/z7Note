@@ -24,6 +24,8 @@ RUN apk add --no-cache sqlite tzdata su-exec
 
 WORKDIR /app
 
+ENV NODE_ENV=production
+
 # 从构建阶段复制依赖和源码
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
