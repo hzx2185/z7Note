@@ -1,4 +1,4 @@
-import { CHANGELOG_ENTRIES } from '/js/changelog-data.js';
+import { CHANGELOG_ENTRIES } from '/js/changelog-data.js?v=20260605-enhance-search-details-v4';
 
 const timeline = document.getElementById('timeline');
 const totalVersions = document.getElementById('total-versions');

@@ -1,4 +1,3 @@
-import { CHANGELOG_ENTRIES } from '/js/changelog-data.js';
 import {
   HOME_FEATURES,
   HOME_METRICS,
