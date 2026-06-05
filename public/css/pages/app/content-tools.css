@@ -703,10 +703,158 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
     border-color: transparent;
 }
 
+.modal-content-toolbar-settings {
+    width: min(720px, 94vw);
+    height: min(82vh, 720px);
+    max-height: min(82vh, 720px);
+    overflow: hidden;
+}
+
+.toolbar-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.toolbar-settings-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
+.toolbar-settings-list {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.toolbar-settings-section + .toolbar-settings-section {
+    margin-top: 10px;
+}
+
+.toolbar-settings-section-flat {
+    max-width: 100%;
+}
+
+.toolbar-settings-section {
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface-panel) 92%, var(--surface-toolbar) 8%);
+    overflow: hidden;
+}
+
+.toolbar-settings-section h4 {
+    margin: 0;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--control-border);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.toolbar-settings-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    min-height: 0;
+}
+
+.toolbar-settings-item {
+    display: grid;
+    grid-template-columns: minmax(72px, 1fr) auto auto;
+    gap: 6px;
+    align-items: center;
+    min-height: 34px;
+    padding: 4px;
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    border-radius: 8px;
+    background: var(--surface-1);
+}
+
+.toolbar-settings-category {
+    min-width: 44px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--surface-toolbar) 82%, transparent);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.toolbar-settings-item-muted {
+    opacity: 0.62;
+}
+
+.toolbar-settings-item-label {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toolbar-settings-visibility {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.toolbar-settings-visibility input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
+.toolbar-settings-group-select {
+    width: 100%;
+    min-height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--control-border);
+    border-radius: 8px;
+    background: var(--surface-input-bg);
+    color: var(--text);
+    font-size: 12px;
+}
+
+.toolbar-settings-item-actions {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.toolbar-settings-item-actions .tool-btn {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 5px;
+}
+
+.toolbar-settings-empty {
+    padding: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+}
+
 @media (max-width: 640px) {
   .note-title-wrapper { padding: 8px 12px; gap: 6px; row-gap: 0; align-items: center; flex-wrap: nowrap; }
   .note-title-meta-row { gap: 0; width: auto; max-width: none; flex: 0 0 auto; margin-left: auto; justify-content: flex-end; align-items: center; }
-  .note-title-input { font-size: 13px; line-height: 1.05; flex: 1 1 auto; }
+  .note-title-input { font-size: 16px; line-height: 1.15; min-height: 28px; flex: 1 1 auto; }
   .note-meta { display: none; }
   .note-meta-action { min-width: 22px; width: 22px; height: 22px; font-size: 11px; }
   .modal-content-history { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
@@ -722,4 +870,7 @@ html.dark-mode .CodeMirror .multiselect-start { background: linear-gradient(90de
   .trash-list-item { flex-direction: column; align-items: stretch; }
   .trash-list-actions { width: 100%; }
   .trash-list-actions .btn { flex: 1; }
+  .modal-content-toolbar-settings { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .toolbar-settings-body { height: calc(100dvh - 53px); padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .toolbar-settings-actions .tool-btn { flex: 1; min-height: 34px; }
 }

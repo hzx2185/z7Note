@@ -216,7 +216,10 @@ const UIManager = {
         const container = document.getElementById("editor-container");
         if (!container) return;
 
-        const currentlyEnabled = localStorage.getItem('show-line-numbers') === 'true';
+        const storedLineNumbers = localStorage.getItem('show-line-numbers');
+        const currentlyEnabled = storedLineNumbers === null
+            ? true
+            : storedLineNumbers !== 'false';
         const newState = !currentlyEnabled;
 
         if (newState) {

@@ -14,54 +14,682 @@ const ToolsManager = {
         modal.classList.add('show');
         loadBackupConfig();
     },
+
+    _toolbarGroups: [
+        { id: 'common', label: '常用' },
+        { id: 'line', label: '行操作' },
+        { id: 'format', label: '格式' },
+        { id: 'insert', label: '插入' },
+        { id: 'view', label: '视图' },
+        { id: 'tools', label: '工具' }
+    ],
+    _toolbarPrimaryGroupId: 'common',
+    _toolbarLayoutEndpoint: '/api/user/toolbar-layout',
+    _defaultToolbarLayout: null,
+    _serverToolbarLayoutLoaded: false,
+    _toolbarLayoutRequest: null,
+
+    _toolbarStorageKey() {
+        const username = localStorage.getItem('z7note_username') || localStorage.getItem('username') || 'guest';
+        return `z7note_toolbar_layout:${username}`;
+    },
+
+    _cssEscape(value) {
+        if (window.CSS?.escape) return CSS.escape(value);
+        return String(value).replace(/["\\]/g, '\\$&');
+    },
+
+    _getToolbarElement() {
+        return document.querySelector('.quick-tools.workspace-brand-toolbar');
+    },
+
+    _getToolbarGroups() {
+        return Array.from(document.querySelectorAll('.quick-tools [data-toolbar-group]'));
+    },
+
+    _getToolbarItems() {
+        return Array.from(document.querySelectorAll('.quick-tools [data-toolbar-item]'));
+    },
+
+    _readGroupedToolbarLayoutFromDom() {
+        return this._getToolbarGroups().map((group) => ({
+            group: group.dataset.toolbarGroup,
+            items: Array.from(group.querySelectorAll('[data-toolbar-item]')).map((item) => ({
+                id: item.dataset.toolbarItem,
+                visible: item.dataset.toolbarItem === 'toolbarSettings' || item.dataset.toolbarHidden !== 'true'
+            }))
+        }));
+    },
+
+    _cloneToolbarLayout(layout) {
+        return Array.isArray(layout) ? JSON.parse(JSON.stringify(layout)) : null;
+    },
+
+    _escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = String(value ?? '');
+        return div.innerHTML;
+    },
+
+    _normalizeToolbarItem(rawItem) {
+        const id = typeof rawItem === 'string'
+            ? rawItem
+            : (typeof rawItem?.id === 'string' ? rawItem.id : '');
+        if (!id) return null;
+        return {
+            id,
+            visible: id === 'toolbarSettings' || !(typeof rawItem === 'object' && rawItem?.visible === false)
+        };
+    },
+
+    _getToolbarGroupLabel(groupId) {
+        return this._toolbarGroups.find((group) => group.id === groupId)?.label || groupId || '工具';
+    },
+
+    _getToolbarDefaultGroupByItem() {
+        const groupByItem = new Map();
+        const source = Array.isArray(this._defaultToolbarLayout)
+            ? this._defaultToolbarLayout
+            : this._readGroupedToolbarLayoutFromDom();
+
+        source.forEach((section) => {
+            if (!Array.isArray(section.items)) return;
+            section.items.forEach((rawItem) => {
+                const normalized = this._normalizeToolbarItem(rawItem);
+                if (normalized && !groupByItem.has(normalized.id)) {
+                    groupByItem.set(normalized.id, section.group);
+                }
+            });
+        });
+
+        return groupByItem;
+    },
+
+    _getDefaultToolbarItemIds() {
+        const ids = [];
+        const source = Array.isArray(this._defaultToolbarLayout)
+            ? this._defaultToolbarLayout
+            : this._readGroupedToolbarLayoutFromDom();
+
+        source.forEach((section) => {
+            if (!Array.isArray(section.items)) return;
+            section.items.forEach((rawItem) => {
+                const normalized = this._normalizeToolbarItem(rawItem);
+                if (normalized && !ids.includes(normalized.id)) ids.push(normalized.id);
+            });
+        });
+
+        return ids;
+    },
+
+    _normalizeToolbarLayout(layout, { includeMissing = true } = {}) {
+        if (!Array.isArray(layout)) return null;
+
+        const validGroups = new Set(this._toolbarGroups.map((group) => group.id));
+        const domItems = new Map(this._getToolbarItems().map((item) => [item.dataset.toolbarItem, item]));
+        const items = [];
+        const seenItems = new Set();
+        const seenGroups = new Set();
+
+        layout.forEach((section) => {
+            const groupId = typeof section?.group === 'string' ? section.group : '';
+            if (!validGroups.has(groupId) || seenGroups.has(groupId) || !Array.isArray(section.items)) return;
+            seenGroups.add(groupId);
+
+            section.items.forEach((rawItem) => {
+                const normalized = this._normalizeToolbarItem(rawItem);
+                if (!normalized || !domItems.has(normalized.id) || seenItems.has(normalized.id)) return;
+                items.push(normalized);
+                seenItems.add(normalized.id);
+            });
+        });
+
+        if (includeMissing) {
+            const defaultItemIds = this._getDefaultToolbarItemIds();
+            defaultItemIds.forEach((itemId) => {
+                if (seenItems.has(itemId) || !domItems.has(itemId)) return;
+                items.push({ id: itemId, visible: true });
+                seenItems.add(itemId);
+            });
+
+            for (const itemId of domItems.keys()) {
+                if (seenItems.has(itemId)) continue;
+                items.push({ id: itemId, visible: true });
+                seenItems.add(itemId);
+            }
+        }
+
+        return [{ group: this._toolbarPrimaryGroupId, items }];
+    },
+
+    _readToolbarLayoutFromDom() {
+        return [{
+            group: this._toolbarPrimaryGroupId,
+            items: this._getToolbarItems().map((item) => ({
+                id: item.dataset.toolbarItem,
+                visible: item.dataset.toolbarItem === 'toolbarSettings' || item.dataset.toolbarHidden !== 'true'
+            }))
+        }];
+    },
+
+    _readSavedToolbarLayout() {
+        try {
+            const saved = localStorage.getItem(this._toolbarStorageKey());
+            if (!saved) return null;
+            const parsed = JSON.parse(saved);
+            return this._normalizeToolbarLayout(parsed);
+        } catch (e) {
+            return null;
+        }
+    },
+
+    _saveLocalToolbarLayout(layout) {
+        const normalized = this._normalizeToolbarLayout(layout);
+        if (!normalized) return;
+        localStorage.setItem(this._toolbarStorageKey(), JSON.stringify(normalized));
+    },
+
+    _clearLocalToolbarLayout() {
+        localStorage.removeItem(this._toolbarStorageKey());
+    },
+
+    _ensureDefaultToolbarLayout() {
+        if (!this._defaultToolbarLayout) {
+            this._defaultToolbarLayout = this._readGroupedToolbarLayoutFromDom();
+        }
+    },
+
+    _updateToolbarGroupVisibility() {
+        const toolbar = this._getToolbarElement();
+        if (toolbar) toolbar.dataset.toolbarFlat = 'true';
+
+        this._getToolbarGroups().forEach((group) => {
+            const visibleItems = Array.from(group.querySelectorAll('[data-toolbar-item]'))
+                .filter((item) => item.dataset.toolbarHidden !== 'true');
+            group.dataset.toolbarEmpty = visibleItems.length ? 'false' : 'true';
+        });
+    },
+
+    applyToolbarLayout(layout = this._readSavedToolbarLayout()) {
+        if (!Array.isArray(layout)) {
+            this._updateToolbarGroupVisibility();
+            return;
+        }
+        const normalizedLayout = this._normalizeToolbarLayout(layout);
+        if (!normalizedLayout) return;
+        const groups = new Map(this._getToolbarGroups().map((group) => [group.dataset.toolbarGroup, group]));
+        const primaryGroup = groups.get(this._toolbarPrimaryGroupId) || this._getToolbarGroups()[0];
+        if (!primaryGroup) return;
+        const items = new Map(this._getToolbarItems().map((item) => [item.dataset.toolbarItem, item]));
+        const placed = new Set();
+
+        normalizedLayout.flatMap((section) => section.items || []).forEach((layoutItem) => {
+            const normalized = this._normalizeToolbarItem(layoutItem);
+            if (!normalized) return;
+            const item = items.get(normalized.id);
+            if (!item || placed.has(normalized.id)) return;
+            item.dataset.toolbarHidden = normalized.visible ? 'false' : 'true';
+            primaryGroup.appendChild(item);
+            placed.add(normalized.id);
+        });
+
+        for (const [itemId, item] of items) {
+            if (!placed.has(itemId)) {
+                primaryGroup.appendChild(item);
+                placed.add(itemId);
+            }
+        }
+
+        for (const [itemId, item] of items) {
+            if (itemId === 'toolbarSettings') {
+                item.dataset.toolbarHidden = 'false';
+            }
+        }
+
+        this._updateToolbarGroupVisibility();
+        const toolbar = this._getToolbarElement();
+        if (toolbar) toolbar.scrollLeft = 0;
+    },
+
+    async _persistToolbarLayout(layout) {
+        const normalized = this._normalizeToolbarLayout(layout);
+        const response = await fetch(this._toolbarLayoutEndpoint, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layout: normalized })
+        });
+        if (!response.ok) {
+            let message = '保存失败';
+            try {
+                const data = await response.json();
+                message = data.error || message;
+            } catch (e) {}
+            throw new Error(message);
+        }
+        return response.json();
+    },
+
+    async initToolbarLayout() {
+        this._ensureDefaultToolbarLayout();
+        const localLayout = this._readSavedToolbarLayout();
+        if (localLayout) this.applyToolbarLayout(localLayout);
+        return this.loadToolbarLayout();
+    },
+
+    async loadToolbarLayout({ force = false } = {}) {
+        this._ensureDefaultToolbarLayout();
+        if (!force && this._serverToolbarLayoutLoaded) return;
+        if (!force && this._toolbarLayoutRequest) return this._toolbarLayoutRequest;
+
+        const localLayout = this._readSavedToolbarLayout();
+        if (localLayout) this.applyToolbarLayout(localLayout);
+
+        this._toolbarLayoutRequest = fetch(this._toolbarLayoutEndpoint, { cache: 'no-store' })
+            .then(async (response) => {
+                if (!response.ok) throw new Error('读取工具栏配置失败');
+                const data = await response.json();
+                const serverLayout = this._normalizeToolbarLayout(data.layout);
+                this._serverToolbarLayoutLoaded = true;
+
+                if (serverLayout) {
+                    this._saveLocalToolbarLayout(serverLayout);
+                    this.applyToolbarLayout(serverLayout);
+                    return serverLayout;
+                }
+
+                this._clearLocalToolbarLayout();
+                this.applyToolbarLayout(this._cloneToolbarLayout(this._defaultToolbarLayout));
+                return null;
+            })
+            .catch(() => {
+                if (localLayout) this.applyToolbarLayout(localLayout);
+                return localLayout;
+            })
+            .finally(() => {
+                this._toolbarLayoutRequest = null;
+            });
+
+        return this._toolbarLayoutRequest;
+    },
+
+    _renderToolbarSettings() {
+        const list = document.getElementById('toolbar-settings-list');
+        if (!list) return;
+        const groupByItem = this._getToolbarDefaultGroupByItem();
+        const itemsHtml = this._getToolbarItems().map((item) => {
+            const itemId = item.dataset.toolbarItem;
+            const label = item.dataset.toolbarLabel || item.title || item.textContent.trim() || itemId;
+            const visible = itemId === 'toolbarSettings' || item.dataset.toolbarHidden !== 'true';
+            const disabled = itemId === 'toolbarSettings' ? ' disabled' : '';
+            const category = this._getToolbarGroupLabel(groupByItem.get(itemId));
+            return `
+                <div class="toolbar-settings-item${visible ? '' : ' toolbar-settings-item-muted'}" data-toolbar-settings-item="${itemId}">
+                    <span class="toolbar-settings-item-label">${this._escapeHtml(label)}</span>
+                    <span class="toolbar-settings-category">${this._escapeHtml(category)}</span>
+                    <label class="toolbar-settings-visibility">
+                        <input type="checkbox" onchange="tools.toggleToolbarSettingsItem('${itemId}', this.checked)"${visible ? ' checked' : ''}${disabled}>
+                        <span>显示</span>
+                    </label>
+                    <div class="toolbar-settings-item-actions">
+                        <button type="button" class="tool-btn" onclick="tools.shiftToolbarSettingsItem('${itemId}', -1)" title="上移">↑</button>
+                        <button type="button" class="tool-btn" onclick="tools.shiftToolbarSettingsItem('${itemId}', 1)" title="下移">↓</button>
+                    </div>
+                </div>`;
+        }).join('');
+
+        list.innerHTML = `
+            <section class="toolbar-settings-section toolbar-settings-section-flat">
+                <h4>全部按钮</h4>
+                <div class="toolbar-settings-items">${itemsHtml || '<div class="toolbar-settings-empty">空</div>'}</div>
+            </section>`;
+    },
+
+    openToolbarSettings() {
+        this.loadToolbarLayout().finally(() => {
+            this._renderToolbarSettings();
+            document.getElementById('toolbar-settings-modal')?.classList.add('show');
+        });
+    },
+
+    closeToolbarSettings() {
+        document.getElementById('toolbar-settings-modal')?.classList.remove('show');
+    },
+
+    toggleToolbarSettingsItem(itemId, visible) {
+        const item = document.querySelector(`[data-toolbar-item="${this._cssEscape(itemId)}"]`);
+        if (!item) return;
+        item.dataset.toolbarHidden = itemId === 'toolbarSettings' || visible ? 'false' : 'true';
+        const row = document.querySelector(`[data-toolbar-settings-item="${this._cssEscape(itemId)}"]`);
+        if (row) row.classList.toggle('toolbar-settings-item-muted', item.dataset.toolbarHidden === 'true');
+        this._updateToolbarGroupVisibility();
+    },
+
+    moveToolbarSettingsItem(itemId, groupId) {
+        const item = document.querySelector(`[data-toolbar-item="${this._cssEscape(itemId)}"]`);
+        const group = document.querySelector(`.quick-tools [data-toolbar-group="${this._cssEscape(groupId || this._toolbarPrimaryGroupId)}"]`);
+        if (!item || !group) return;
+        group.appendChild(item);
+        this._renderToolbarSettings();
+    },
+
+    shiftToolbarSettingsItem(itemId, direction) {
+        const item = document.querySelector(`[data-toolbar-item="${this._cssEscape(itemId)}"]`);
+        if (!item) return;
+        const siblings = Array.from(item.parentElement.querySelectorAll('[data-toolbar-item]'));
+        const index = siblings.indexOf(item);
+        const target = siblings[index + direction];
+        if (!target) return;
+        if (direction < 0) {
+            item.parentElement.insertBefore(item, target);
+        } else {
+            item.parentElement.insertBefore(target, item);
+        }
+        this._renderToolbarSettings();
+    },
+
+    async saveToolbarLayout() {
+        const layout = this._readToolbarLayoutFromDom();
+        this._saveLocalToolbarLayout(layout);
+
+        try {
+            const data = await this._persistToolbarLayout(layout);
+            const savedLayout = this._normalizeToolbarLayout(data.layout || layout);
+            if (savedLayout) {
+                this._saveLocalToolbarLayout(savedLayout);
+                this.applyToolbarLayout(savedLayout);
+            }
+            this._serverToolbarLayoutLoaded = true;
+            this.closeToolbarSettings();
+            ui.showToast('工具栏配置已保存到账号');
+        } catch (e) {
+            ui.showToast(e.message || '保存到账号失败，已保存在本机', false);
+        }
+    },
+
+    async resetToolbarLayout() {
+        this._ensureDefaultToolbarLayout();
+        const defaultLayout = this._cloneToolbarLayout(this._defaultToolbarLayout) || this._readToolbarLayoutFromDom();
+
+        try {
+            const response = await fetch(this._toolbarLayoutEndpoint, { method: 'DELETE' });
+            if (!response.ok) throw new Error('恢复默认失败');
+            this._clearLocalToolbarLayout();
+            this._serverToolbarLayoutLoaded = true;
+            this.applyToolbarLayout(defaultLayout);
+            this._renderToolbarSettings();
+            this.closeToolbarSettings();
+            ui.showToast('工具栏已恢复默认');
+        } catch (e) {
+            ui.showToast(e.message || '恢复默认失败', false);
+        }
+    },
+
+    _getEditorText() {
+        return ui.editor?.getValue ? ui.editor.getValue() : '';
+    },
+
+    _indexFromPosition(pos, text = this._getEditorText()) {
+        const lines = text.split('\n');
+        let offset = 0;
+        const targetLine = Math.max(0, Math.min(pos.line || 0, lines.length - 1));
+        for (let i = 0; i < targetLine; i++) {
+            offset += (lines[i] || '').length + 1;
+        }
+        return offset + Math.max(0, Math.min(pos.ch || 0, (lines[targetLine] || '').length));
+    },
+
+    _positionFromIndex(index, text = this._getEditorText()) {
+        const safeIndex = Math.max(0, Math.min(index, text.length));
+        const before = text.slice(0, safeIndex);
+        const lines = before.split('\n');
+        return { line: lines.length - 1, ch: lines[lines.length - 1].length };
+    },
+
+    _getSelectionRange(text = this._getEditorText()) {
+        const cm = ui.editor?._editor;
+        if (cm?.getCursor && cm?.indexFromPos) {
+            const from = cm.getCursor('from');
+            const to = cm.getCursor('to');
+            return {
+                start: cm.indexFromPos(from),
+                end: cm.indexFromPos(to),
+                text: cm.getSelection ? cm.getSelection() : ''
+            };
+        }
+
+        const selectedText = ui.editor?.getSelection ? ui.editor.getSelection() : '';
+        const cursor = ui.editor?.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
+        const cursorIndex = ui.editor?.getCursorPos
+            ? ui.editor.getCursorPos()
+            : this._indexFromPosition(cursor, text);
+        return {
+            start: Math.max(0, cursorIndex - selectedText.length),
+            end: cursorIndex,
+            text: selectedText
+        };
+    },
+
+    _setSelectionByIndex(start, end = start) {
+        if (!ui.editor?.setSelection) return;
+        ui.editor.setSelection(start, end);
+    },
+
+    _replaceRange(start, end, replacement, cursorStart = start + replacement.length, cursorEnd = cursorStart) {
+        const text = this._getEditorText();
+        const safeStart = Math.max(0, Math.min(start, text.length));
+        const safeEnd = Math.max(safeStart, Math.min(end, text.length));
+
+        if (ui.editor?.executeEdits && ui.editor?.setSelection) {
+            this._setSelectionByIndex(safeStart, safeEnd);
+            ui.editor.executeEdits('toolbarEdit', [{ text: replacement }]);
+        } else if (ui.editor?.setValue) {
+            ui.editor.setValue(text.slice(0, safeStart) + replacement + text.slice(safeEnd));
+        }
+
+        this._setSelectionByIndex(cursorStart, cursorEnd);
+        ui.editor?.focus?.();
+        ui.save();
+        ui.updatePreview();
+    },
+
+    _currentLineRange(includeLineBreak = false) {
+        const text = this._getEditorText();
+        const cursor = ui.editor?.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
+        const lines = text.split('\n');
+        const line = Math.max(0, Math.min(cursor.line || 0, lines.length - 1));
+        const start = this._indexFromPosition({ line, ch: 0 }, text);
+        let end = start + (lines[line] || '').length;
+        if (includeLineBreak && line < lines.length - 1) end += 1;
+        return { text, lines, line, start, end, lineText: lines[line] || '' };
+    },
+
+    _getLineEditContext(text = this._getEditorText()) {
+        const range = this._getSelectionRange(text);
+        const cursor = ui.editor?.getPosition
+            ? ui.editor.getPosition()
+            : this._positionFromIndex(range.end, text);
+        const hasSelection = range.end > range.start;
+        const selectionStart = hasSelection ? range.start : this._indexFromPosition(cursor, text);
+        const selectionEnd = hasSelection ? range.end : selectionStart;
+        const startLine = hasSelection
+            ? this._positionFromIndex(selectionStart, text).line
+            : Math.max(0, cursor.line || 0);
+        const endLine = hasSelection
+            ? this._positionFromIndex(Math.max(selectionStart, selectionEnd - 1), text).line
+            : startLine;
+
+        return {
+            text,
+            lines: text.split('\n'),
+            hasSelection,
+            selectionStart,
+            selectionEnd,
+            startLine,
+            endLine
+        };
+    },
+
+    _applyLineTransform(transformLine) {
+        const context = this._getLineEditContext();
+        let deltaStart = 0;
+        let deltaEnd = 0;
+
+        for (let line = context.startLine; line <= context.endLine; line++) {
+            const original = context.lines[line] || '';
+            const updated = transformLine(original, line, context);
+            const delta = updated.length - original.length;
+            if (line === context.startLine) deltaStart = delta;
+            deltaEnd += delta;
+            context.lines[line] = updated;
+        }
+
+        const newText = context.lines.join('\n');
+        if (newText === context.text) return false;
+
+        ui.editor.setValue(newText);
+        const newStart = Math.max(0, context.selectionStart + (context.hasSelection ? deltaStart : Math.max(0, deltaStart)));
+        const newEnd = Math.max(newStart, context.selectionEnd + deltaEnd);
+        this._setSelectionByIndex(context.hasSelection ? newStart : newEnd, newEnd);
+        ui.editor.focus();
+        ui.save();
+        ui.updatePreview();
+        return true;
+    },
+
+    _escapeRegExp(value) {
+        return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    },
+
+    _copyTextWithExecCommand(text, restoreRange = null) {
+        if (typeof document.execCommand !== 'function') return false;
+
+        const textarea = document.createElement('textarea');
+        const activeElement = document.activeElement;
+        textarea.value = String(text ?? '');
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.width = '1px';
+        textarea.style.height = '1px';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        textarea.style.fontSize = '16px';
+
+        document.body.appendChild(textarea);
+
+        try {
+            textarea.focus({ preventScroll: true });
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+            return document.execCommand('copy');
+        } catch (e) {
+            return false;
+        } finally {
+            textarea.remove();
+            if (restoreRange) {
+                try {
+                    this._setSelectionByIndex(restoreRange.start, restoreRange.end);
+                } catch (e) {}
+            }
+            try {
+                activeElement?.focus?.({ preventScroll: true });
+            } catch (e) {}
+        }
+    },
+
+    async _writeClipboardText(text, restoreRange = null) {
+        const value = String(text ?? '');
+        if (navigator.clipboard?.writeText && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(value);
+                return true;
+            } catch (e) {}
+        }
+        return this._copyTextWithExecCommand(value, restoreRange);
+    },
+
+    async _readClipboardText() {
+        if (!navigator.clipboard?.readText || !window.isSecureContext) return null;
+
+        try {
+            return await navigator.clipboard.readText();
+        } catch (e) {
+            return null;
+        }
+    },
+
+    _readClipboardTextWithExecCommand() {
+        if (typeof document.execCommand !== 'function') return null;
+
+        const textarea = document.createElement('textarea');
+        textarea.setAttribute('aria-hidden', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '-9999px';
+        textarea.style.width = '1px';
+        textarea.style.height = '1px';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        textarea.style.fontSize = '16px';
+
+        document.body.appendChild(textarea);
+
+        try {
+            textarea.focus({ preventScroll: true });
+            textarea.select();
+            const success = document.execCommand('paste');
+            return success ? textarea.value : null;
+        } catch (e) {
+            return null;
+        } finally {
+            textarea.remove();
+        }
+    },
+
+    _insertEditorText(text, range = this._getSelectionRange()) {
+        const value = String(text ?? '');
+        const cursor = range.start + value.length;
+        this._replaceRange(range.start, range.end, value, cursor, cursor);
+    },
+
+    _promptNativePaste(range = this._getSelectionRange()) {
+        this._setSelectionByIndex(range.start, range.end);
+        try {
+            ui.editor?.focus?.();
+        } catch (e) {}
+
+        const isTouchDevice = window.matchMedia?.('(pointer: coarse)').matches
+            || navigator.maxTouchPoints > 0;
+        ui.showToast(isTouchDevice ? '请长按编辑区粘贴' : '请按 Ctrl/Cmd+V 粘贴', false);
+    },
+
     // 编辑器操作 - 使用适配器接口
     async editorAction(type) {
         if (!ui.editor) return;
 
         if (type === 'copy') {
+            const range = this._getSelectionRange();
             try {
-                const text = ui.editor.getSelection ? ui.editor.getSelection() : ui.editor.value || '';
-                await navigator.clipboard.writeText(text);
-                ui.showToast("已复制");
+                let text = range.text;
+                if (!text) {
+                    text = this._currentLineRange(false).lineText;
+                }
+                const copied = await this._writeClipboardText(text, range);
+                if (!copied) throw new Error('copy failed');
+                ui.showToast(text ? "已复制" : "已复制空行");
             } catch (e) {
                 ui.showToast("复制失败", false);
             }
         }         else if (type === 'cut') {
             try {
-                const text = ui.editor.getSelection ? ui.editor.getSelection() : ui.editor.value || '';
+                const range = this._getSelectionRange();
+                const text = range.text;
 
                 if (text) {
-                    // 先复制到剪贴板
-                    await navigator.clipboard.writeText(text);
-
-                    // 删除选中的文本 - 使用 CodeMirror 原生方法
-                    if (ui.editor._editor && ui.editor._editor.replaceSelection) {
-                        // 使用 CodeMirror 原生实例
-                        ui.editor._editor.replaceSelection('');
-                    } else if (ui.editor.replaceSelection) {
-                        // 使用适配器方法
-                        ui.editor.replaceSelection('');
-                    } else if (ui.editor.selectionStart !== undefined) {
-                        // 普通 textarea
-                        const fullText = ui.editor.getValue ? ui.editor.getValue() : ui.editor.value || '';
-                        const start = ui.editor.selectionStart || 0;
-                        const end = ui.editor.selectionEnd || 0;
-                        const newContent = fullText.substring(0, start) + fullText.substring(end);
-                        if (ui.editor.setValue) {
-                            ui.editor.setValue(newContent);
-                        } else {
-                            ui.editor.value = newContent;
-                        }
-                        if (ui.editor.setSelection) {
-                            ui.editor.setSelection(start, start);
-                        } else {
-                            ui.editor.selectionStart = ui.editor.selectionEnd = start;
-                        }
-                    }
-
-                    ui.editor.focus();
-                    ui.save();
-                    ui.updatePreview();
+                    const copied = await this._writeClipboardText(text, range);
+                    if (!copied) throw new Error('cut copy failed');
+                    this._replaceRange(range.start, range.end, '', range.start, range.start);
                     ui.showToast("已剪切");
                 } else {
                     ui.showToast("未选择内容", false);
@@ -72,126 +700,33 @@ const ToolsManager = {
             }
         } else if (type === 'paste') {
             try {
-                // 方案1：现代 Clipboard API
-                if (navigator.clipboard && navigator.clipboard.readText) {
-                    try {
-                        const text = await navigator.clipboard.readText();
-                        if (text) {
-                            // 根据编辑器类型执行粘贴
-                            if (ui.editor.executeEdits) {
-                                // 使用 CodeMirror 适配器的 executeEdits 方法
-                                ui.editor.executeEdits('paste', [{ text: text }]);
-                            } else if (ui.editor.replaceRange) {
-                                // 直接使用 CodeMirror 的 replaceRange
-                                const cursor = ui.editor.getCursor ? ui.editor.getCursor() : { ch: 0, line: 0 };
-                                ui.editor.replaceRange(text, cursor);
-                            } else if (ui.editor.selectionStart !== undefined) {
-                                // 普通 textarea - 使用 getValue 而不是 value
-                                const fullText = ui.editor.getValue ? ui.editor.getValue() : ui.editor.value || '';
-                                const start = ui.editor.selectionStart || 0;
-                                const end = ui.editor.selectionEnd || 0;
-                                const newContent = fullText.substring(0, start) + text + fullText.substring(end);
-                                if (ui.editor.setValue) {
-                                    ui.editor.setValue(newContent);
-                                } else {
-                                    ui.editor.value = newContent;
-                                }
-                                if (ui.editor.setSelection) {
-                                    ui.editor.setSelection(start + text.length, start + text.length);
-                                } else {
-                                    ui.editor.selectionStart = ui.editor.selectionEnd = start + text.length;
-                                }
-                            } else if (ui.editor.setValue) {
-                                // 其他编辑器类型 - 追加到末尾
-                                const currentText = ui.editor.getValue ? ui.editor.getValue() : '';
-                                ui.editor.setValue(currentText + text);
-                            }
-                            ui.editor.focus();
-                            ui.save();
-                            ui.updatePreview();
-                            ui.showToast("已粘贴");
-                        } else {
-                            ui.showToast("剪贴板为空", false);
-                        }
-                        return;
-                    } catch (e) {
-                        // 忽略 Clipboard API 错误，继续尝试方案2
-                    }
-
-                }
-
-                // 方案2：使用 input 元素触发粘贴
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.style.position = 'fixed';
-                input.style.top = '-100px';
-                input.style.left = '-100px';
-                input.style.width = '20px';
-                input.style.height = '20px';
-                input.style.opacity = '0';
-                input.style.pointerEvents = 'none';
-                document.body.appendChild(input);
-
-                try {
-                    // 聚焦并选择输入框
-                    input.focus();
-                    input.select();
-
-                    // 等待一小段时间让浏览器响应
-                    await new Promise(resolve => setTimeout(resolve, 200));
-
-                    // 尝试执行粘贴命令
-                    const success = document.execCommand('paste');
-                    const pastedText = input.value;
-
-                    if (success && pastedText) {
-                        // 根据编辑器类型执行粘贴
-                        if (ui.editor.executeEdits) {
-                            // 使用 CodeMirror 适配器的 executeEdits 方法
-                            ui.editor.executeEdits('paste', [{ text: pastedText }]);
-                        } else if (ui.editor.replaceRange) {
-                            // 直接使用 CodeMirror 的 replaceRange
-                            const cursor = ui.editor.getCursor ? ui.editor.getCursor() : { ch: 0, line: 0 };
-                            ui.editor.replaceRange(pastedText, cursor);
-                        } else if (ui.editor.selectionStart !== undefined) {
-                            // 普通 textarea - 使用 getValue 而不是 value
-                            const fullText = ui.editor.getValue ? ui.editor.getValue() : ui.editor.value || '';
-                            const start = ui.editor.selectionStart || 0;
-                            const end = ui.editor.selectionEnd || 0;
-                            const newContent = fullText.substring(0, start) + pastedText + fullText.substring(end);
-                            if (ui.editor.setValue) {
-                                ui.editor.setValue(newContent);
-                            } else {
-                                ui.editor.value = newContent;
-                            }
-                            if (ui.editor.setSelection) {
-                                ui.editor.setSelection(start + pastedText.length, start + pastedText.length);
-                            } else {
-                                ui.editor.selectionStart = ui.editor.selectionEnd = start + pastedText.length;
-                            }
-                        } else if (ui.editor.setValue) {
-                            // 其他编辑器类型 - 追加到末尾
-                            const currentText = ui.editor.getValue ? ui.editor.getValue() : '';
-                            ui.editor.setValue(currentText + pastedText);
-                        }
-                        ui.editor.focus();
-                        ui.save();
-                        ui.updatePreview();
+                const range = this._getSelectionRange();
+                const text = await this._readClipboardText();
+                if (text !== null) {
+                    if (text) {
+                        this._insertEditorText(text, range);
                         ui.showToast("已粘贴");
                     } else {
-                        // 所有方案都失败，显示最终提示
-                        ui.showToast("粘贴失败，请长按编辑器区域并选择粘贴", false);
+                        ui.showToast("剪贴板为空", false);
                     }
-                } catch (execError) {
-                    ui.showToast("粘贴失败，请长按编辑器区域并选择粘贴", false);
-                } finally {
-                    if (document.body.contains(input)) {
-                        document.body.removeChild(input);
-                    }
+                    return;
                 }
+
+                const pastedText = this._readClipboardTextWithExecCommand();
+                if (pastedText !== null) {
+                    if (pastedText) {
+                        this._insertEditorText(pastedText, range);
+                        ui.showToast("已粘贴");
+                    } else {
+                        ui.showToast("剪贴板为空", false);
+                    }
+                    return;
+                }
+
+                this._promptNativePaste(range);
             } catch (e) {
                 console.error('粘贴操作失败:', e);
-                ui.showToast("粘贴失败，请长按编辑器区域并选择粘贴", false);
+                ui.showToast("粘贴失败", false);
             }
         } else if (type === 'selectAll') {
             if (ui.editor.select) {
@@ -201,52 +736,17 @@ const ToolsManager = {
             }
             ui.editor.focus();
         } else if (type === 'selectLine') {
-            // 选择当前整行
-            try {
-                // 获取当前光标位置
-                const cursor = ui.editor.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
-                const line = cursor.line || 0;
-
-                // 获取当前行内容长度
-                let lineLength = 0;
-                if (ui.editor.getValue) {
-                    const fullText = ui.editor.getValue();
-                    const lines = fullText.split('\n');
-                    if (lines[line]) {
-                        lineLength = lines[line].length;
-                    }
-                } else if (ui.editor.getLine) {
-                    lineLength = ui.editor.getLine(line).length;
-                }
-
-                // 使用 setSelection 方法（需要索引）
-                if (ui.editor.setSelection && ui.editor.getCursorPos) {
-                    // 获取行的开始索引（行号 × 假设每行平均长度 + 当前行内的偏移）
-                    // 更准确的方式：使用 indexFromPos
-                    const startIndex = ui.editor.getCursorPos ? ui.editor.getCursorPos() : 0;
-                    // 计算行的开始索引
-                    const lineStartIndex = ui.editor.getCursorPos();
-                    // 计算当前行的偏移量
-                    const currentLineOffset = cursor.ch || 0;
-                    const finalStartIndex = lineStartIndex - currentLineOffset;
-                    const finalEndIndex = finalStartIndex + lineLength;
-
-                    ui.editor.setSelection(finalStartIndex, finalEndIndex);
-                } else if (ui.editor.setSelection) {
-                    // 如果没有 getCursorPos，尝试直接使用适配器的 setSelection
-                    // 适配器的 setSelection 期望索引，但这里我们需要计算
-                    const fullText = ui.editor.getValue ? ui.editor.getValue() : '';
-                    const lines = fullText.split('\n');
-                    let offset = 0;
-                    for (let i = 0; i < line; i++) {
-                        offset += (lines[i] || '').length + 1; // +1 是换行符
-                    }
-                    ui.editor.setSelection(offset, offset + lineLength);
-                } else if (ui.editor.setSelectionRange) {
-                    ui.editor.setSelectionRange(line, line + lineLength);
-                }
-            } catch (e) {
-                // 忽略选择行失败
+            const text = this._getEditorText();
+            const lines = text.split('\n');
+            const cursor = ui.editor.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
+            const line = Math.max(0, Math.min(cursor.line || 0, lines.length - 1));
+            const start = this._indexFromPosition({ line, ch: 0 }, text);
+            const end = line + 1 < lines.length
+                ? this._indexFromPosition({ line: line + 1, ch: 0 }, text)
+                : start + (lines[line] || '').length;
+            this._setSelectionByIndex(start, end);
+            if (ui.editor.scrollIntoView) {
+                ui.editor.scrollIntoView({ line, ch: 0 }, 96);
             }
             ui.editor.focus();
         }
@@ -255,21 +755,33 @@ const ToolsManager = {
     // 移动光标 - 使用适配器接口
     moveCursor(dir) {
         if (!ui.editor) return;
+        const preferredColumnKey = '_z7notePreferredCursorColumn';
+        const lastVerticalPositionKey = '_z7noteLastVerticalCursorPosition';
 
         // 获取当前光标位置
         const cursor = ui.editor.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
         const line = cursor.line || 0;
         const ch = cursor.ch || 0;
+        const fullText = ui.editor.getValue ? ui.editor.getValue() : '';
+        const lines = fullText.split('\n');
+        const isVerticalMove = dir === 'up' || dir === 'down';
+        if (!isVerticalMove) {
+            ui.editor[preferredColumnKey] = null;
+            ui.editor[lastVerticalPositionKey] = null;
+        }
+        const lastVerticalPosition = ui.editor[lastVerticalPositionKey];
+        const isContinuingVerticalMove = isVerticalMove
+            && lastVerticalPosition
+            && lastVerticalPosition.line === line
+            && lastVerticalPosition.ch === ch;
+        const preferredColumn = isVerticalMove
+            ? (isContinuingVerticalMove && Number.isFinite(ui.editor[preferredColumnKey])
+                ? ui.editor[preferredColumnKey]
+                : ch)
+            : ch;
 
         // 获取当前行内容
-        let lineLength = 0;
-        if (ui.editor.getValue) {
-            const fullText = ui.editor.getValue();
-            const lines = fullText.split('\n');
-            if (lines[line]) {
-                lineLength = lines[line].length;
-            }
-        }
+        const lineLength = lines[line] ? lines[line].length : 0;
 
         let newPos = { line: line, ch: ch };
 
@@ -278,35 +790,35 @@ const ToolsManager = {
                 newPos.ch = ch - 1;
             } else if (line > 0) {
                 // 移动到上一行末尾
-                if (ui.editor.getValue) {
-                    const fullText = ui.editor.getValue();
-                    const lines = fullText.split('\n');
-                    if (lines[line - 1]) {
-                        newPos.line = line - 1;
-                        newPos.ch = lines[line - 1].length;
-                    }
-                } else {
-                    newPos.line = line - 1;
-                    newPos.ch = 0;
-                }
+                newPos.line = line - 1;
+                newPos.ch = (lines[line - 1] || '').length;
             }
         } else if (dir === 'right') {
             if (ch < lineLength) {
                 newPos.ch = ch + 1;
             } else {
                 // 移动到下一行开头
-                if (ui.editor.getValue) {
-                    const fullText = ui.editor.getValue();
-                    const lines = fullText.split('\n');
-                    if (lines[line + 1] !== undefined) {
-                        newPos.line = line + 1;
-                        newPos.ch = 0;
-                    }
-                } else {
+                if (lines[line + 1] !== undefined) {
                     newPos.line = line + 1;
                     newPos.ch = 0;
                 }
             }
+        } else if (dir === 'up') {
+            if (line > 0) {
+                const targetLine = line - 1;
+                newPos.line = targetLine;
+                newPos.ch = Math.min(preferredColumn, (lines[targetLine] || '').length);
+            }
+        } else if (dir === 'down') {
+            if (lines[line + 1] !== undefined) {
+                const targetLine = line + 1;
+                newPos.line = targetLine;
+                newPos.ch = Math.min(preferredColumn, (lines[targetLine] || '').length);
+            }
+        }
+        if (isVerticalMove) {
+            ui.editor[preferredColumnKey] = preferredColumn;
+            ui.editor[lastVerticalPositionKey] = { line: newPos.line, ch: newPos.ch };
         }
 
         // 设置新光标位置
@@ -325,6 +837,9 @@ const ToolsManager = {
         }
 
         ui.editor.focus();
+        if (ui.editor.scrollIntoView) {
+            ui.editor.scrollIntoView(newPos, 120);
+        }
     },
 
     // 插入符号 - 使用适配器接口
@@ -333,53 +848,197 @@ const ToolsManager = {
 
         const b = before.replace(/\\n/g, '\n');
         const a = after.replace(/\\n/g, '\n');
-        const selText = ui.editor.getSelection ? ui.editor.getSelection() : '';
+        const range = this._getSelectionRange();
+        const insertText = b + range.text + a;
+        const cursor = range.start + b.length + range.text.length;
 
-        // 获取当前光标位置
-        const cursor = ui.editor.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
-        const line = cursor.line || 0;
-        const ch = cursor.ch || 0;
+        this._replaceRange(range.start, range.end, insertText, cursor, cursor);
+    },
 
-        // 组合插入文本
-        const insertText = b + selText + a;
-
-        // 使用 executeEdits 方法插入
-        if (ui.editor.executeEdits) {
-            ui.editor.executeEdits('insertSymbol', [{ text: insertText }]);
-        } else if (ui.editor.replaceSelection) {
-            // 如果有 replaceSelection 方法
-            ui.editor.replaceSelection(insertText);
-        } else if (ui.editor.setValue && ui.editor.getValue) {
-            // 回退方案：直接操作文本
-            const fullText = ui.editor.getValue();
-            const lines = fullText.split('\n');
-            let offset = 0;
-            for (let i = 0; i < line; i++) {
-                offset += (lines[i] || '').length + 1;
-            }
-            offset += ch;
-            const newText = fullText.substring(0, offset) + insertText + fullText.substring(offset);
-            ui.editor.setValue(newText);
+    wrapSelection(before, after = before, placeholder = '') {
+        if (!ui.editor) return;
+        const text = this._getEditorText();
+        const range = this._getSelectionRange();
+        if (
+            range.text
+            && text.slice(range.start - before.length, range.start) === before
+            && text.slice(range.end, range.end + after.length) === after
+        ) {
+            const replacement = range.text;
+            this._replaceRange(
+                range.start - before.length,
+                range.end + after.length,
+                replacement,
+                range.start - before.length,
+                range.end - before.length
+            );
+            return;
         }
 
-        // 计算并设置新光标位置
-        const newCh = ch + b.length + selText.length;
-        if (ui.editor.setPosition) {
-            ui.editor.setPosition({ line: line, ch: newCh });
-        } else if (ui.editor.setSelection) {
-            const fullText = ui.editor.getValue ? ui.editor.getValue() : '';
-            const lines = fullText.split('\n');
-            let offset = 0;
-            for (let i = 0; i < line; i++) {
-                offset += (lines[i] || '').length + 1;
-            }
-            offset += newCh;
-            ui.editor.setSelection(offset, offset);
-        }
+        const inner = range.text || placeholder;
+        const replacement = before + inner + after;
+        const innerStart = range.start + before.length;
+        const innerEnd = innerStart + inner.length;
 
+        this._replaceRange(range.start, range.end, replacement, innerStart, innerEnd);
+    },
+
+    insertTemplate(type) {
+        const templates = {
+            table: '| 项目 | 内容 |\n| --- | --- |\n|  |  |',
+            image: '![图片说明](图片地址)'
+        };
+        const template = templates[type];
+        if (!template) return;
+        this.insertSymbol(template);
+    },
+
+    toggleLinePrefix(prefix, options = {}) {
+        if (!ui.editor) return;
+        const escapedPrefix = this._escapeRegExp(prefix);
+        const prefixPattern = options.pattern || new RegExp(`^(\\s*)${escapedPrefix}\\s?`);
+        this._applyLineTransform((line) => {
+            if (prefixPattern.test(line)) {
+                return line.replace(prefixPattern, '$1');
+            }
+            return line.replace(/^(\s*)/, `$1${prefix}`);
+        });
+    },
+
+    toggleHeading() {
+        if (!ui.editor) return;
+        this._applyLineTransform((line) => {
+            if (/^\s*#{1,6}\s+/.test(line)) {
+                return line.replace(/^(\s*)#{1,6}\s+/, '$1');
+            }
+            return line.replace(/^(\s*)/, '$1# ');
+        });
+    },
+
+    toggleTodo() {
+        if (!ui.editor) return;
+        this._applyLineTransform((line) => {
+            if (/^(\s*)-\s+\[[ xX]\]\s+/.test(line)) {
+                return line.replace(/^(\s*)-\s+\[[ xX]\]\s+/, '$1');
+            }
+            return line.replace(/^(\s*)/, '$1- [ ] ');
+        });
+    },
+
+    indentSelection(direction = 'in') {
+        if (!ui.editor) return;
+        this._applyLineTransform((line) => {
+            if (direction === 'out') {
+                return line.startsWith('    ')
+                    ? line.slice(4)
+                    : line.replace(/^\s{1,3}/, '');
+            }
+            return `    ${line}`;
+        });
+    },
+
+    duplicateCurrentLine() {
+        if (!ui.editor) return;
+
+        const context = this._getLineEditContext();
+        const { lines, startLine, endLine } = context;
+        const block = lines.slice(startLine, endLine + 1);
+        const nextStartLine = endLine + 1;
+        lines.splice(nextStartLine, 0, ...block);
+
+        const nextEndLine = nextStartLine + block.length - 1;
+        const newText = lines.join('\n');
+        ui.editor.setValue(newText);
+        const selectionStart = this._indexFromPosition({ line: nextStartLine, ch: 0 }, newText);
+        const selectionEnd = this._indexFromPosition(
+            { line: nextEndLine, ch: (lines[nextEndLine] || '').length },
+            newText
+        );
+        this._setSelectionByIndex(selectionStart, selectionEnd);
+        if (ui.editor.scrollIntoView) {
+            ui.editor.scrollIntoView({ line: nextStartLine, ch: 0 }, 96);
+        }
         ui.editor.focus();
         ui.save();
         ui.updatePreview();
+        ui.showToast(block.length > 1 ? `已复制 ${block.length} 行` : '已复制当前行');
+    },
+
+    deleteCurrentLine() {
+        if (!ui.editor) return;
+
+        const context = this._getLineEditContext();
+        const { lines, startLine, endLine } = context;
+        const block = lines.slice(startLine, endLine + 1);
+        const removedCount = block.length;
+        if (removedCount >= lines.length) {
+            lines.splice(0, lines.length, '');
+        } else {
+            lines.splice(startLine, removedCount);
+        }
+
+        const newText = lines.join('\n');
+        const cursorLine = Math.max(0, Math.min(startLine, lines.length - 1));
+        const cursorIndex = this._indexFromPosition({ line: cursorLine, ch: 0 }, newText);
+        ui.editor.setValue(newText);
+        this._setSelectionByIndex(cursorIndex, cursorIndex);
+        if (ui.editor.scrollIntoView) {
+            ui.editor.scrollIntoView({ line: cursorLine, ch: 0 }, 96);
+        }
+        ui.editor.focus();
+        ui.save();
+        ui.updatePreview();
+        const hasContent = block.some((line) => line.trim());
+        ui.showToast(removedCount > 1 ? `已删除 ${removedCount} 行` : (hasContent ? '已删除当前行' : '已删除空行'));
+    },
+
+    moveLines(direction = 'up') {
+        if (!ui.editor) return;
+
+        const context = this._getLineEditContext();
+        const { lines, startLine, endLine } = context;
+        const moveDown = direction === 'down';
+        if (lines.length <= 1) {
+            ui.showToast('没有可移动的行', false);
+            return;
+        }
+        if (!moveDown && startLine <= 0) {
+            ui.showToast('已经在顶部', false);
+            return;
+        }
+        if (moveDown && endLine >= lines.length - 1) {
+            ui.showToast('已经在底部', false);
+            return;
+        }
+
+        const block = lines.slice(startLine, endLine + 1);
+        let nextStartLine;
+        if (moveDown) {
+            const nextLine = lines[endLine + 1];
+            lines.splice(startLine, block.length + 1, nextLine, ...block);
+            nextStartLine = startLine + 1;
+        } else {
+            const previousLine = lines[startLine - 1];
+            lines.splice(startLine - 1, block.length + 1, ...block, previousLine);
+            nextStartLine = startLine - 1;
+        }
+
+        const nextEndLine = nextStartLine + block.length - 1;
+        const newText = lines.join('\n');
+        ui.editor.setValue(newText);
+        const selectionStart = this._indexFromPosition({ line: nextStartLine, ch: 0 }, newText);
+        const selectionEnd = this._indexFromPosition(
+            { line: nextEndLine, ch: (lines[nextEndLine] || '').length },
+            newText
+        );
+        this._setSelectionByIndex(selectionStart, selectionEnd);
+        if (ui.editor.scrollIntoView) {
+            ui.editor.scrollIntoView({ line: nextStartLine, ch: 0 }, 96);
+        }
+        ui.editor.focus();
+        ui.save();
+        ui.updatePreview();
+        ui.showToast(moveDown ? '已下移行' : '已上移行');
     },
 
     // 插入待办事项 - 使用适配器接口
@@ -387,53 +1046,10 @@ const ToolsManager = {
         if (!ui.editor) return;
 
         const checkbox = completed ? '- [x] ' : '- [ ] ';
-        const selText = ui.editor.getSelection ? ui.editor.getSelection() : '';
-
-        // 获取当前光标位置
-        const cursor = ui.editor.getPosition ? ui.editor.getPosition() : { line: 0, ch: 0 };
-        const line = cursor.line || 0;
-        const ch = cursor.ch || 0;
-
-        // 组合插入文本
-        const insertText = checkbox + selText;
-
-        // 使用 executeEdits 方法插入
-        if (ui.editor.executeEdits) {
-            ui.editor.executeEdits('insertTodo', [{ text: insertText }]);
-        } else if (ui.editor.replaceSelection) {
-            // 如果有 replaceSelection 方法
-            ui.editor.replaceSelection(insertText);
-        } else if (ui.editor.setValue && ui.editor.getValue) {
-            // 回退方案：直接操作文本
-            const fullText = ui.editor.getValue();
-            const lines = fullText.split('\n');
-            let offset = 0;
-            for (let i = 0; i < line; i++) {
-                offset += (lines[i] || '').length + 1;
-            }
-            offset += ch;
-            const newText = fullText.substring(0, offset) + insertText + fullText.substring(offset);
-            ui.editor.setValue(newText);
-        }
-
-        // 计算并设置新光标位置（在待办事项文本末尾）
-        const newCh = ch + checkbox.length + selText.length;
-        if (ui.editor.setPosition) {
-            ui.editor.setPosition({ line: line, ch: newCh });
-        } else if (ui.editor.setSelection) {
-            const fullText = ui.editor.getValue ? ui.editor.getValue() : '';
-            const lines = fullText.split('\n');
-            let offset = 0;
-            for (let i = 0; i < line; i++) {
-                offset += (lines[i] || '').length + 1;
-            }
-            offset += newCh;
-            ui.editor.setSelection(offset, offset);
-        }
-
-        ui.editor.focus();
-        ui.save();
-        ui.updatePreview();
+        const range = this._getSelectionRange();
+        const insertText = checkbox + range.text;
+        const cursor = range.start + insertText.length;
+        this._replaceRange(range.start, range.end, insertText, cursor, cursor);
     },
 
     // 导出当前笔记为 TXT

@@ -252,7 +252,7 @@ button:disabled {
     overflow: auto;
 }
 
-body,html { height: 100%; overflow: hidden; }
+body,html { height: var(--app-visual-height, 100%); overflow: hidden; }
 html:has(body.calendar-page),
 html:has(body.contacts-page) {
     height: auto;
@@ -268,7 +268,7 @@ body.contacts-page {
 }
 
 /* ==================== 主应用布局 ==================== */
-.header { height: 40px; background: var(--surface-header); display: flex; align-items: center; padding: 0 6px; border-bottom: 1px solid var(--control-border); justify-content: space-between; position: fixed; top: 0; left: 0; right: 0; z-index: 3201; width: 100%; backdrop-filter: blur(14px); box-shadow: var(--header-shadow); }
+.header { height: var(--app-header-height, 40px); background: var(--surface-header); display: flex; align-items: center; padding: 0 6px; border-bottom: 1px solid var(--control-border); justify-content: space-between; position: fixed; top: 0; left: 0; right: 0; z-index: 3201; width: 100%; backdrop-filter: blur(14px); box-shadow: var(--header-shadow); transition: transform 0.2s ease, opacity 0.2s ease; }
 .header > div { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .header > div:last-child { gap: 1px; }
 .header-group-wide { display: flex; align-items: center; gap: 12px !important; }
@@ -278,7 +278,7 @@ body.contacts-page {
 .status-text { font-size: 12px; color: var(--text-muted); }
 
 /* 主容器 */
-.container { display: flex; height: 100%; min-height: 0; position: relative; overflow: hidden; width: 100vw; padding-top: 40px; }
+.container { display: flex; height: var(--app-visual-height, 100%); min-height: 0; position: relative; overflow: hidden; width: 100vw; padding-top: var(--app-header-height, 40px); }
 #sidebar { width:260px;background:var(--surface-3);border-right:1px solid var(--border);display:flex;flex-direction:column;position:relative;z-index:100;transition: width 0.2s ease; overflow:hidden; will-change: width; min-height: 0; box-shadow: var(--shadow-sm); }
 #sidebar.collapsed { width:0;border-right:none;overflow:hidden; }
 
@@ -287,7 +287,7 @@ body.contacts-page {
 
 /* 移动端sidebar样式 */
 @media (max-width: 768px) {
-    #sidebar { position: fixed; top: 40px; left: 0; bottom: 0; width: 80%; max-width: 300px; z-index: 2001; transform: translateX(-100%); transition: transform 0.3s ease; border-right: 1px solid var(--border); box-shadow: var(--shadow-md); display: flex; flex-direction: column; overflow: hidden; }
+    #sidebar { position: fixed; top: var(--app-header-height, 40px); left: 0; bottom: 0; width: 80%; max-width: 300px; z-index: 2001; transform: translateX(-100%); transition: transform 0.3s ease; border-right: 1px solid var(--border); box-shadow: var(--shadow-md); display: flex; flex-direction: column; overflow: hidden; }
     #sidebar.show { transform: translateX(0); }
     #sidebar.collapsed { width: 80%; max-width: 300px; transform: translateX(-100%); }
     .sidebar-footer, .sidebar-footer > div { flex-shrink: 0; position: relative; z-index: 2002; }
@@ -298,7 +298,12 @@ body.contacts-page {
 .quick-tools::-webkit-scrollbar { height: 6px; }
 .quick-tools::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 .quick-tool-group { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; padding: 2px; border-radius: 12px; background: color-mix(in srgb, var(--surface-1) 82%, transparent); border: 1px solid color-mix(in srgb, var(--border) 76%, transparent); }
-.quick-tool-group .tool-btn { min-width: 32px; }
+.quick-tool-group .tool-btn { min-width: 32px; white-space: nowrap; line-height: 1; flex-shrink: 0; }
+.quick-tools [data-toolbar-hidden="true"] { display: none !important; }
+.quick-tool-group[data-toolbar-empty="true"] { display: none; }
+.quick-tools[data-toolbar-flat="true"] .divider { display: none; }
+.quick-tools[data-toolbar-flat="true"] .quick-tool-group { display: contents; }
+.quick-tools[data-toolbar-flat="true"] .quick-tool-group[data-toolbar-empty="true"] { display: none; }
 
 /* 连选模式按钮样式 */
 .range-select-btn {
@@ -337,17 +342,21 @@ body.contacts-page {
     .quick-tools {
         gap: 4px;
         padding: 6px;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
     }
 
     .quick-tool-group {
         gap: 2px;
         padding: 2px;
+        border-radius: 8px;
     }
 
     .quick-tool-group .tool-btn {
-        min-width: 30px;
+        min-width: 34px;
+        height: 34px;
         padding: 0 6px;
-        font-size: 12px;
+        font-size: 13px;
     }
 }
 #main-view { flex:1;display:flex;overflow:hidden;position: relative; min-height: 0; }
@@ -390,3 +399,105 @@ html.dark-mode .cm-s-default .cm-header { color: var(--accent); }
 .dark-mode .CodeMirror-activeline-background { background: var(--accent-soft) !important; }
 .CodeMirror-activeline-gutter { background: var(--accent-soft-strong) !important; }
 .dark-mode .CodeMirror-activeline-gutter { background: var(--accent-soft-strong) !important; }
+
+@media (max-width: 768px) {
+    html.ios-visual-viewport,
+    html.ios-visual-viewport body[data-ui-surface="app"] {
+        height: var(--app-visual-height, 100dvh);
+        min-height: var(--app-visual-height, 100dvh);
+    }
+
+    body.mobile-editor-keyboard .header {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(calc(-1 * var(--app-header-height, 40px)));
+    }
+
+    body.mobile-editor-keyboard .container {
+        padding-top: 0;
+    }
+
+    body.mobile-editor-keyboard #main {
+        min-height: var(--app-visual-height, 100dvh);
+        height: var(--app-visual-height, 100dvh);
+        padding-top: var(--mobile-editor-toolbar-height, 40px);
+    }
+
+    body.mobile-editor-keyboard #sidebar {
+        top: 0;
+    }
+
+    body.mobile-editor-keyboard #editor-wrapper {
+        border-radius: 0;
+    }
+
+    body.mobile-editor-keyboard #editor-scroller,
+    body.mobile-editor-keyboard #editor-container {
+        min-height: 0;
+    }
+
+    body.mobile-editor-keyboard .quick-tools {
+        position: fixed;
+        top: var(--app-visual-offset-top, 0px);
+        left: 0;
+        right: 0;
+        z-index: 3202;
+        height: var(--mobile-editor-toolbar-height, 40px);
+        min-height: 34px;
+        max-height: var(--mobile-editor-toolbar-height, 40px);
+        padding-top: 2px;
+        padding-bottom: 2px;
+        gap: 3px;
+        flex-wrap: nowrap;
+        align-items: center;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-radius: 0;
+        background: color-mix(in srgb, var(--surface-toolbar) 98%, transparent);
+        box-shadow: 0 1px 10px color-mix(in srgb, #000 12%, transparent);
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    body.mobile-editor-keyboard .quick-tools::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.mobile-editor-keyboard .quick-tool-group {
+        flex-shrink: 0;
+        padding: 1px;
+        gap: 1px;
+    }
+
+    body.mobile-editor-keyboard .quick-tool-group .tool-btn {
+        height: 29px;
+        min-width: 28px;
+        padding: 0 3px;
+        font-size: 12px;
+    }
+
+    body.mobile-editor-keyboard .divider {
+        height: 16px;
+        flex-shrink: 0;
+    }
+
+    body.mobile-editor-keyboard .note-title-wrapper {
+        padding-top: 5px;
+        padding-bottom: 5px;
+        min-height: 38px;
+    }
+
+    body.mobile-editor-keyboard .note-title-input {
+        min-height: 24px;
+        font-size: 15px;
+        line-height: 1.1;
+    }
+
+    body.mobile-editor-keyboard .note-title-meta-row {
+        display: none;
+    }
+
+    body.mobile-editor-focused .CodeMirror {
+        caret-color: var(--accent);
+    }
+}

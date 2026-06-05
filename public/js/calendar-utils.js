@@ -72,6 +72,14 @@ window.createCalendarUtils = function createCalendarUtils({ state, elements }) {
       return `${year}-${month}-${day}`;
     },
 
+    getLocalTimeZone() {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
+      } catch (e) {
+        return 'Asia/Shanghai';
+      }
+    },
+
     // 健壮的日期转换：针对全天事件进行特殊处理 (使用 UTC 提取日期)
     getAllDayDisplayDate(ts, isEnd = false) {
       if (!ts || ts <= 0) return null;
@@ -198,9 +206,10 @@ window.createCalendarUtils = function createCalendarUtils({ state, elements }) {
     },
 
     formatSidebarDate(date) {
+      const year = date.getFullYear();
       const month = date.getMonth() + 1;
       const day = date.getDate();
-      return `${month}月${day}日`;
+      return `${year}/${month}/${day}`;
     },
 
     formatTime(timestamp) {

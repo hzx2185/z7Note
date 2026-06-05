@@ -7,7 +7,9 @@ const Admin = {
         activeTab: 'overview',
         workspaceType: 'all',
         counts: { note: 0, event: 0, todo: 0, contact: 0 },
-        memberPlans: []
+        memberPlans: [],
+        versionStatus: null,
+        updatePollTimer: null
     },
 
     async api(url, options = {}) {
@@ -202,7 +204,8 @@ const Admin = {
             this.loadMembershipOperations(),
             this.loadWorkspace(),
             this.loadBackupConfig(),
-            this.loadSmtpConfig()
+            this.loadSmtpConfig(),
+            this.checkVersion()
         ]);
     },
 
@@ -595,6 +598,174 @@ const Admin = {
         if (!confirm('立即执行一次全系统备份并根据配置同步到 WebDAV？')) return;
         await this.api('/api/admin/backup/now', { method: 'POST' });
         alert('备份任务已在后台启动，完成后会根据设置发送邮件通知。');
+    },
+
+    formatVersionTime(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { hour12: false });
+    },
+
+    renderVersionStatus(status = {}) {
+        this.state.versionStatus = status;
+
+        const currentEl = document.getElementById('version-current');
+        const latestEl = document.getElementById('version-latest');
+        const tipEl = document.getElementById('version-tip');
+        const copyEl = document.getElementById('version-status-copy');
+        const badgeEl = document.getElementById('version-update-badge');
+        const buttonEl = document.getElementById('version-update-btn');
+        if (!currentEl || !latestEl || !tipEl || !copyEl || !badgeEl || !buttonEl) return;
+
+        const latestVersion = status.latestVersion || '';
+        const updateState = status.updateState || {};
+        const remotePlatformText = status.remotePlatformText || (Array.isArray(status.remotePlatforms) ? status.remotePlatforms.join(' / ') : '');
+        currentEl.textContent = status.currentVersion || '-';
+        latestEl.textContent = latestVersion || (status.remoteError ? '获取失败' : '-');
+
+        badgeEl.classList.remove('update', 'ok', 'warn', 'running');
+        if (updateState.running) {
+            badgeEl.textContent = '更新中';
+            badgeEl.classList.add('running');
+            copyEl.textContent = '后台更新命令正在执行';
+            buttonEl.disabled = true;
+            buttonEl.textContent = '更新中';
+        } else if (status.platformMatched === false) {
+            badgeEl.textContent = '架构不符';
+            badgeEl.classList.add('warn');
+            copyEl.textContent = `当前平台 ${status.runtimePlatform || '-'} 未在远端 tag 中找到`;
+            buttonEl.disabled = false;
+            buttonEl.textContent = '更新提示';
+        } else if (status.updateAvailable) {
+            badgeEl.textContent = '有新版本';
+            badgeEl.classList.add('update');
+            copyEl.textContent = `可更新到 ${latestVersion}`;
+            buttonEl.disabled = false;
+            buttonEl.textContent = status.updateEnabled ? '自动更新' : '更新提示';
+        } else if (status.remoteError) {
+            badgeEl.textContent = '检查失败';
+            badgeEl.classList.add('warn');
+            copyEl.textContent = '暂时无法获取远端版本';
+            buttonEl.disabled = true;
+            buttonEl.textContent = '自动更新';
+        } else if (latestVersion && status.comparable === false) {
+            badgeEl.textContent = '需确认';
+            badgeEl.classList.add('warn');
+            copyEl.textContent = `远端 tag 为 ${latestVersion}`;
+            buttonEl.disabled = false;
+            buttonEl.textContent = status.updateEnabled ? '自动更新' : '更新提示';
+        } else {
+            badgeEl.textContent = '已是最新';
+            badgeEl.classList.add('ok');
+            copyEl.textContent = '当前版本已同步到最新 tag';
+            buttonEl.disabled = true;
+            buttonEl.textContent = '自动更新';
+        }
+
+        const publishedText = this.formatVersionTime(status.publishedAt);
+        if (status.remoteError) {
+            tipEl.textContent = `检查失败：${status.remoteError}`;
+        } else if (status.updateAvailable) {
+            tipEl.textContent = `发现新版本 ${latestVersion}，可查看更新提示。`;
+        } else if (status.platformMatched === false) {
+            tipEl.textContent = '当前平台未匹配远端镜像，请查看更新提示。';
+        } else if (latestVersion && status.comparable === false) {
+            tipEl.textContent = `远端 tag 为 ${latestVersion}，需手动确认是否更新。`;
+        } else if (latestVersion) {
+            tipEl.textContent = status.comparable === false ? '远端 tag 需确认。' : '版本状态正常。';
+        } else {
+            tipEl.textContent = '后台会从 GitHub / Docker Hub 获取最新版本。';
+        }
+
+        const titlePieces = [];
+        if (status.source) titlePieces.push(`来源：${status.source}`);
+        if (publishedText) titlePieces.push(`发布时间：${publishedText}`);
+        if (status.runtimePlatform) titlePieces.push(`当前平台：${status.runtimePlatform}`);
+        if (remotePlatformText) titlePieces.push(`远端平台：${remotePlatformText}`);
+        if (!status.updateEnabled) titlePieces.push('自动更新需配置 Z7NOTE_UPDATE_COMMAND');
+        buttonEl.title = titlePieces.join('\n') || (status.updateEnabled ? '执行后台配置的固定更新命令' : '查看更新提示');
+
+        this.syncUpdatePolling(updateState.running);
+    },
+
+    async checkVersion(force = false) {
+        try {
+            const status = await this.api(`/api/admin/system/version${force ? '?force=1' : ''}`);
+            this.renderVersionStatus(status);
+            return status;
+        } catch (e) {
+            this.renderVersionStatus({
+                currentVersion: this.state.versionStatus?.currentVersion || '-',
+                remoteError: e.message
+            });
+            return null;
+        }
+    },
+
+    async startSystemUpdate() {
+        const status = this.state.versionStatus || {};
+        const targetVersion = status.latestVersion || '';
+        if (!status.updateEnabled) {
+            this.showUpdateHint(status);
+            return;
+        }
+        if (!confirm(`确认执行后台自动更新${targetVersion ? `到 ${targetVersion}` : ''}？更新过程可能会重启服务。`)) return;
+
+        try {
+            const response = await this.api('/api/admin/system/update', {
+                method: 'POST',
+                body: JSON.stringify({ targetVersion })
+            });
+            this.renderVersionStatus({
+                ...status,
+                updateState: response.updateState || { running: true },
+                updateEnabled: true
+            });
+            alert('更新命令已启动。页面可能会在服务重启时短暂断开，请稍后刷新查看结果。');
+        } catch (e) {
+            const latestStatus = this.state.versionStatus || {};
+            this.showUpdateHint(latestStatus);
+        }
+    },
+
+    showUpdateHint(status = {}) {
+        const hint = status.updateHint || [
+            `镜像：${status.targetImage || 'hzx2185/z7note:latest'}`,
+            `当前平台：${status.runtimePlatform || '-'}`,
+            `远端平台：${status.remotePlatformText || (Array.isArray(status.remotePlatforms) ? status.remotePlatforms.join(' / ') : '未知')}`,
+            'Docker Compose 会自动拉取当前平台对应的 amd64 / arm64 镜像。',
+            '若使用 Docker 镜像部署，可在宿主机更新 compose 中的镜像 tag 后执行：docker compose pull && docker compose up -d',
+            '若使用当前源码构建部署，可在宿主机执行：git pull && docker compose build && docker compose up -d',
+            '如需后台按钮直接执行，请设置 Z7NOTE_UPDATE_COMMAND 为宿主环境可用的固定更新命令。'
+        ].join('\n');
+        alert(hint);
+    },
+
+    syncUpdatePolling(running) {
+        if (!running) {
+            if (this.state.updatePollTimer) {
+                clearInterval(this.state.updatePollTimer);
+                this.state.updatePollTimer = null;
+            }
+            return;
+        }
+
+        if (this.state.updatePollTimer) return;
+        this.state.updatePollTimer = setInterval(async () => {
+            try {
+                const data = await this.api('/api/admin/system/update/status');
+                const current = this.state.versionStatus || {};
+                this.renderVersionStatus({
+                    ...current,
+                    updateState: data.updateState || {}
+                });
+                if (!data.updateState?.running) {
+                    this.checkVersion(true);
+                }
+            } catch (e) {
+                this.syncUpdatePolling(false);
+            }
+        }, 5000);
     },
 
     selectAll(cls, checked) {

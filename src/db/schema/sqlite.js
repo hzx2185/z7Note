@@ -100,6 +100,16 @@ async function createBaseTables(db) {
     FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
   )`);
 
+  await db.exec(`CREATE TABLE IF NOT EXISTS user_preferences (
+    username TEXT NOT NULL,
+    settingKey TEXT NOT NULL,
+    value TEXT,
+    createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+    updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+    PRIMARY KEY (username, settingKey),
+    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+  )`);
+
   await db.exec(`CREATE TABLE IF NOT EXISTS shares (
     token TEXT PRIMARY KEY,
     owner TEXT,
@@ -185,6 +195,7 @@ async function createBaseIndexes(db) {
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_shares_expires_at ON shares(expiresAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_sessions_username ON user_sessions(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_sessions_expires_at ON user_sessions(expiresAt)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_preferences_username ON user_preferences(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_username ON upload_chunks(username)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_upload_chunks_expires ON upload_chunks(expiresAt)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_backup_config_enabled ON user_backup_config(enabled)`);
@@ -278,6 +289,19 @@ async function migrateBaseSchema(db) {
       createdAt INTEGER NOT NULL
     )`);
   }
+
+  if (!(await sqliteHasTable(db, 'user_preferences'))) {
+    await db.exec(`CREATE TABLE user_preferences (
+      username TEXT NOT NULL,
+      settingKey TEXT NOT NULL,
+      value TEXT,
+      createdAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+      updatedAt INTEGER DEFAULT ${SQLITE_DEFAULTS.epochSeconds},
+      PRIMARY KEY (username, settingKey),
+      FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+    )`);
+  }
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_user_preferences_username ON user_preferences(username)`);
 
   if (!(await sqliteHasColumn(db, 'users', 'blogTitle'))) {
     await db.exec(`ALTER TABLE users ADD COLUMN blogTitle TEXT`);

@@ -1,31 +1,113 @@
 @media (max-width: 920px) {
-    .footer-card,
-    .topbar-inner {
-        flex-direction: column;
-        align-items: flex-start;
+    .footer-card {
+        align-items: center;
     }
 
-    .topbar-left,
-    .topbar-right {
-        width: 100%;
+    .topbar-inner {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
     }
 
     .topbar-left {
-        justify-content: space-between;
+        display: contents;
     }
 
-    .topnav,
-    .topnav-actions {
-        width: 100%;
-        flex-wrap: wrap;
+    .brand {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+    }
+
+    .topbar-right {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        width: auto;
     }
 
     .topnav {
-        gap: 10px;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .topbar .topnav .btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 0 4px;
+        font-size: 13px;
+    }
+
+    .topnav-actions {
+        flex-wrap: nowrap;
+        gap: 6px;
+    }
+
+    .topbar .topnav-actions .btn {
+        min-height: 34px;
+        padding: 0 8px;
+        font-size: 13px;
+    }
+
+    .topbar .topnav-actions [data-site-auth-link] {
+        max-width: 96px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .footer-inner {
         padding: 20px 24px;
+    }
+}
+
+@media (max-width: 520px) {
+    .topbar-inner {
+        gap: 8px;
+        padding: 8px 0;
+    }
+
+    .brand {
+        gap: 8px;
+    }
+
+    .brand-mark {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        font-size: 16px;
+    }
+
+    .brand-meta {
+        display: none;
+    }
+
+    .topbar-right {
+        gap: 6px;
+    }
+
+    .topnav {
+        gap: 5px;
+    }
+
+    .topbar .topnav .btn {
+        min-height: 32px;
+        font-size: 12px;
+    }
+
+    .topbar .topnav-actions .btn {
+        min-height: 32px;
+        padding: 0 7px;
+        font-size: 12px;
+    }
+
+    .topbar .topnav-actions [data-site-auth-link] {
+        max-width: 72px;
     }
 }
 

@@ -209,6 +209,7 @@
       const eventId = elements.eventForm.dataset.eventId;
 
         data.allDay = data.allDay === 'true';
+        data.timezone = utils.getLocalTimeZone();
 
         // 显式处理复选框，因为未勾选的复选框不会出现在 FormData 中
         data.reminderEmail = elements.eventForm.querySelector('[name="reminderEmail"]')?.checked ? 1 : 0;

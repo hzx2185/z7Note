@@ -7,11 +7,41 @@ class TimeHelper {
     return 'Asia/Shanghai';
   }
 
+  static normalizeTimeZone(timeZone, fallback = TimeHelper.getAppTimeZone()) {
+    const raw = String(timeZone || '').trim().replace(/^["']|["']$/g, '');
+    if (!raw) return fallback || null;
+
+    const aliases = {
+      Z: 'UTC',
+      GMT: 'UTC',
+      UTC: 'UTC',
+      'ETC/UTC': 'UTC',
+      'ETC/GMT': 'UTC'
+    };
+    const alias = aliases[raw.toUpperCase()];
+    if (alias) return alias;
+
+    try {
+      return new Intl.DateTimeFormat('en-US', { timeZone: raw }).resolvedOptions().timeZone;
+    } catch (e) {
+      // Fall through to case-insensitive lookup below.
+    }
+
+    if (typeof Intl.supportedValuesOf === 'function') {
+      const lowerRaw = raw.toLowerCase();
+      const match = Intl.supportedValuesOf('timeZone').find(zone => zone.toLowerCase() === lowerRaw);
+      if (match) return match;
+    }
+
+    return fallback || null;
+  }
+
   static getTimeZoneOffsetMinutes(ts, timeZone = TimeHelper.getAppTimeZone()) {
     const d = new Date(ts * 1000);
+    const normalizedTimeZone = TimeHelper.normalizeTimeZone(timeZone, null) || TimeHelper.getAppTimeZone();
     try {
       const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone,
+        timeZone: normalizedTimeZone,
         timeZoneName: 'shortOffset',
         year: 'numeric',
         month: '2-digit',
@@ -38,10 +68,11 @@ class TimeHelper {
   static getDatePartsInTimeZone(ts, timeZone = TimeHelper.getAppTimeZone()) {
     if (!ts && ts !== 0) return null;
     const d = new Date(ts * 1000);
+    const normalizedTimeZone = TimeHelper.normalizeTimeZone(timeZone, null) || TimeHelper.getAppTimeZone();
 
     try {
       const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone,
+        timeZone: normalizedTimeZone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
@@ -64,10 +95,11 @@ class TimeHelper {
   static getTimeStringInTimeZone(ts, timeZone = TimeHelper.getAppTimeZone()) {
     if (!ts && ts !== 0) return '00:00';
     const d = new Date(ts * 1000);
+    const normalizedTimeZone = TimeHelper.normalizeTimeZone(timeZone, null) || TimeHelper.getAppTimeZone();
 
     try {
       const formatter = new Intl.DateTimeFormat('en-GB', {
-        timeZone,
+        timeZone: normalizedTimeZone,
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
@@ -86,9 +118,20 @@ class TimeHelper {
   }
 
   static toTimeZoneClockTs(year, month, day, hour = 0, minute = 0, second = 0, timeZone = TimeHelper.getAppTimeZone()) {
+    const normalizedTimeZone = TimeHelper.normalizeTimeZone(timeZone, null) || TimeHelper.getAppTimeZone();
     const utcGuess = Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000);
-    const offsetMinutes = TimeHelper.getTimeZoneOffsetMinutes(utcGuess, timeZone);
-    return utcGuess - offsetMinutes * 60;
+    let resolvedTs = utcGuess;
+
+    for (let i = 0; i < 4; i++) {
+      const offsetMinutes = TimeHelper.getTimeZoneOffsetMinutes(resolvedTs, normalizedTimeZone);
+      const nextTs = utcGuess - offsetMinutes * 60;
+      if (nextTs === resolvedTs) {
+        return nextTs;
+      }
+      resolvedTs = nextTs;
+    }
+
+    return resolvedTs;
   }
 
   static getUtcDateParts(ts) {
@@ -101,13 +144,52 @@ class TimeHelper {
     };
   }
 
+  static parseAllDayBoundaryTs(value) {
+    if (typeof value === 'string') {
+      const raw = value.trim();
+
+      let match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (match) {
+        return TimeHelper.toUtcMidnightTs(
+          Number(match[1]),
+          Number(match[2]),
+          Number(match[3])
+        );
+      }
+
+      match = raw.match(/^(\d{4})(\d{2})(\d{2})$/);
+      if (match) {
+        return TimeHelper.toUtcMidnightTs(
+          Number(match[1]),
+          Number(match[2]),
+          Number(match[3])
+        );
+      }
+
+      const hasExplicitTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+      match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (match && !hasExplicitTimeZone) {
+        return Math.floor(Date.UTC(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+          Number(match[4]),
+          Number(match[5]),
+          Number(match[6] || 0)
+        ) / 1000);
+      }
+    }
+
+    return TimeHelper.parseToTs(value);
+  }
+
   static normalizeAllDayRange(startTs, endTs, timeZone = TimeHelper.getAppTimeZone()) {
     if (startTs === undefined || startTs === null || startTs === '') {
       return { startTime: null, endTime: null };
     }
 
-    const normalizedStartTs = TimeHelper.parseToTs(startTs);
-    const normalizedEndTs = TimeHelper.parseToTs(endTs);
+    const normalizedStartTs = TimeHelper.parseAllDayBoundaryTs(startTs);
+    const normalizedEndTs = TimeHelper.parseAllDayBoundaryTs(endTs);
 
     if (!normalizedStartTs) {
       return { startTime: null, endTime: null };
@@ -165,23 +247,10 @@ class TimeHelper {
     if (!ts) return '';
     const d = new Date(ts * 1000);
 
-    try {
-      const formatter = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Shanghai',
-        year: 'numeric', month: '2-digit', day: '2-digit'
-      });
-      const parts = formatter.formatToParts(d);
-      const y = parts.find(p => p.type === 'year').value;
-      const m = parts.find(p => p.type === 'month').value;
-      const day = parts.find(p => p.type === 'day').value;
-      return `${y}${m}${day}`;
-    } catch (e) {
-      // 降级使用本地方法
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}${m}${day}`;
-    }
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}${m}${day}`;
   }
   /**
    * 前端专用：将时间戳转为 datetime-local 所需的字符串

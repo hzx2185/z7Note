@@ -108,11 +108,13 @@
       try {
         let result;
         if (type === 'event') {
+          const timezone = utils.getLocalTimeZone();
           const eventsData = items.map(item => ({
             title: item.title,
             startTime: `${item.date}T00:00`,
             endTime: `${item.date}T23:59`,
             allDay: true,
+            timezone,
             description: '批量导入'
           }));
 

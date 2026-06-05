@@ -9,6 +9,62 @@ const { requirePlanCapability } = require('../middleware/memberAccess');
 const { listPlanConfigs } = require('../services/memberService');
 
 const router = express.Router();
+const TOOLBAR_LAYOUT_SETTING_KEY = 'toolbarLayout';
+const TOOLBAR_LAYOUT_MAX_BYTES = 16000;
+const TOOLBAR_LAYOUT_GROUP = 'common';
+const TOOLBAR_GROUPS = new Set(['common', 'line', 'format', 'insert', 'view', 'tools']);
+const TOOLBAR_ITEMS = new Set([
+  'undo', 'redo', 'copy', 'paste', 'search',
+  'selectLine', 'duplicateLine', 'deleteLine', 'moveLineUp', 'moveLineDown', 'indent', 'outdent',
+  'heading', 'bold', 'italic', 'inlineCode', 'quote', 'list', 'todo',
+  'codeBlock', 'link', 'image', 'table', 'attachments', 'markerStart', 'markerEnd',
+  'split', 'preview', 'lineNumbers', 'wrap', 'top', 'bottom',
+  'cursorLeft', 'cursorUp', 'cursorDown', 'cursorRight',
+  'exportTxt', 'cleanFormat', 'toolbarSettings'
+]);
+
+function normalizeToolbarLayout(layout) {
+  if (!Array.isArray(layout)) {
+    const error = new Error('工具栏配置格式无效');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const seenItems = new Set();
+  const seenGroups = new Set();
+  const items = [];
+
+  for (const section of layout.slice(0, TOOLBAR_GROUPS.size)) {
+    const group = typeof section?.group === 'string' ? section.group : '';
+    if (!TOOLBAR_GROUPS.has(group) || seenGroups.has(group)) continue;
+
+    seenGroups.add(group);
+    const rawItems = Array.isArray(section.items) ? section.items : [];
+
+    for (const rawItem of rawItems) {
+      const id = typeof rawItem === 'string'
+        ? rawItem
+        : (typeof rawItem?.id === 'string' ? rawItem.id : '');
+      if (!TOOLBAR_ITEMS.has(id) || seenItems.has(id)) continue;
+      seenItems.add(id);
+      items.push({
+        id,
+        visible: id === 'toolbarSettings' || !(typeof rawItem === 'object' && rawItem?.visible === false)
+      });
+    }
+  }
+
+  return [{ group: TOOLBAR_LAYOUT_GROUP, items }];
+}
+
+function parseToolbarLayout(value) {
+  if (!value) return null;
+  try {
+    return normalizeToolbarLayout(JSON.parse(value));
+  } catch (error) {
+    return null;
+  }
+}
 
 router.get('/api/public/member-plans', async (req, res) => {
   try {
@@ -123,6 +179,60 @@ router.post('/api/user/editor-type', async (req, res) => {
   } catch (e) {
     log('ERROR', '更新编辑器类型失败', { username: req.user, error: e.message, stack: e.stack });
     res.status(500).json({ error: "更新失败" });
+  }
+});
+
+router.get('/api/user/toolbar-layout', async (req, res) => {
+  try {
+    const row = await db.queryOne(
+      'SELECT value, updatedAt FROM user_preferences WHERE username = ? AND settingKey = ?',
+      [req.user, TOOLBAR_LAYOUT_SETTING_KEY]
+    );
+    res.json({
+      layout: parseToolbarLayout(row?.value),
+      updatedAt: row?.updatedAt || 0
+    });
+  } catch (e) {
+    log('ERROR', '获取工具栏配置失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: '获取失败' });
+  }
+});
+
+router.put('/api/user/toolbar-layout', async (req, res) => {
+  try {
+    const layout = normalizeToolbarLayout(req.body?.layout);
+    const value = JSON.stringify(layout);
+    if (Buffer.byteLength(value, 'utf8') > TOOLBAR_LAYOUT_MAX_BYTES) {
+      return res.status(400).json({ error: '工具栏配置过大' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    await db.execute(
+      `INSERT INTO user_preferences (username, settingKey, value, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(username, settingKey) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt`,
+      [req.user, TOOLBAR_LAYOUT_SETTING_KEY, value, now, now]
+    );
+    res.json({ status: 'ok', layout, updatedAt: now });
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message });
+    }
+    log('ERROR', '保存工具栏配置失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: '保存失败' });
+  }
+});
+
+router.delete('/api/user/toolbar-layout', async (req, res) => {
+  try {
+    await db.execute(
+      'DELETE FROM user_preferences WHERE username = ? AND settingKey = ?',
+      [req.user, TOOLBAR_LAYOUT_SETTING_KEY]
+    );
+    res.json({ status: 'ok' });
+  } catch (e) {
+    log('ERROR', '恢复默认工具栏配置失败', { username: req.user, error: e.message, stack: e.stack });
+    res.status(500).json({ error: '恢复失败' });
   }
 });
 

@@ -13,18 +13,50 @@
     border-bottom: 1px solid var(--control-border);
     flex: 0 0 auto;
     background: color-mix(in srgb, var(--surface-toolbar) 88%, transparent);
+    position: relative;
 }
 
 .calendar-page .sidebar-search input {
     width: 100%;
     height: 26px;
-    padding: 0 8px;
+    padding: 0 24px 0 8px;
     border: 1px solid var(--control-border);
     border-radius: 4px;
     background: var(--surface-input-bg);
     color: var(--text);
     font-size: 12px;
     outline: none;
+}
+
+.calendar-page .search-clear-btn {
+    position: absolute;
+    right: 18px; /* For containers with 12px right padding */
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted, #888);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    z-index: 2;
+}
+
+.calendar-page .sidebar-search-bar .sidebar-search .search-clear-btn {
+    right: 8px; /* For containers with no padding */
+}
+
+.calendar-page .search-clear-btn:hover {
+    color: var(--text);
+    background: var(--surface-hover, rgba(0, 0, 0, 0.05));
 }
 
 .calendar-page .sidebar-tabs {
@@ -388,9 +420,30 @@
     background: var(--accent);
     color: var(--text-on-accent);
 }
-
 .calendar-page .subscription-btn.delete-sub-btn {
     border-color: transparent;
     background: var(--danger-soft);
     color: var(--red);
+}
+
+.calendar-page .recurrence-badge {
+    display: inline-block;
+    padding: 1px 4px;
+    font-size: 10px;
+    background-color: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-soft-strong);
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+    font-weight: 500;
+}
+
+.calendar-page .event-recurrence-info {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }

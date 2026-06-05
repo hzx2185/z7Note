@@ -14,6 +14,19 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
 
       // 绑定搜索事件
       if (elements.sidebarSearch) {
+        const toggleClearBtn = () => {
+          if (elements.sidebarSearchClear) {
+            if (elements.sidebarSearch.value) {
+              elements.sidebarSearchClear.style.display = 'flex';
+            } else {
+              elements.sidebarSearchClear.style.display = 'none';
+            }
+          }
+        };
+
+        // 立即切换清除按钮的可见性
+        elements.sidebarSearch.addEventListener('input', toggleClearBtn);
+
         elements.sidebarSearch.addEventListener('input', utils.debounce(async (e) => {
           const query = e.target.value.trim().toLowerCase();
           state.sidebar.searchQuery = query;
@@ -37,6 +50,16 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
 
           this.render();
         }, 300));
+
+        if (elements.sidebarSearchClear) {
+          elements.sidebarSearchClear.addEventListener('click', async () => {
+            elements.sidebarSearch.value = '';
+            toggleClearBtn();
+            state.sidebar.searchQuery = '';
+            state.sidebar.dataByDate.delete('__search__');
+            this.render();
+          });
+        }
       }
 
       if (elements.sidebarRecurringOnly) {
@@ -120,15 +143,15 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
             // 渲染搜索结果
             let hasResults = false;
             if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'event') && filteredSearchData.events && filteredSearchData.events.length > 0) {
-              filteredSearchData.events.forEach(event => searchGroup.appendChild(this.renderEventItem(event)));
+              filteredSearchData.events.forEach(event => searchGroup.appendChild(this.renderEventItem(event, true)));
               hasResults = true;
             }
             if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'todo') && filteredSearchData.todos && filteredSearchData.todos.length > 0) {
-              filteredSearchData.todos.forEach(todo => searchGroup.appendChild(this.renderTodoItem(todo)));
+              filteredSearchData.todos.forEach(todo => searchGroup.appendChild(this.renderTodoItem(todo, true)));
               hasResults = true;
             }
             if ((state.sidebar.currentTab === 'all' || state.sidebar.currentTab === 'note') && filteredSearchData.notes && filteredSearchData.notes.length > 0) {
-              filteredSearchData.notes.forEach(note => searchGroup.appendChild(this.renderNoteItem(note)));
+              filteredSearchData.notes.forEach(note => searchGroup.appendChild(this.renderNoteItem(note, true)));
               hasResults = true;
             }
 
@@ -550,15 +573,18 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
         );
       };
 
+      const filteredEvents = filterItems(dayData.events, { onlyRecurring });
+      filteredEvents.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+
       return {
         todos: filterItems(dayData.todos),
-        events: filterItems(dayData.events, { onlyRecurring }),
+        events: filteredEvents,
         notes: filterItems(dayData.notes)
       };
     },
 
     // 渲染待办项
-    renderTodoItem(todo) {
+    renderTodoItem(todo, isSearchResult = false) {
       const item = document.createElement('div');
       item.className = 'todo-item';
 
@@ -571,7 +597,8 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
       let timeHtml = '';
       if (todo.allDay) {
         if (todo.dueDate) {
-          const dateStr = utils.formatDate(new Date(todo.dueDate * 1000));
+          const d = new Date(todo.dueDate * 1000);
+          const dateStr = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
           timeHtml = `<span class="todo-time">截止: ${dateStr}</span>`;
         }
       } else {
@@ -579,11 +606,15 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
           const d = new Date(ts * 1000);
           return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
         };
+        const formatDateWithYear = (ts) => {
+          const d = new Date(ts * 1000);
+          return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+        };
 
         if (todo.startTime && todo.dueDate) {
-          timeHtml = `<span class="todo-time">${formatTime(todo.startTime)} - ${formatTime(todo.dueDate)}</span>`;
+          timeHtml = `<span class="todo-time">${formatDateWithYear(todo.startTime)} ${formatTime(todo.startTime)} - ${formatDateWithYear(todo.dueDate)} ${formatTime(todo.dueDate)}</span>`;
         } else if (todo.dueDate) {
-          timeHtml = `<span class="todo-time">截止: ${formatTime(todo.dueDate)}</span>`;
+          timeHtml = `<span class="todo-time">截止: ${formatDateWithYear(todo.dueDate)} ${formatTime(todo.dueDate)}</span>`;
         }
       }
 
@@ -643,26 +674,82 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
     },
 
     // 渲染事件项
-    renderEventItem(event) {
+    renderEventItem(event, isSearchResult = false) {
       const item = document.createElement('div');
       item.className = 'event-item';
       item.style.borderLeftColor = event.color || '#2563eb';
 
       let timeHtml = '';
       if (event.allDay) {
-        const startInfo = utils.getAllDayDisplayDate(event.startTime, false);
-        const endInfo = utils.getAllDayDisplayDate(event.endTime, true);
-
-        if (startInfo && endInfo && startInfo.str !== endInfo.str) {
-          timeHtml = `<span class="event-all-day">${startInfo.shortStr} - ${endInfo.shortStr} 全天</span>`;
+        const getFullAllDayDateStr = (ts, isEnd = false) => {
+          const info = utils.getAllDayDisplayDate(ts, isEnd);
+          if (!info) return '';
+          const [y, m, d] = info.str.split('-');
+          return `${y}/${parseInt(m)}/${parseInt(d)}`;
+        };
+        const startFullStr = getFullAllDayDateStr(event.startTime, false);
+        const endFullStr = event.endTime ? getFullAllDayDateStr(event.endTime, true) : '';
+        if (endFullStr && startFullStr !== endFullStr) {
+          timeHtml = `<span class="event-all-day">${startFullStr} - ${endFullStr} 全天</span>`;
         } else {
-          timeHtml = `<span class="event-all-day">${startInfo ? startInfo.shortStr : ''} 全天</span>`;
+          timeHtml = `<span class="event-all-day">${startFullStr} 全天</span>`;
         }
       } else {
-        timeHtml = utils.formatTime(event.startTime * 1000);
+        const startD = new Date(event.startTime * 1000);
+        const startYear = startD.getFullYear();
+        const startMonth = startD.getMonth() + 1;
+        const startDay = startD.getDate();
+        const startTimeStr = utils.formatTime(event.startTime * 1000);
+        let timeStr = `${startYear}/${startMonth}/${startDay} ${startTimeStr}`;
         if (event.endTime) {
-          timeHtml += ` - ${utils.formatTime(event.endTime * 1000)}`;
+          const endD = new Date(event.endTime * 1000);
+          const endYear = endD.getFullYear();
+          const endMonth = endD.getMonth() + 1;
+          const endDay = endD.getDate();
+          const endTimeStr = utils.formatTime(event.endTime * 1000);
+          if (startYear === endYear && startMonth === endMonth && startDay === endDay) {
+            timeStr += ` - ${endTimeStr}`;
+          } else {
+            timeStr += ` - ${endYear}/${endMonth}/${endDay} ${endTimeStr}`;
+          }
         }
+        timeHtml = timeStr;
+      }
+
+      let recurrence = null;
+      if (event.recurrence) {
+        if (typeof event.recurrence === 'string') {
+          try {
+            recurrence = JSON.parse(event.recurrence);
+          } catch (e) {
+            recurrence = { type: event.recurrence };
+          }
+        } else {
+          recurrence = event.recurrence;
+        }
+      }
+
+      let recurrenceHtml = '';
+      if (recurrence) {
+        const recurrenceLabelMap = {
+          daily: '按天',
+          weekly: '按周',
+          monthly: '按月',
+          yearly: '按年',
+          lunar_daily: '农历按天',
+          lunar_weekly: '农历按周',
+          lunar_monthly: '农历按月',
+          lunar_yearly: '农历按年'
+        };
+        const recurrenceTypeLabel = recurrenceLabelMap[recurrence.type] || '重复';
+
+        let recurrenceEndLabel = '持续重复';
+        if (event.recurrenceEnd) {
+          const endD = new Date(event.recurrenceEnd * 1000);
+          recurrenceEndLabel = `至: ${endD.getFullYear()}/${endD.getMonth() + 1}/${endD.getDate()}`;
+        }
+
+        recurrenceHtml = ` · 🔄 ${recurrenceTypeLabel} · ${recurrenceEndLabel}`;
       }
 
       let checkboxHtml = '';
@@ -676,15 +763,14 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
       item.innerHTML = `
         ${checkboxHtml}
         <div class="event-content" data-id="${event.isRecurringInstance ? event._originalId : event.id}">
-          <div class="event-title">${utils.escapeHtml(event.title)}${event.isRecurringInstance ? ' <span class="recurrence-badge">重复</span>' : ''}</div>
-          <div class="event-time">${timeHtml}</div>
+          <div class="event-title">${utils.escapeHtml(event.title)}${(event.isRecurringInstance || recurrence) ? ' <span class="recurrence-badge">重复</span>' : ''}</div>
+          <div class="event-time">${timeHtml}${recurrenceHtml}</div>
         </div>
         <div class="event-actions">
           <button class="edit-btn" data-id="${event.isRecurringInstance ? event._originalId : event.id}" title="编辑">✎</button>
           <button class="delete-btn" data-id="${event.id}" title="删除">×</button>
         </div>
       `;
-
       const eventContent = item.querySelector('.event-content');
       eventContent.addEventListener('click', () => getHandlers().editEvent(event));
 
@@ -702,9 +788,8 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
 
       return item;
     },
-
     // 渲染笔记项
-    renderNoteItem(note) {
+    renderNoteItem(note, isSearchResult = false) {
       const item = document.createElement('div');
       item.className = 'note-item';
       item.title = note.title;
@@ -716,9 +801,23 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
         checkboxHtml = `<input type="checkbox" class="batch-checkbox" data-id="${note.id}" data-type="note" ${isChecked ? 'checked' : ''}>`;
       }
 
+      let metaHtml = '';
+      if (note.updatedAt) {
+        const d = new Date(note.updatedAt * 1000);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hour = String(d.getHours()).padStart(2, '0');
+        const minute = String(d.getMinutes()).padStart(2, '0');
+        metaHtml = `<div class="note-time" style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">修改于: ${year}-${month}-${day} ${hour}:${minute}</div>`;
+      }
+
       item.innerHTML = `
         ${checkboxHtml}
-        <div class="note-title">${utils.escapeHtml(note.title)}</div>
+        <div class="note-content" style="flex: 1; min-width: 0;">
+          <div class="note-title" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${utils.escapeHtml(note.title)}</div>
+          ${metaHtml}
+        </div>
       `;
 
       item.addEventListener('click', () => {
@@ -727,7 +826,6 @@ window.createCalendarSidebarRenderer = function createCalendarSidebarRenderer(de
 
       return item;
     },
-
     // 刷新数据
     async refresh() {
       const dateStr = utils.formatDate(state.selectedDate);

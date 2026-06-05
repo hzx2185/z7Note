@@ -4,7 +4,8 @@
 
 const log = require('./logger');
 const ICalGenerator = require('./icalGenerator');
-const { inferReminderPreset, getTimezoneOffset } = require('./icalShared');
+const TimeHelper = require('./timeHelper');
+const { inferReminderPreset } = require('./icalShared');
 
 class ICalParser {
   static inferReminderPreset(item, alarms) {
@@ -43,7 +44,8 @@ class ICalParser {
         const colonIndex = line.indexOf(':');
         if (colonIndex === -1) continue;
 
-        const keyPart = line.substring(0, colonIndex).toUpperCase();
+        const rawKeyPart = line.substring(0, colonIndex);
+        const keyPart = rawKeyPart.toUpperCase();
         const value = line.substring(colonIndex + 1);
 
         // 分离属性名和参数
@@ -52,7 +54,7 @@ class ICalParser {
         const params = {};
 
         if (semicolonIndex > 0) {
-          const paramString = keyPart.substring(semicolonIndex + 1);
+          const paramString = rawKeyPart.substring(semicolonIndex + 1);
           // 改进参数解析，处理带引号的情况
           const paramRegex = /([^=;]+)=([^;"]+|"[^"]*")/g;
           let match;
@@ -210,9 +212,7 @@ class ICalParser {
 
     // 解析时区ID (TZID)
     if (startTime && typeof startTime === 'object' && startTime.params && startTime.params.TZID) {
-        // 将时区转换为标准格式（首字母大写，其余小写）
-        const tzid = startTime.params.TZID;
-        event.timezone = tzid.split('/').map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()).join('/');
+        event.timezone = TimeHelper.normalizeTimeZone(startTime.params.TZID, null) || startTime.params.TZID;
     }
 
     // 解析重复规则 (RRULE)
@@ -270,7 +270,7 @@ class ICalParser {
             break;
           case 'UNTIL':
             // UNTIL格式: 20260213T000000Z
-            result.recurrenceEnd = this.parseDateTime(value.replace(/Z$/, ''));
+            result.recurrenceEnd = this.parseDateTime(value);
             break;
           case 'COUNT':
             result.count = parseInt(value);
@@ -444,22 +444,17 @@ class ICalParser {
       // 浮动时间 (没有 'Z')
       // 如果有TZID参数，需要根据时区转换为UTC时间
       if (params && params.TZID) {
-        const timezone = params.TZID;
-        // 处理常见时区
-        const offset = getTimezoneOffset(timezone);
-        if (offset !== null) {
-          // 先构造本地时间的时间戳（当作UTC处理）
-          const localTimestamp = Date.UTC(
+        const timezone = TimeHelper.normalizeTimeZone(params.TZID, null);
+        if (timezone) {
+          return TimeHelper.toTimeZoneClockTs(
             parseInt(year),
-            parseInt(month) - 1,
+            parseInt(month),
             parseInt(day),
             parseInt(hours),
             parseInt(minutes),
-            parseInt(seconds)
+            parseInt(seconds),
+            timezone
           );
-          // 减去时区偏移得到UTC时间
-          const utcTimestamp = localTimestamp - (offset * 60 * 60 * 1000);
-          return Math.floor(utcTimestamp / 1000);
         }
       }
       

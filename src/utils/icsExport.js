@@ -149,6 +149,14 @@ function exportToICS(events, options = {}) {
   return lines.join('\r\n');
 }
 
+function parseParamValue(key, paramName) {
+  const pattern = new RegExp(`${paramName}=([^;:]+|"[^"]*")`, 'i');
+  const match = String(key || '').match(pattern);
+  if (!match) return null;
+  const value = match[1];
+  return value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+}
+
 /**
  * 从ICS格式导入事件（增强版）
  * @param {string} icsContent - ICS格式字符串
@@ -265,14 +273,11 @@ function importFromICS(icsContent, options = {}) {
         // 传递完整的key（包含参数）和value给parseICSDate
         currentEvent.startTime = parseICSDate(key + ':' + value);
         // 提取时区信息
-        if (key.includes('TZID=')) {
-          const tzidMatch = key.match(/TZID=([^;:]+)/);
-          if (tzidMatch) {
-            currentEvent.timezone = tzidMatch[1];
-          }
+        if (/TZID=/i.test(key)) {
+          currentEvent.timezone = parseParamValue(key, 'TZID');
         }
         // 检查是否是全天事件
-        if (key.includes('VALUE=DATE')) {
+        if (/VALUE=DATE/i.test(key)) {
           currentEvent.allDay = true;
         }
         break;

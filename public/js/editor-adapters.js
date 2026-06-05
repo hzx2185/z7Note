@@ -75,9 +75,19 @@ const CodeMirrorAdapter = {
 
     async create(container, content, options) {
         const ui = window.ui;
+        const isIOS = /iP(hone|od|ad)/.test(navigator.platform)
+            || (navigator.userAgent.includes('Mac') && navigator.maxTouchPoints > 1);
+        const isTouchPhone = isIOS
+            || (window.matchMedia
+                ? window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches
+                : window.innerWidth <= 768);
+        const cleanupFns = [];
 
         // 检查是否显示行号 - 默认显示
-        const showLineNumbers = localStorage.getItem('show-line-numbers') !== 'false';
+        const storedLineNumbers = localStorage.getItem('show-line-numbers');
+        const showLineNumbers = storedLineNumbers === null
+            ? true
+            : storedLineNumbers !== 'false';
 
         // 同步设置容器类名
         if (showLineNumbers) {
@@ -97,8 +107,8 @@ const CodeMirrorAdapter = {
             lineWrapping: lineWrapping,
             matchBrackets: true,
             autoCloseBrackets: true,
-            autofocus: true,
-            viewportMargin: 20,
+            autofocus: !isTouchPhone,
+            viewportMargin: isTouchPhone ? 10 : 20,
             undoDepth: 200,
             gutters: showLineNumbers ? ['CodeMirror-linenumbers', 'CodeMirror-activeline-gutter'] : ['CodeMirror-activeline-gutter'],
             styleActiveLine: true,
@@ -113,6 +123,144 @@ const CodeMirrorAdapter = {
             return function(...args) {
                 clearTimeout(timeout);
                 timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        };
+
+        const keepMobileKeyboardClosedOnInit = () => {
+            if (!isTouchPhone) return;
+
+            const blurEditorInput = () => {
+                try {
+                    const inputEl = editor.getInputField && editor.getInputField();
+                    if (inputEl && document.activeElement === inputEl) {
+                        inputEl.blur();
+                    }
+                    if (editor.hasFocus && editor.hasFocus()) {
+                        editor.getInputField()?.blur();
+                    }
+                    if (
+                        document.activeElement &&
+                        editor.getWrapperElement().contains(document.activeElement) &&
+                        typeof document.activeElement.blur === 'function'
+                    ) {
+                        document.activeElement.blur();
+                    }
+                } catch (e) {}
+            };
+
+            requestAnimationFrame(blurEditorInput);
+            setTimeout(blurEditorInput, 80);
+            setTimeout(blurEditorInput, 260);
+        };
+
+        const setupMobileViewport = () => {
+            if (!isTouchPhone) return null;
+
+            const root = document.documentElement;
+            const body = document.body;
+            const vv = window.visualViewport;
+            let editorFocused = false;
+            let keyboardPrimed = false;
+            let viewportTimer = null;
+
+            root.classList.toggle('ios-visual-viewport', Boolean(isIOS && vv));
+
+            const setViewportVars = () => {
+                const visualHeight = vv ? vv.height : window.innerHeight;
+                const visualOffsetTop = vv ? vv.offsetTop : 0;
+                const layoutHeight = Math.max(
+                    window.innerHeight || 0,
+                    document.documentElement.clientHeight || 0,
+                    window.screen?.height || 0
+                );
+                const keyboardOverlap = vv
+                    ? Math.max(0, layoutHeight - visualHeight - visualOffsetTop)
+                    : 0;
+                const keyboardLikelyOpen = editorFocused
+                    && (keyboardPrimed || keyboardOverlap > 80 || layoutHeight - visualHeight > 120);
+
+                root.style.setProperty('--app-visual-height', `${Math.round(visualHeight)}px`);
+                root.style.setProperty('--app-visual-offset-top', `${Math.round(visualOffsetTop)}px`);
+                root.style.setProperty('--app-keyboard-overlap', `${Math.round(keyboardOverlap)}px`);
+                root.style.setProperty('--app-editor-bottom-safe', keyboardLikelyOpen ? '88px' : '44px');
+                body.classList.toggle('mobile-editor-focused', editorFocused);
+                body.classList.toggle('mobile-editor-keyboard', keyboardLikelyOpen);
+            };
+
+            const refreshAroundCursor = () => {
+                clearTimeout(viewportTimer);
+                viewportTimer = setTimeout(() => {
+                    if (!editor) return;
+                    editor.refresh();
+                    if (editorFocused) {
+                        const cursor = editor.getCursor();
+                        editor.scrollIntoView(cursor, keyboardPrimed ? 140 : 96);
+                        if (keyboardPrimed) {
+                            const cursorCoords = editor.cursorCoords(cursor, 'local');
+                            const scrollInfo = editor.getScrollInfo();
+                            const targetTop = Math.max(0, cursorCoords.top - scrollInfo.clientHeight * 0.32);
+                            if (cursorCoords.bottom > scrollInfo.top + scrollInfo.clientHeight * 0.62) {
+                                editor.scrollTo(null, targetTop);
+                            }
+                        }
+                    }
+                }, 80);
+            };
+
+            const syncViewport = () => {
+                setViewportVars();
+                refreshAroundCursor();
+            };
+
+            const onFocus = () => {
+                editorFocused = true;
+                keyboardPrimed = true;
+                body.classList.add('mobile-editor-focused', 'mobile-editor-keyboard');
+                syncViewport();
+                setTimeout(syncViewport, 180);
+                setTimeout(syncViewport, 420);
+            };
+
+            const onBlur = () => {
+                editorFocused = false;
+                keyboardPrimed = false;
+                setTimeout(syncViewport, 80);
+            };
+
+            editor.on('focus', onFocus);
+            editor.on('blur', onBlur);
+            setViewportVars();
+
+            if (vv) {
+                vv.addEventListener('resize', syncViewport, { passive: true });
+                vv.addEventListener('scroll', syncViewport, { passive: true });
+            }
+            window.addEventListener('orientationchange', syncViewport, { passive: true });
+            window.addEventListener('resize', syncViewport, { passive: true });
+
+            const inputEl = editor.getInputField && editor.getInputField();
+            if (inputEl) {
+                inputEl.setAttribute('autocapitalize', 'off');
+                inputEl.setAttribute('autocomplete', 'off');
+                inputEl.setAttribute('autocorrect', 'off');
+                inputEl.setAttribute('enterkeyhint', 'enter');
+                inputEl.setAttribute('inputmode', 'text');
+                inputEl.setAttribute('spellcheck', 'false');
+            }
+
+            return () => {
+                clearTimeout(viewportTimer);
+                editor.off('focus', onFocus);
+                editor.off('blur', onBlur);
+                if (vv) {
+                    vv.removeEventListener('resize', syncViewport);
+                    vv.removeEventListener('scroll', syncViewport);
+                }
+                window.removeEventListener('orientationchange', syncViewport);
+                window.removeEventListener('resize', syncViewport);
+                root.classList.remove('ios-visual-viewport');
+                root.style.removeProperty('--app-editor-bottom-safe');
+                body.classList.remove('mobile-editor-focused', 'mobile-editor-keyboard');
             };
         };
         
@@ -174,10 +322,22 @@ const CodeMirrorAdapter = {
         setTimeout(highlightNumbers, 300);
         
         // 监听事件
-        editor.on('viewportChange', debounce(highlightNumbers, 100));
-        editor.on('change', debounce(highlightNumbers, 300));
-        editor.on('refresh', debounce(highlightNumbers, 100));
-        window.addEventListener('resize', debounce(highlightNumbers, 200));
+        const debouncedViewportHighlight = debounce(highlightNumbers, 100);
+        const debouncedChangeHighlight = debounce(highlightNumbers, 300);
+        const debouncedRefreshHighlight = debounce(highlightNumbers, 100);
+        const debouncedResizeHighlight = debounce(highlightNumbers, 200);
+        editor.on('viewportChange', debouncedViewportHighlight);
+        editor.on('change', debouncedChangeHighlight);
+        editor.on('refresh', debouncedRefreshHighlight);
+        window.addEventListener('resize', debouncedResizeHighlight);
+        cleanupFns.push(() => {
+            editor.off('viewportChange', debouncedViewportHighlight);
+            editor.off('change', debouncedChangeHighlight);
+            editor.off('refresh', debouncedRefreshHighlight);
+            window.removeEventListener('resize', debouncedResizeHighlight);
+        });
+        const mobileViewportCleanup = setupMobileViewport();
+        if (mobileViewportCleanup) cleanupFns.push(mobileViewportCleanup);
         
         editor.hasNumberHighlight = true;
 
@@ -289,70 +449,267 @@ const CodeMirrorAdapter = {
             }
         });
 
-        // 存储上次点击行号及时间，用于5秒内连选
-        let lastGutterClickLine = null;
-        let lastGutterClickTime = 0;
+        let lastSelectedLine = null;
         let lastTouchSelectionTime = 0; // 防止触摸和点击双重触发
-        const RANGE_CLICK_INTERVAL = 5000;
+        let mobileSelectedLineHandle = null;
+
+        const clearMobileSelectedLine = () => {
+            if (!mobileSelectedLineHandle) return;
+            try {
+                editor.removeLineClass(mobileSelectedLineHandle, 'wrap', 'mobile-gutter-selected-line');
+                editor.removeLineClass(mobileSelectedLineHandle, 'background', 'mobile-gutter-selected-line-bg');
+            } catch (e) {}
+            mobileSelectedLineHandle = null;
+        };
+
+        const markMobileSelectedLine = (line) => {
+            if (!isTouchPhone) return;
+            clearMobileSelectedLine();
+            try {
+                mobileSelectedLineHandle = editor.addLineClass(line, 'wrap', 'mobile-gutter-selected-line');
+                editor.addLineClass(line, 'background', 'mobile-gutter-selected-line-bg');
+            } catch (e) {}
+        };
 
         const selectLineRange = (startLine, endLine) => {
             const rangeStartLine = Math.min(startLine, endLine);
             const rangeEndLine = Math.max(startLine, endLine);
-            const lastLineText = editor.getLine(rangeEndLine) || '';
+            const lineCount = editor.lineCount();
+            const to = rangeEndLine + 1 < lineCount
+                ? { line: rangeEndLine + 1, ch: 0 }
+                : { line: rangeEndLine, ch: (editor.getLine(rangeEndLine) || '').length };
             
             editor.setSelection(
                 { line: rangeStartLine, ch: 0 },
-                { line: rangeEndLine, ch: lastLineText.length }
+                to
             );
+            editor.scrollIntoView({ line: rangeStartLine, ch: 0 }, 64);
         };
 
         const selectSingleLine = (line) => {
             const lineText = editor.getLine(line);
             if (lineText === undefined) return false;
+            const lineCount = editor.lineCount();
+            const to = line + 1 < lineCount
+                ? { line: line + 1, ch: 0 }
+                : { line: line, ch: lineText.length };
             
             editor.setSelection(
                 { line: line, ch: 0 },
-                { line: line, ch: lineText.length }
+                to
             );
+            editor.scrollIntoView({ line, ch: 0 }, 64);
+            markMobileSelectedLine(line);
             return true;
         };
 
-        // 处理行号点击的主逻辑 (不抑制键盘，确保选中 100% 成功)
-        const handleLineNumberClick = (line) => {
-            const now = Date.now();
-            
-            const isRangeSelect = 
-                lastGutterClickLine !== null && 
-                now - lastGutterClickTime <= RANGE_CLICK_INTERVAL && 
-                lastGutterClickLine !== line;
+        // 处理行号点击：手机端单点始终只选当前行，桌面端 Shift+点击选范围。
+        const handleLineNumberClick = (line, event = null) => {
+            const isRangeSelect = event?.shiftKey && lastSelectedLine !== null && lastSelectedLine !== line;
 
             if (isRangeSelect) {
-                selectLineRange(lastGutterClickLine, line);
-                lastGutterClickLine = null;
-                lastGutterClickTime = 0;
+                selectLineRange(lastSelectedLine, line);
             } else {
-                if (selectSingleLine(line)) {
-                    lastGutterClickLine = line;
-                    lastGutterClickTime = now;
-                }
+                selectSingleLine(line);
+            }
+
+            lastSelectedLine = line;
+        };
+
+        const isEditorFocused = () => {
+            try {
+                return Boolean(editor.hasFocus?.() || editor.getWrapperElement().contains(document.activeElement));
+            } catch (e) {
+                return false;
             }
         };
 
-        // 针对触摸屏的优化：在 touchstart 阶段立即选中，确保点击一次就生效
-        const gutterElement = editor.getWrapperElement().querySelector('.CodeMirror-gutters');
-        if (gutterElement) {
-            gutterElement.addEventListener('touchstart', (e) => {
-                const target = e.target;
-                if (!target.closest('.CodeMirror-linenumbers')) return;
-
-                const touch = e.changedTouches ? e.changedTouches[0] : e;
-                const line = editor.lineAtHeight(touch.clientY, 'client');
-                
-                if (line >= 0 && line < editor.lineCount()) {
-                    lastTouchSelectionTime = Date.now();
-                    handleLineNumberClick(line);
+        const blurMobileEditorInput = () => {
+            try {
+                editor.getInputField?.()?.blur?.();
+                if (editor.getWrapperElement().contains(document.activeElement)) {
+                    document.activeElement?.blur?.();
                 }
-            }, { passive: true });
+                document.body.classList.remove('mobile-editor-focused', 'mobile-editor-keyboard');
+            } catch (e) {}
+        };
+
+        const applyLineNumberSelection = (line, event = null) => {
+            const shouldKeepEditorFocus = !isTouchPhone
+                || document.body.classList.contains('mobile-editor-keyboard')
+                || isEditorFocused();
+            const keepMobileKeyboardClosed = isTouchPhone && !shouldKeepEditorFocus;
+
+            if (shouldKeepEditorFocus) {
+                try {
+                    editor.focus();
+                } catch (e) {}
+            }
+
+            handleLineNumberClick(line, event);
+            if (keepMobileKeyboardClosed) {
+                requestAnimationFrame(blurMobileEditorInput);
+            }
+
+            if (isTouchPhone) {
+                setTimeout(() => {
+                    handleLineNumberClick(line, event);
+                    if (keepMobileKeyboardClosed) {
+                        blurMobileEditorInput();
+                    }
+                }, 60);
+            }
+        };
+
+        const clampLine = (line) => {
+            if (!Number.isFinite(line)) return null;
+            return Math.max(0, Math.min(editor.lineCount() - 1, line));
+        };
+
+        const getLineNumberGutter = () => editor.getWrapperElement().querySelector('.CodeMirror-linenumbers');
+
+        const asElement = (target) => {
+            if (target instanceof Element) return target;
+            return target?.parentElement || null;
+        };
+
+        const getLineNumberElement = (target) => {
+            return asElement(target)?.closest('.CodeMirror-linenumber') || null;
+        };
+
+        const lineFromLineNumberElement = (lineNumberElement) => {
+            if (!lineNumberElement) return null;
+
+            const rawNumber = Number.parseInt((lineNumberElement.textContent || '').trim(), 10);
+            if (Number.isFinite(rawNumber)) {
+                const firstLineNumber = editor.getOption('firstLineNumber') || 1;
+                const line = clampLine(rawNumber - firstLineNumber);
+                if (line !== null) return line;
+            }
+
+            const rect = lineNumberElement.getBoundingClientRect();
+            return clampLine(editor.lineAtHeight(rect.top + rect.height / 2, 'client'));
+        };
+
+        const pointFromEvent = (event) => {
+            const source = event.changedTouches?.[0] || event.touches?.[0] || event;
+            if (!source || source.clientX === undefined || source.clientY === undefined) return null;
+            return { x: source.clientX, y: source.clientY };
+        };
+
+        const lineFromMobileGutterPoint = (point) => {
+            if (!point || !isTouchPhone) return null;
+
+            const wrapperRect = editor.getWrapperElement().getBoundingClientRect();
+            if (point.y < wrapperRect.top || point.y > wrapperRect.bottom) return null;
+
+            const gutter = getLineNumberGutter();
+            const gutterRect = gutter?.getBoundingClientRect();
+            const mobileGutterHitWidth = 36;
+            const gutterLeft = gutterRect ? gutterRect.left : wrapperRect.left;
+            const gutterRight = gutterRect
+                ? Math.max(gutterRect.right, gutterRect.left + mobileGutterHitWidth)
+                : wrapperRect.left + mobileGutterHitWidth;
+
+            if (point.x < gutterLeft || point.x > gutterRight) return null;
+            return clampLine(editor.lineAtHeight(point.y, 'client'));
+        };
+
+        const isLineNumberGutterPoint = (target, point) => {
+            if (getLineNumberElement(target)) return true;
+            if (asElement(target)?.closest('.CodeMirror-linenumbers')) return true;
+
+            const lineNumberGutter = getLineNumberGutter();
+            if (!lineNumberGutter || !point) return false;
+
+            const rect = lineNumberGutter.getBoundingClientRect();
+            return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+        };
+
+        const lineFromGutterEvent = (event) => {
+            const point = pointFromEvent(event);
+            if (!isLineNumberGutterPoint(event.target, point)) return null;
+
+            const directLine = lineFromLineNumberElement(getLineNumberElement(event.target));
+            if (directLine !== null) return directLine;
+
+            if (point && document.elementsFromPoint) {
+                const lineNumberElement = document.elementsFromPoint(point.x, point.y)
+                    .find((element) => element.classList?.contains('CodeMirror-linenumber'));
+                const pointLine = lineFromLineNumberElement(lineNumberElement);
+                if (pointLine !== null) return pointLine;
+            }
+
+            if (!point) return null;
+            return clampLine(editor.lineAtHeight(point.y, 'client'));
+        };
+
+        const lineFromMobileTouchEvent = (event) => {
+            const point = pointFromEvent(event);
+            const eventLine = lineFromGutterEvent(event);
+            if (eventLine !== null) return eventLine;
+            return lineFromMobileGutterPoint(point);
+        };
+
+        // 针对触摸屏的优化：触摸结束后按左侧行号命中带选行，避免被 Safari/CodeMirror 后续流程覆盖。
+        const wrapperElement = editor.getWrapperElement();
+        if (wrapperElement) {
+            let pendingTouchLine = null;
+
+            const rememberTouchGutterLine = (e) => {
+                pendingTouchLine = lineFromMobileTouchEvent(e);
+                if (pendingTouchLine === null) return;
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            const commitTouchGutterSelection = (e) => {
+                const line = pendingTouchLine ?? lineFromMobileTouchEvent(e);
+                pendingTouchLine = null;
+                if (line === null) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+
+                lastTouchSelectionTime = Date.now();
+                requestAnimationFrame(() => {
+                    applyLineNumberSelection(line, e);
+                });
+            };
+
+            const cancelPendingTouchGutterSelection = () => {
+                pendingTouchLine = null;
+            };
+
+            const handleMobileGutterClick = (e) => {
+                if (!isTouchPhone || Date.now() - lastTouchSelectionTime < 50) return;
+                const line = lineFromMobileTouchEvent(e);
+                if (line === null) return;
+                e.preventDefault();
+                e.stopPropagation();
+                lastTouchSelectionTime = Date.now();
+                applyLineNumberSelection(line, e);
+            };
+
+            const suppressSyntheticTouchMouse = (e) => {
+                if (!isTouchPhone || Date.now() - lastTouchSelectionTime > 900) return;
+                if (lineFromMobileTouchEvent(e) === null) return;
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            wrapperElement.addEventListener('touchstart', rememberTouchGutterLine, { passive: false, capture: true });
+            wrapperElement.addEventListener('touchend', commitTouchGutterSelection, { passive: false, capture: true });
+            wrapperElement.addEventListener('touchcancel', cancelPendingTouchGutterSelection, true);
+            wrapperElement.addEventListener('mousedown', suppressSyntheticTouchMouse, true);
+            wrapperElement.addEventListener('click', handleMobileGutterClick, true);
+            cleanupFns.push(() => {
+                wrapperElement.removeEventListener('touchstart', rememberTouchGutterLine, { capture: true });
+                wrapperElement.removeEventListener('touchend', commitTouchGutterSelection, { capture: true });
+                wrapperElement.removeEventListener('touchcancel', cancelPendingTouchGutterSelection, true);
+                wrapperElement.removeEventListener('mousedown', suppressSyntheticTouchMouse, true);
+                wrapperElement.removeEventListener('click', handleMobileGutterClick, true);
+            });
         }
 
         // 电脑端行号点击事件 (增加时间检查防止与手机触摸冲突)
@@ -360,8 +717,10 @@ const CodeMirrorAdapter = {
             if (gutter !== 'CodeMirror-linenumbers') return;
             // 如果最近 500ms 内刚刚通过 touch 选中过，则忽略本次点击
             if (Date.now() - lastTouchSelectionTime < 500) return;
-            handleLineNumberClick(line);
+            if (e && e.preventDefault) e.preventDefault();
+            applyLineNumberSelection(line, e);
         });
+        keepMobileKeyboardClosedOnInit();
 
         // 粘贴事件处理
         editor.on('paste', (editor, event) => {
@@ -431,6 +790,12 @@ const CodeMirrorAdapter = {
                 }
             },
             destroy: () => {
+                while (cleanupFns.length) {
+                    const cleanup = cleanupFns.pop();
+                    try {
+                        cleanup();
+                    } catch (e) {}
+                }
                 try {
                     if (editor && typeof editor.toTextArea === 'function') {
                         editor.toTextArea();

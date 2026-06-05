@@ -45,7 +45,7 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
     padding: 14px 0;
     flex-wrap: wrap;
 }
@@ -53,7 +53,7 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
 .topbar-left {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 14px;
     flex-wrap: wrap;
     flex: 1;
     min-width: 0;
@@ -62,7 +62,7 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
 .topbar-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
@@ -115,7 +115,7 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
 .topnav {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 8px;
     color: var(--muted);
     font-size: 14px;
     flex-wrap: wrap;
@@ -126,8 +126,9 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
 }
 
 .topbar .topnav .btn {
-    min-height: 40px;
-    padding: 0 16px;
+    min-width: 44px;
+    min-height: 36px;
+    padding: 0 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border, var(--line));
     background: var(--surface-2);
@@ -138,7 +139,7 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
 .topnav-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
 }
 
@@ -161,8 +162,8 @@ body[data-ui-surface="site"][data-theme="midnight"] .topbar {
 }
 
 .topbar .topnav-actions .btn {
-    min-height: 40px;
-    padding: 0 16px;
+    min-height: 36px;
+    padding: 0 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border, var(--line));
     background: var(--surface-2);

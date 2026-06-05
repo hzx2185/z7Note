@@ -244,7 +244,7 @@ window.createCalendarItemHandlers = function createCalendarItemHandlers(dependen
         }
       }
 
-      if (!(await this.showConfirm('确定要删除这个事件吗？'))) return;
+      if (!(await this.showConfirm('确定要删除此事件？'))) return;
 
       try {
         await api.deleteEvent(id);

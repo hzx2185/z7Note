@@ -51,6 +51,7 @@ const CalendarApp = (function() {
     sidebarDate: document.getElementById('sidebar-date'),
     sidebarContent: document.getElementById('sidebar-content'),
     sidebarSearch: document.getElementById('sidebar-search'),
+    sidebarSearchClear: document.getElementById('sidebar-search-clear'),
     eventSubfilters: document.getElementById('event-subfilters'),
     sidebarRecurringOnly: document.getElementById('sidebar-recurring-only'),
     sidebarTabs: document.querySelectorAll('.sidebar-tab'),

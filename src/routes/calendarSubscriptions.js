@@ -287,8 +287,8 @@ async function syncSubscription(subscriptionId, username, options = {}) {
       const id = `sub_${subscriptionId}_${eventUid}`;
 
       await tx.execute(
-        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, subscriptionId, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, timezone, subscriptionId, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id,
           username,
@@ -298,6 +298,7 @@ async function syncSubscription(subscriptionId, username, options = {}) {
           event.endTime || null,
           event.allDay ? 1 : 0,
           subscription.color || '#6366f1',
+          event.timezone || null,
           subscriptionId,
           now,
           now

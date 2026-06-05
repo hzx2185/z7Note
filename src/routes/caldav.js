@@ -243,7 +243,7 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
             const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
             const eventId = scopeExternalCalendarId(username, e.id || id);
             const ex = await db.queryOne('SELECT id FROM events WHERE id IN (?, ?) AND username = ?', [e.id || id, eventId, username]);
-            if (ex) await db.execute('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, reminderEmail=?, reminderBrowser=?, reminderCaldav=?, reminderPreset=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
+            if (ex) await db.execute('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, timezone=?, reminderEmail=?, reminderBrowser=?, reminderCaldav=?, reminderPreset=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.timezone || null, e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
             else {
                 if (eventQuota.limit > 0 && nextEventCount + 1 > eventQuota.limit) {
                     const error = new Error('ITEM_QUOTA_EXCEEDED');
@@ -252,7 +252,7 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
                     error.current = nextEventCount;
                     throw error;
                 }
-                await db.execute('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, now]);
+                await db.execute('INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, timezone, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [eventId, username, e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.timezone || null, e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, now]);
                 nextEventCount += 1;
             }
         }

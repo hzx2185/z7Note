@@ -133,6 +133,22 @@
     line-height: 1.4;
 }
 
+.calendar-page #confirm-modal .modal-content {
+    width: min(320px, calc(100vw - 32px));
+    max-width: 320px;
+    height: auto;
+    max-height: min(80vh, 520px);
+    border-radius: 12px;
+}
+
+.calendar-page #confirm-modal .modal-body {
+    padding: 16px;
+}
+
+.calendar-page #confirm-modal .confirm-message {
+    overflow-wrap: anywhere;
+}
+
 .calendar-page #login-required {
     position: fixed;
     inset: 0;

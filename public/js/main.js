@@ -205,6 +205,12 @@ import wsManager from './websocket.js';
             editorAction: tools.editorAction.bind(tools),
             moveCursor: tools.moveCursor.bind(tools),
             insertSymbol: tools.insertSymbol.bind(tools),
+            wrapSelection: tools.wrapSelection.bind(tools),
+            insertTemplate: tools.insertTemplate.bind(tools),
+            indentSelection: tools.indentSelection.bind(tools),
+            moveLines: tools.moveLines.bind(tools),
+            duplicateCurrentLine: tools.duplicateCurrentLine.bind(tools),
+            deleteCurrentLine: tools.deleteCurrentLine.bind(tools),
             // 工具函数
             exportCurrentAsTxt: tools.exportCurrentAsTxt.bind(tools),
             findNext: tools.findNext.bind(tools),
@@ -231,6 +237,7 @@ import wsManager from './websocket.js';
 
     // 渲染界面
     ui.render(undefined, true);
+    await tools.initToolbarLayout();
 
     // 打开最新的笔记
     const openLatestNote = async () => {

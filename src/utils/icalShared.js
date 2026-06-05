@@ -74,7 +74,12 @@ function inferReminderPreset(item, alarmsOrTrigger) {
   return item.allDay ? 'same_day_9am' : '15m';
 }
 
-function getTimezoneOffset(timezone) {
+function getTimezoneOffset(timezone, ts = Math.floor(Date.now() / 1000)) {
+  const normalizedTimeZone = TimeHelper.normalizeTimeZone(timezone, null);
+  if (normalizedTimeZone) {
+    return TimeHelper.getTimeZoneOffsetMinutes(ts, normalizedTimeZone) / 60;
+  }
+
   const timezoneMap = {
     'Asia/Shanghai': 8,
     'Asia/Chongqing': 8,
@@ -120,9 +125,9 @@ function unescapeICS(text) {
 }
 
 function formatICSDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}${month}${day}`;
 }
 
@@ -143,25 +148,7 @@ function formatICSDateTime(date, options = {}) {
     return `${utcYear}${utcMonth}${utcDay}T${utcHours}${utcMinutes}${utcSeconds}Z`;
   }
 
-  const offset = getTimezoneOffset(timezone);
-  if (offset !== null) {
-    const localTime = new Date(date.getTime() + offset * 60 * 60 * 1000);
-    const year = localTime.getUTCFullYear();
-    const month = String(localTime.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(localTime.getUTCDate()).padStart(2, '0');
-    const hours = String(localTime.getUTCHours()).padStart(2, '0');
-    const minutes = String(localTime.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(localTime.getUTCSeconds()).padStart(2, '0');
-    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
-  }
-
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+  return formatLocalTime(Math.floor(date.getTime() / 1000), timezone);
 }
 
 function parseICSDate(icsDate) {
@@ -202,31 +189,27 @@ function parseICSDate(icsDate) {
   const minutes = parseInt(value.substring(11, 13), 10);
   const seconds = parseInt(value.substring(13, 15), 10);
 
-  let date;
   if (isUTC) {
-    date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+    return Math.floor(Date.UTC(year, month, day, hours, minutes, seconds) / 1000);
   } else if (tzId) {
-    const offset = getTimezoneOffset(tzId);
-    if (offset !== null) {
-      const localTimestamp = Date.UTC(year, month, day, hours, minutes, seconds);
-      date = new Date(localTimestamp - offset * 60 * 60 * 1000);
-    } else {
-      date = new Date(year, month, day, hours, minutes, seconds);
+    const normalizedTimeZone = TimeHelper.normalizeTimeZone(tzId, null);
+    if (normalizedTimeZone) {
+      return TimeHelper.toTimeZoneClockTs(year, month + 1, day, hours, minutes, seconds, normalizedTimeZone);
     }
-  } else {
-    date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
   }
 
+  const date = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
   return Math.floor(date.getTime() / 1000);
 }
 
 function formatLocalTime(ts, timezone = 'Asia/Shanghai') {
   if (!ts) return '';
   const date = new Date(ts * 1000);
+  const normalizedTimeZone = TimeHelper.normalizeTimeZone(timezone, null) || TimeHelper.getAppTimeZone();
 
   try {
     const formatter = new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
+      timeZone: normalizedTimeZone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

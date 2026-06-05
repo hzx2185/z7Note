@@ -6,6 +6,11 @@ const { deleteContact, getContactDetail } = require('../services/contactService'
 const { insertDeletedItem } = require('../utils/deletedItems');
 const { broadcast } = require('./ws');
 const {
+  getVersionStatus,
+  startSystemUpdate,
+  getUpdateState
+} = require('../services/versionService');
+const {
   getUserStats,
   filterAndSortUserStats,
   deleteUser,
@@ -1063,6 +1068,51 @@ router.post('/api/admin/system/init-defaults', async (req, res) => {
       error: e.message
     });
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/api/admin/system/version', async (req, res) => {
+  try {
+    const force = req.query.force === '1' || req.query.force === 'true';
+    const status = await getVersionStatus({ force });
+    res.json({ status: 'ok', ...status });
+  } catch (e) {
+    log('ERROR', '获取系统版本信息失败', {
+      requestedBy: req.user,
+      error: e.message
+    });
+    res.status(500).json({ error: '获取版本信息失败: ' + e.message });
+  }
+});
+
+router.get('/api/admin/system/update/status', (req, res) => {
+  res.json({ status: 'ok', updateState: getUpdateState() });
+});
+
+router.post('/api/admin/system/update', async (req, res) => {
+  try {
+    const targetVersion = typeof req.body?.targetVersion === 'string' ? req.body.targetVersion.trim() : '';
+    const updateState = startSystemUpdate({ targetVersion, operator: req.user });
+    res.json({ status: 'ok', updateState });
+  } catch (e) {
+    if (e.message === 'UPDATE_COMMAND_NOT_CONFIGURED') {
+      return res.status(e.statusCode || 400).json({
+        error: '当前未配置后台自动更新命令',
+        hint: e.hint
+      });
+    }
+    if (e.message === 'UPDATE_ALREADY_RUNNING') {
+      return res.status(e.statusCode || 409).json({ error: '已有更新任务正在执行' });
+    }
+    if (e.message === 'UPDATE_TARGET_TAG_INVALID') {
+      return res.status(e.statusCode || 400).json({ error: '目标版本 tag 无效' });
+    }
+    log('ERROR', '触发系统更新失败', {
+      requestedBy: req.user,
+      error: e.message,
+      stack: e.stack
+    });
+    res.status(500).json({ error: '触发更新失败: ' + e.message });
   }
 });
 

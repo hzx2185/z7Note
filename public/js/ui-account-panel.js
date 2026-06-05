@@ -57,6 +57,10 @@ export function enhanceUIAccountPanel(UIManager) {
           localStorage.setItem('z7note_username', data.username);
         }
 
+        if (window.tools?.loadToolbarLayout) {
+          window.tools.loadToolbarLayout({ force: true });
+        }
+
         this.applyPlanCapabilityVisibility(data.planCapabilities || {}, data);
 
         const noteUsageText = document.getElementById('note-usage-text');

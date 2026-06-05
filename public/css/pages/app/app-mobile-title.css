@@ -1,6 +1,13 @@
 /* 移动端样式 */
 @media (max-width: 768px) {
     body, html { font-size: 14px; }
+    :root {
+        --app-header-height: 40px;
+        --app-visual-height: 100dvh;
+        --app-keyboard-overlap: 0px;
+        --app-editor-bottom-safe: 44px;
+        --mobile-editor-toolbar-height: 40px;
+    }
     .modal-content { max-height: 100dvh; }
     .modal-body { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     #preview-wrapper { overflow-x: hidden; }
@@ -102,9 +109,9 @@
 }
 
 .CodeMirror-linenumber {
-    padding: 0 4px !important;
+    padding: 0 3px !important;
     color: var(--text-muted) !important;
-    min-width: 20px !important;
+    min-width: 18px !important;
     text-align: right !important;
     border-radius: 4px;
     transition: background-color 0.15s;
@@ -125,4 +132,63 @@
 
 .CodeMirror-selectedtext {
     background-color: var(--accent-soft-strong);
+}
+
+.mobile-gutter-selected-line-bg {
+    background: var(--accent-soft-strong) !important;
+}
+
+.mobile-gutter-selected-line .CodeMirror-line,
+.mobile-gutter-selected-line pre.CodeMirror-line,
+.mobile-gutter-selected-line pre.CodeMirror-line-like {
+    background: var(--accent-soft) !important;
+}
+
+@media (max-width: 768px) {
+    .CodeMirror {
+        font-size: 16px !important;
+        line-height: 1.65;
+    }
+
+    .CodeMirror textarea,
+    .CodeMirror [contenteditable="true"] {
+        font-size: 16px !important;
+        -webkit-text-size-adjust: 100%;
+    }
+
+    .CodeMirror-scroll {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+        scroll-padding-bottom: calc(var(--app-editor-bottom-safe, 44px) + env(safe-area-inset-bottom));
+    }
+
+    .CodeMirror-lines {
+        padding: 10px 0 calc(var(--app-editor-bottom-safe, 44px) + env(safe-area-inset-bottom)) !important;
+    }
+
+    .CodeMirror pre.CodeMirror-line,
+    .CodeMirror pre.CodeMirror-line-like {
+        padding: 0 10px;
+    }
+
+    .CodeMirror-gutters,
+    .CodeMirror-gutter-wrapper,
+    .CodeMirror-gutter-elt {
+        min-width: 24px;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+
+    .CodeMirror-linenumber {
+        min-width: 20px !important;
+        padding: 0 4px 0 1px !important;
+        font-size: 12px;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
 }

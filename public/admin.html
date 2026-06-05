@@ -22,6 +22,7 @@
     <div class="admin-header-actions">
         <div data-theme-slot data-theme-mode="compact" data-theme-button-class="tool-btn"></div>
         <button class="btn btn-secondary" onclick="Admin.refreshAll()">刷新数据</button>
+        <button class="btn btn-secondary" onclick="Admin.checkVersion(true)">检查更新</button>
         <a class="btn btn-secondary admin-ghost-link" href="/app">返回应用</a>
     </div>
 </header>
@@ -104,6 +105,31 @@
             <div class="admin-inline-actions" style="margin-top:12px">
                 <button class="btn btn-secondary" onclick="Admin.showMemberPlanConfig()">套餐配置</button>
                 <button class="btn btn-secondary" onclick="Admin.vacuumDatabase()">数据库优化</button>
+            </div>
+        </section>
+
+        <section class="card admin-section">
+            <div class="admin-section-head">
+                <div>
+                    <h2 class="admin-section-title">版本更新</h2>
+                    <p class="admin-section-kicker" id="version-status-copy">正在读取当前版本</p>
+                </div>
+                <span class="admin-version-pill" id="version-update-badge">检查中</span>
+            </div>
+            <div class="admin-version-card" id="version-card">
+                <div class="admin-version-row">
+                    <span>当前版本</span>
+                    <strong id="version-current">-</strong>
+                </div>
+                <div class="admin-version-row">
+                    <span>最新版本</span>
+                    <strong id="version-latest">-</strong>
+                </div>
+                <p class="admin-version-tip" id="version-tip">后台会从 GitHub / Docker Hub 获取最新版本。</p>
+                <div class="admin-inline-actions">
+                    <button class="btn btn-secondary" type="button" onclick="Admin.checkVersion(true)">检查更新</button>
+                    <button class="btn admin-primary-fill" type="button" id="version-update-btn" onclick="Admin.startSystemUpdate()" disabled>自动更新</button>
+                </div>
             </div>
         </section>
 

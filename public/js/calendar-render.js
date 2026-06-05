@@ -258,6 +258,9 @@ window.createCalendarRender = function createCalendarRender(dependencies) {
         bannerText.textContent = monthLabel;
       }
 
+      const renderToken = Symbol('renderToken');
+      this.currentRenderToken = renderToken;
+
       elements.monthView.querySelectorAll('.day-content').forEach(container => {
         container.innerHTML = '';
       });
@@ -278,6 +281,11 @@ window.createCalendarRender = function createCalendarRender(dependencies) {
       });
 
       const expandedEvents = await this.expandRecurringEvents(state.currentMonthEvents, year, month);
+
+      // Render Guard: abort if a newer render cycle has started
+      if (this.currentRenderToken !== renderToken) {
+        return;
+      }
 
       expandedEvents.forEach(event => {
         let startDate, actualLoopEnd;
@@ -363,6 +371,7 @@ window.createCalendarRender = function createCalendarRender(dependencies) {
         }
 
         if (container) {
+          container.innerHTML = '';
           const items = [];
 
           data.events.slice(0, 5).forEach(event => {

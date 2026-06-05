@@ -19,7 +19,7 @@
 
     <!-- CSS - 关键样式立即加载 -->
     <link rel="stylesheet" href="/cdn/codemirror.min.css">
-    <link rel="stylesheet" href="/css/app.css?v=20260512-title-icon-mobile">
+    <link rel="stylesheet" href="/css/app.css?v=20260519-toolbar-line-icons-v1">
 
     <!-- 非关键样式延迟加载 -->
     <link rel="stylesheet" href="/cdn/highlight-dark.min.css" media="print" onload="this.media='all'">
@@ -125,6 +125,14 @@
             <path d="M16 4 20 8a2 2 0 0 1 0 2.8l-6.4 6.4a2 2 0 0 1-2.8 0l-4-4a2 2 0 0 1 0-2.8L13.2 4a2 2 0 0 1 2.8 0Z"></path>
             <path d="M5 19h10"></path>
         </symbol>
+        <symbol id="icon-sliders" viewBox="0 0 24 24">
+            <path d="M4 7h4"></path>
+            <path d="M14 7h6"></path>
+            <circle cx="11" cy="7" r="3"></circle>
+            <path d="M4 17h9"></path>
+            <path d="M19 17h1"></path>
+            <circle cx="16" cy="17" r="3"></circle>
+        </symbol>
         <symbol id="icon-history" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="8"></circle>
             <path d="M12 8v5l3 2"></path>
@@ -138,6 +146,14 @@
         <symbol id="icon-copy" viewBox="0 0 24 24">
             <rect x="9" y="9" width="10" height="10" rx="2"></rect>
             <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+        </symbol>
+        <symbol id="icon-arrow-up" viewBox="0 0 24 24">
+            <path d="M12 19V5"></path>
+            <path d="m6 11 6-6 6 6"></path>
+        </symbol>
+        <symbol id="icon-arrow-down" viewBox="0 0 24 24">
+            <path d="M12 5v14"></path>
+            <path d="m18 13-6 6-6-6"></path>
         </symbol>
     </svg>
     <div id="overlay" onclick="ui.toggleSidebar()"></div>
@@ -265,46 +281,61 @@
         <div id="main">
             <!-- 快捷工具栏 -->
             <div class="quick-tools workspace-brand-toolbar">
-                <div class="quick-tool-group" aria-label="编辑与视图">
-                    <button class="tool-btn" onclick="ui.undo()" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-undo"></use></svg></button>
-                    <button class="tool-btn" onclick="ui.redo()" title="重做 (Ctrl+Y)" aria-label="重做 (Ctrl+Y)"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-redo"></use></svg></button>
-                    <button class="tool-btn" onclick="ui.toggleSplit()" title="分屏预览" aria-label="分屏预览"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-columns"></use></svg></button>
-                    <button id="btn-preview" class="tool-btn" onclick="ui.openDedicatedPreview()" title="弹出预览窗口" aria-label="弹出预览窗口"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-popout"></use></svg></button>
+                <div class="quick-tool-group" data-toolbar-group="common" aria-label="常用">
+                    <button class="tool-btn" data-toolbar-item="undo" data-toolbar-label="撤销" onclick="ui.undo()" title="撤销 (Ctrl+Z)" aria-label="撤销 (Ctrl+Z)"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-undo"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="redo" data-toolbar-label="重做" onclick="ui.redo()" title="重做 (Ctrl+Y)" aria-label="重做 (Ctrl+Y)"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-redo"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="copy" data-toolbar-label="复制" onclick="tools.editorAction('copy')" title="复制内容">复</button>
+                    <button class="tool-btn" data-toolbar-item="paste" data-toolbar-label="粘贴" onclick="tools.editorAction('paste')" title="粘贴内容">粘</button>
+                    <button class="tool-btn" data-toolbar-item="search" data-toolbar-label="查找替换" onclick="tools.toggleSearchReplace()" title="查找替换" aria-label="查找替换"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-search"></use></svg></button>
                 </div>
                 <div class="divider"></div>
-                <div class="quick-tool-group" aria-label="定位与选择">
-                    <button class="tool-btn" onclick="ui.scrollControl('top')" title="回到顶部">↑</button>
-                    <button class="tool-btn" onclick="ui.scrollControl('bottom')" title="回到底部">↓</button>
-                    <button class="tool-btn" onclick="tools.moveCursor('left')" title="左移光标">←</button>
-                    <button class="tool-btn" onclick="tools.moveCursor('right')" title="右移光标">→</button>
-                    <button class="tool-btn" onclick="tools.editorAction('copy')" title="复制内容">复</button>
-                    <button class="tool-btn" onclick="tools.editorAction('cut')" title="剪切内容">剪</button>
-                    <button class="tool-btn" onclick="tools.editorAction('paste')" title="粘贴内容">粘</button>
-                    <button class="tool-btn" onclick="tools.editorAction('selectAll')" title="全选内容">全</button>
-                    <button class="tool-btn" onclick="tools.editorAction('selectLine')" title="选择当前行">行</button>
+                <div class="quick-tool-group" data-toolbar-group="line" aria-label="行操作">
+                    <button class="tool-btn" data-toolbar-item="selectLine" data-toolbar-label="选择行" onclick="tools.editorAction('selectLine')" title="选择当前整行" aria-label="选择当前整行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-list-ordered"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="duplicateLine" data-toolbar-label="复制到下方" onclick="tools.duplicateCurrentLine()" title="复制当前或选中行到下方" aria-label="复制当前或选中行到下方"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-copy"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="deleteLine" data-toolbar-label="删除行" onclick="tools.deleteCurrentLine()" title="删除当前或选中行" aria-label="删除当前或选中行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-trash"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="moveLineUp" data-toolbar-label="行上移" onclick="tools.moveLines('up')" title="上移当前或选中行" aria-label="上移当前或选中行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-arrow-up"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="moveLineDown" data-toolbar-label="行下移" onclick="tools.moveLines('down')" title="下移当前或选中行" aria-label="下移当前或选中行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-arrow-down"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="indent" data-toolbar-label="缩进" onclick="tools.indentSelection('in')" title="缩进">缩</button>
+                    <button class="tool-btn" data-toolbar-item="outdent" data-toolbar-label="反缩进" onclick="tools.indentSelection('out')" title="反缩进">退</button>
                 </div>
                 <div class="divider"></div>
-                <div class="quick-tool-group" aria-label="插入与标记">
-                    <button class="tool-btn" onclick="tools.insertSymbol('#')" title="标题">#</button>
-                    <button class="tool-btn" onclick="tools.insertSymbol('*')" title="强调">*</button>
-                    <button class="tool-btn" onclick="tools.insertSymbol('`')" title="行内代码">`</button>
-                    <button class="tool-btn" onclick="tools.insertSymbol('>')" title="引用">></button>
-                    <button class="tool-btn" onclick="tools.insertSymbol('-')" title="列表">-</button>
-                    <button class="tool-btn" onclick="tools.insertTodo(false)" title="待办事项">☐</button>
-                    <button class="tool-btn" onclick="tools.insertTodo(true)" title="完成事项">☑</button>
-                    <button class="tool-btn" onclick="tools.insertSymbol('```\n', '\n```')" title="代码块">块</button>
-                    <button class="tool-btn" onclick="tools.insertSymbol('[', '](url)')" title="超链接">链</button>
-                    <button id="attachment-manager-btn" class="tool-btn" onclick="tools.openAttachmentManager()" title="附件管理" aria-label="附件管理"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-paperclip"></use></svg></button>
-                    <button id="btn-editor-type" onclick="ui.toggleEditor()" class="tool-btn" title="显示/隐藏行号" aria-label="显示或隐藏行号"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-list-ordered"></use></svg></button>
-                    <button onclick="ui.toggleLineWrapping()" class="tool-btn" title="自动换行" aria-label="自动换行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-wrap"></use></svg></button>
-                    <button onclick="ui.setMarkerStart()" class="tool-btn" title="标记起 (Alt+[)">「</button>
-                    <button onclick="ui.setMarkerEnd()" class="tool-btn" title="标记终 (Alt+])">」</button>
+                <div class="quick-tool-group" data-toolbar-group="format" aria-label="格式">
+                    <button class="tool-btn" data-toolbar-item="heading" data-toolbar-label="标题" onclick="tools.toggleHeading()" title="标题">#</button>
+                    <button class="tool-btn" data-toolbar-item="bold" data-toolbar-label="粗体" onclick="tools.wrapSelection('**', '**', '粗体')" title="粗体" aria-label="粗体">B</button>
+                    <button class="tool-btn" data-toolbar-item="italic" data-toolbar-label="斜体" onclick="tools.wrapSelection('*', '*', '斜体')" title="斜体" aria-label="斜体">I</button>
+                    <button class="tool-btn" data-toolbar-item="inlineCode" data-toolbar-label="行内代码" onclick="tools.wrapSelection('`', '`', 'code')" title="行内代码">`</button>
+                    <button class="tool-btn" data-toolbar-item="quote" data-toolbar-label="引用" onclick="tools.toggleLinePrefix('> ')" title="引用">></button>
+                    <button class="tool-btn" data-toolbar-item="list" data-toolbar-label="列表" onclick="tools.toggleLinePrefix('- ', { pattern: /^(\s*)[-*]\s+/ })" title="列表">-</button>
+                    <button class="tool-btn" data-toolbar-item="todo" data-toolbar-label="待办" onclick="tools.toggleTodo()" title="待办事项">☐</button>
                 </div>
                 <div class="divider"></div>
-                <div class="quick-tool-group" aria-label="搜索与导出">
-                    <button class="tool-btn" onclick="tools.toggleSearchReplace()" title="查找替换" aria-label="查找替换"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-search"></use></svg></button>
-                    <button class="tool-btn" onclick="tools.exportCurrentAsTxt()" title="导出 TXT" aria-label="导出 TXT"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-file-text"></use></svg></button>
-                    <button class="tool-btn" onclick="tools.cleanFormat()" title="清理格式 (去除行末空格、多余空行)" aria-label="清理格式"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-eraser"></use></svg></button>
+                <div class="quick-tool-group" data-toolbar-group="insert" aria-label="插入">
+                    <button class="tool-btn" data-toolbar-item="codeBlock" data-toolbar-label="代码块" onclick="tools.insertSymbol('```\n', '\n```')" title="代码块">块</button>
+                    <button class="tool-btn" data-toolbar-item="link" data-toolbar-label="链接" onclick="tools.wrapSelection('[', '](url)', '链接文字')" title="超链接">链</button>
+                    <button class="tool-btn" data-toolbar-item="image" data-toolbar-label="图片" onclick="tools.insertTemplate('image')" title="图片模板">图</button>
+                    <button class="tool-btn" data-toolbar-item="table" data-toolbar-label="表格" onclick="tools.insertTemplate('table')" title="表格模板">表</button>
+                    <button id="attachment-manager-btn" class="tool-btn" data-toolbar-item="attachments" data-toolbar-label="附件" onclick="tools.openAttachmentManager()" title="附件管理" aria-label="附件管理"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-paperclip"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="markerStart" data-toolbar-label="标记起" onclick="ui.setMarkerStart()" title="标记起 (Alt+[)">「</button>
+                    <button class="tool-btn" data-toolbar-item="markerEnd" data-toolbar-label="标记终" onclick="ui.setMarkerEnd()" title="标记终 (Alt+])">」</button>
+                </div>
+                <div class="divider"></div>
+                <div class="quick-tool-group" data-toolbar-group="view" aria-label="视图">
+                    <button class="tool-btn" data-toolbar-item="split" data-toolbar-label="分屏" onclick="ui.toggleSplit()" title="分屏预览" aria-label="分屏预览"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-columns"></use></svg></button>
+                    <button id="btn-preview" class="tool-btn" data-toolbar-item="preview" data-toolbar-label="弹出预览" onclick="ui.openDedicatedPreview()" title="弹出预览窗口" aria-label="弹出预览窗口"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-popout"></use></svg></button>
+                    <button id="btn-editor-type" class="tool-btn" data-toolbar-item="lineNumbers" data-toolbar-label="行号" onclick="ui.toggleEditor()" title="显示/隐藏行号" aria-label="显示或隐藏行号"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-list-ordered"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="wrap" data-toolbar-label="换行" onclick="ui.toggleLineWrapping()" title="自动换行" aria-label="自动换行"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-wrap"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="top" data-toolbar-label="顶部" onclick="ui.scrollControl('top')" title="回到顶部">顶</button>
+                    <button class="tool-btn" data-toolbar-item="bottom" data-toolbar-label="底部" onclick="ui.scrollControl('bottom')" title="回到底部">底</button>
+                    <button class="tool-btn" data-toolbar-item="cursorLeft" data-toolbar-label="光标左移" onclick="tools.moveCursor('left')" title="左移光标">←</button>
+                    <button class="tool-btn" data-toolbar-item="cursorUp" data-toolbar-label="光标上移" onclick="tools.moveCursor('up')" title="上移光标">↑</button>
+                    <button class="tool-btn" data-toolbar-item="cursorDown" data-toolbar-label="光标下移" onclick="tools.moveCursor('down')" title="下移光标">↓</button>
+                    <button class="tool-btn" data-toolbar-item="cursorRight" data-toolbar-label="光标右移" onclick="tools.moveCursor('right')" title="右移光标">→</button>
+                </div>
+                <div class="divider"></div>
+                <div class="quick-tool-group" data-toolbar-group="tools" aria-label="工具">
+                    <button class="tool-btn" data-toolbar-item="exportTxt" data-toolbar-label="导出 TXT" onclick="tools.exportCurrentAsTxt()" title="导出 TXT" aria-label="导出 TXT"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-file-text"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="cleanFormat" data-toolbar-label="清理格式" onclick="tools.cleanFormat()" title="清理格式 (去除行末空格、多余空行)" aria-label="清理格式"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-eraser"></use></svg></button>
+                    <button class="tool-btn" data-toolbar-item="toolbarSettings" data-toolbar-label="工具栏设置" onclick="tools.openToolbarSettings()" title="工具栏设置" aria-label="工具栏设置"><svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sliders"></use></svg></button>
                 </div>
             </div>
 
@@ -472,7 +503,7 @@
     </div>
 
     <!-- 应用脚本 - 统一入口，延迟加载不阻塞渲染 -->
-    <script type="module" src="/js/app-entry.js?v=20260512-title-icon-mobile"></script>
+    <script type="module" src="/js/app-entry.js?v=20260519-toolbar-clipboard-v1"></script>
 
     <!-- 修改密码模态框 -->
     <div id="change-password-modal" class="modal workspace-brand-modal hidden-by-default">
@@ -612,6 +643,22 @@
                         <button type="button" onclick="backupNow()" class="btn-blue form-action-btn">立即备份</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toolbar-settings-modal" class="modal workspace-brand-modal">
+        <div class="modal-content modal-content-toolbar-settings">
+            <div class="modal-header">
+                <h3>工具栏设置</h3>
+                <button class="modal-close" onclick="tools.closeToolbarSettings()">×</button>
+            </div>
+            <div class="modal-body toolbar-settings-body">
+                <div class="toolbar-settings-actions">
+                    <button type="button" class="tool-btn" onclick="tools.saveToolbarLayout()">保存</button>
+                    <button type="button" class="tool-btn" onclick="tools.resetToolbarLayout()">恢复默认</button>
+                </div>
+                <div id="toolbar-settings-list" class="toolbar-settings-list"></div>
             </div>
         </div>
     </div>

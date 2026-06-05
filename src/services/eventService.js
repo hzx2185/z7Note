@@ -26,6 +26,10 @@ function normalizeEventRange(startTime, endTime, allDay) {
   };
 }
 
+function normalizeEventTimezone(timezone) {
+  return TimeHelper.normalizeTimeZone(timezone, null) || null;
+}
+
 function expandRecurringInstancesForRange(event, startDate, endDate) {
   const recurrence = typeof event.recurrence === 'string' ? JSON.parse(event.recurrence) : event.recurrence;
   if (!recurrence || !recurrence.type) return [];
@@ -76,15 +80,15 @@ async function createBatchEvents(username, events) {
 
     let count = 0;
     for (const event of events) {
-      const { title, description, startTime, endTime, allDay } = event;
+      const { title, description, startTime, endTime, allDay, timezone } = event;
       if (!title) continue;
 
       const normalizedRange = normalizeEventRange(startTime, endTime, allDay);
       if (!normalizedRange.startTime) continue;
 
       await tx.execute(
-        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, timezone, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           buildEventId(),
           username,
@@ -94,6 +98,7 @@ async function createBatchEvents(username, events) {
           normalizedRange.endTime,
           allDay ? 1 : 0,
           '#2563eb',
+          normalizeEventTimezone(timezone),
           now,
           now
         ]
@@ -325,7 +330,7 @@ async function importCalendar(username, icsContent) {
         }
 
         await tx.execute(
-          'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
+          'UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, timezone=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?',
           [
             event.title,
             event.description || '',
@@ -333,6 +338,7 @@ async function importCalendar(username, icsContent) {
             normalizedRange.endTime,
             event.allDay ? 1 : 0,
             event.color || '#2563eb',
+            normalizeEventTimezone(event.timezone),
             recurrenceStr,
             TimeHelper.parseToTs(event.recurrenceEnd),
             now,
@@ -353,7 +359,7 @@ async function importCalendar(username, icsContent) {
         }
         const eventId = event.id ? scopedEventId : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         await tx.execute(
-          'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+          'INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, timezone, recurrence, recurrenceEnd, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
           [
             eventId,
             username,
@@ -363,6 +369,7 @@ async function importCalendar(username, icsContent) {
             normalizedRange.endTime,
             event.allDay ? 1 : 0,
             event.color || '#2563eb',
+            normalizeEventTimezone(event.timezone),
             recurrenceStr,
             TimeHelper.parseToTs(event.recurrenceEnd),
             now,
@@ -502,6 +509,7 @@ async function createEvent(username, payload) {
     reminderBrowser,
     reminderCaldav,
     reminderPreset,
+    timezone,
     recurrence,
     recurrenceEnd
   } = payload;
@@ -516,8 +524,8 @@ async function createEvent(username, payload) {
   const id = buildEventId();
   const now = Math.floor(Date.now() / 1000);
   await db.execute(
-    `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO events (id, username, title, description, startTime, endTime, allDay, color, timezone, reminderEmail, reminderBrowser, reminderCaldav, reminderPreset, recurrence, recurrenceEnd, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       username,
@@ -527,6 +535,7 @@ async function createEvent(username, payload) {
       normalizedRange.endTime,
       allDay ? 1 : 0,
       '#2563eb',
+      normalizeEventTimezone(timezone),
       reminderEmail ? 1 : 0,
       reminderBrowser ? 1 : 0,
       reminderCaldav ? 1 : 0,
@@ -556,6 +565,7 @@ async function updateEvent(username, rawId, payload) {
     reminderEmail: value => (value ? 1 : 0),
     reminderBrowser: value => (value ? 1 : 0),
     reminderCaldav: value => (value ? 1 : 0),
+    timezone: normalizeEventTimezone,
     recurrence: value => value || null,
     recurrenceEnd: TimeHelper.parseToTs
   };
