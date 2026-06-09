@@ -10,6 +10,7 @@ const {
 const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
 const { normalizeReminderPreset } = require('../utils/reminderPresets');
 const { mapTodoForClient, mapEventForClient } = require('../utils/calendarClientMapper');
+const { filterCalendarDisplayEvents } = require('../utils/calendarShadowEvents');
 const { insertDeletedItem } = require('../utils/deletedItems');
 const ICalGenerator = require('../utils/icalGenerator');
 const ICalParser = require('../utils/icalParser');
@@ -123,7 +124,8 @@ async function listEvents(username, startDate, endDate) {
   }
 
   const events = await db.queryAll(query, params);
-  return events.map(event => mapEventForClient(username, event));
+  return filterCalendarDisplayEvents(username, events)
+    .map(event => mapEventForClient(username, event));
 }
 
 async function deleteBatchEvents(username, { ids, startTime, endTime, all }) {
@@ -818,7 +820,7 @@ async function getDayCalendarData(username, dateString) {
   const dayNotes = notes.filter(note => note.updatedAt >= start && note.updatedAt <= end);
   const expandedEvents = [];
 
-  for (const event of rawEvents) {
+  for (const event of filterCalendarDisplayEvents(username, rawEvents)) {
     if (!event.recurrence) {
       if (event.allDay) {
         const startDate = new Date(event.startTime * 1000);
@@ -865,7 +867,8 @@ async function searchCalendarContent(username, rawQuery) {
 
   return {
     todos: todos.map(todo => mapTodoForClient(username, todo)),
-    events: events.map(event => mapEventForClient(username, event)),
+    events: filterCalendarDisplayEvents(username, events)
+      .map(event => mapEventForClient(username, event)),
     notes: notes.map(note => ({ ...note, id: note.id }))
   };
 }

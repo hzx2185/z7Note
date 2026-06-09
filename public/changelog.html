@@ -7,7 +7,7 @@
   <title>更新日志 - z7Note</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20250312-FINAL-FIX">
   <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
-  <link rel="stylesheet" href="/css/site.css?v=20260517-site-nav-compact-v2">
+  <link rel="stylesheet" href="/css/site.css?v=20260609-release-108">
 </head>
 <body data-ui-surface="site" data-theme="default">
   <header class="topbar">
@@ -76,11 +76,21 @@
             <span class="stat-label">最新更新</span>
           </div>
         </div>
+        <div class="release-summary" id="release-summary"></div>
       </div>
     </section>
 
     <section>
-      <div class="shell timeline" id="timeline"></div>
+      <div class="shell">
+        <div class="changelog-toolbar">
+          <label class="changelog-filter">
+            <span>月份</span>
+            <select id="changelog-month-filter"></select>
+          </label>
+          <div class="changelog-count" id="changelog-count">—</div>
+        </div>
+        <div class="timeline" id="timeline"></div>
+      </div>
     </section>
   </main>
 
@@ -96,6 +106,6 @@
   </footer>
 
   <script type="module" src="/js/site-nav.js"></script>
-  <script type="module" src="/js/changelog-page.js?v=20260605-enhance-search-details-v3"></script>
+  <script type="module" src="/js/changelog-page.js?v=20260609-release-108"></script>
 </body>
 </html>

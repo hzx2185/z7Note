@@ -9,6 +9,7 @@ import {
 const heroMetrics = document.getElementById('hero-metrics');
 const homepageFeatures = document.getElementById('homepage-features');
 const homepageReasons = document.getElementById('homepage-reasons');
+const homepageOperations = document.getElementById('homepage-operations');
 const heroEyebrow = document.getElementById('hero-eyebrow');
 const heroTitle = document.getElementById('hero-title');
 const heroSubtitle = document.getElementById('hero-subtitle');
@@ -27,6 +28,23 @@ const CAPABILITY_COPY = [
   ['importExport', '📤 数据迁移', '支持导入导出，方便迁移和周期性整理。'],
   ['webdavEnabled', '🌐 多端同步', '支持 WebDAV / DAV 客户端接入和外部工具同步。'],
   ['advancedSharing', '🔗 分享协作', '支持公开分享、高级分享能力和跨场景分发。']
+];
+const OPERATIONS_FALLBACK = [
+  {
+    title: 'Docker 发布',
+    summary: '镜像按语义版本与 latest 双标签发布，适合自托管部署和回滚。',
+    meta: 'linux/amd64 + linux/arm64'
+  },
+  {
+    title: 'DAV 同步',
+    summary: 'WebDAV、CalDAV、CardDAV 分别覆盖笔记文件、日历待办和系统通讯录。',
+    meta: '外部客户端兼容'
+  },
+  {
+    title: '数据治理',
+    summary: '迁移脚本负责结构升级和历史数据修复，避免手工直接修改 SQLite。',
+    meta: '启动自动执行'
+  }
 ];
 
 function formatQuota(value, unit) {
@@ -157,6 +175,17 @@ function renderReasons(reasons) {
   `).join('');
 }
 
+function renderOperations(items) {
+  if (!homepageOperations) return;
+  homepageOperations.innerHTML = items.map((item) => `
+    <article class="operation-card">
+      <strong>${item.title}</strong>
+      <p>${item.summary}</p>
+      <span>${item.meta}</span>
+    </article>
+  `).join('');
+}
+
 if (heroEyebrow && HOME_HERO) {
   heroEyebrow.textContent = HOME_HERO.eyebrow;
 }
@@ -191,6 +220,7 @@ if (ctaButton && HOME_CTA) {
 renderMetrics(HOME_METRICS);
 renderFeatures(HOME_FEATURES);
 renderReasons(HOME_SOCIAL_PROOF?.reasons || []);
+renderOperations(OPERATIONS_FALLBACK);
 
 async function loadHomepagePlanContent() {
   try {
@@ -207,6 +237,23 @@ async function loadHomepagePlanContent() {
     renderMetrics(buildDynamicMetrics(sortedPlans));
     renderFeatures(buildDynamicFeatures(sortedPlans));
     renderReasons(buildDynamicReasons(sortedPlans));
+    renderOperations([
+      {
+        title: '同步能力按套餐开放',
+        summary: 'WebDAV、CalDAV、CardDAV、日历订阅和备份导出都跟随后台套餐开关自动收口。',
+        meta: `${sortedPlans.length} 档套餐同步配置`
+      },
+      {
+        title: '发布版本可追踪',
+        summary: '更新日志、package 版本和 Docker 标签保持一致，方便判断当前部署是否需要升级。',
+        meta: 'semantic version + latest'
+      },
+      {
+        title: '数据修复走迁移',
+        summary: '历史数据治理通过迁移脚本执行；例如重复实例影子事件会在启动时自动清理并同步删除记录。',
+        meta: 'schema migration'
+      }
+    ]);
   } catch (error) {
     console.error('加载首页套餐配置失败:', error);
   }

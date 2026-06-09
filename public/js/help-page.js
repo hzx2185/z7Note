@@ -1,6 +1,7 @@
 const guideGrid = document.getElementById('help-guide-grid');
 const faqList = document.getElementById('help-faq-list');
 const quickLinks = document.getElementById('help-quick-links');
+const opsGrid = document.getElementById('help-ops-grid');
 
 const GUIDE_FALLBACK = [
   {
@@ -70,6 +71,23 @@ const QUICK_LINKS_FALLBACK = [
   { label: '🚀 打开应用', href: '/app' },
   { label: '👤 会员中心', href: '/member' }
 ];
+const OPS_FALLBACK = [
+  {
+    title: '升级容器',
+    summary: '镜像部署使用固定服务端更新命令，推荐先拉取新镜像，再由 Compose 重建并启动容器。',
+    steps: ['docker compose pull', 'docker compose up -d', '确认 /health 返回 200']
+  },
+  {
+    title: 'DAV 客户端同步',
+    summary: '外部客户端分别连接 /webdav/、/caldav/、/carddav/。遇到重复日历实例时，升级后会由迁移和同步删除记录自动收口。',
+    steps: ['重新同步账户', '确认客户端收到删除项', '必要时移除并重加账户']
+  },
+  {
+    title: '备份与恢复',
+    summary: '升级前保留 data/ 与 logs/；数据库结构变化由迁移脚本在启动时自动执行，不建议手动改 SQLite 表结构。',
+    steps: ['备份 data/z7note.db', '保留 data/uploads', '启动后查看日志确认迁移完成']
+  }
+];
 
 function renderGuides(items) {
   if (!guideGrid) return;
@@ -100,10 +118,24 @@ function renderQuickLinks(items) {
   )).join('');
 }
 
+function renderOperations(items) {
+  if (!opsGrid) return;
+  opsGrid.innerHTML = items.map((item) => `
+    <article class="help-ops-card">
+      <h3>${item.title}</h3>
+      <p>${item.summary}</p>
+      <ol>
+        ${(item.steps || []).map((step) => `<li>${step}</li>`).join('')}
+      </ol>
+    </article>
+  `).join('');
+}
+
 async function initHelpPage() {
   renderGuides(GUIDE_FALLBACK);
   renderFaq(FAQ_FALLBACK);
   renderQuickLinks(QUICK_LINKS_FALLBACK);
+  renderOperations(OPS_FALLBACK);
 
   try {
     const response = await fetch('/api/public/member-plans', { cache: 'no-store' });
@@ -195,6 +227,10 @@ async function initHelpPage() {
       {
         title: '如何升级套餐？',
         summary: '进入会员中心查看当前套餐，也可以在后台直接调整 Free / Pro / Team 的配额与功能，例如提醒、订阅、附件、DAV、备份导出等。'
+      },
+      {
+        title: '农历生日为什么以前会显示两次？',
+        summary: '旧版本可能把 CalDAV 客户端回写的重复实例保存成独立事件。1.0.8 起会过滤并清理这类影子事件，同时通过 deleted_items 通知外部客户端删除。'
       }
     ];
 
@@ -211,6 +247,25 @@ async function initHelpPage() {
     renderGuides(dynamicGuides);
     renderFaq(dynamicFaq);
     renderQuickLinks(dynamicQuickLinks);
+    renderOperations([
+      {
+        title: '升级容器',
+        summary: 'Docker 部署推荐使用固定 Compose 更新流程，避免浏览器传入任意更新命令。',
+        steps: ['拉取语义版本或 latest 镜像', 'docker compose up -d 重建服务', '检查 /health 和后台版本状态']
+      },
+      {
+        title: '同步客户端排查',
+        summary: sharedCapabilities.caldavEnabled || sharedCapabilities.carddavEnabled
+          ? '套餐已支持 DAV 能力时，外部客户端可以重新同步获取删除记录和最新数据。'
+          : 'DAV 能力可在后台按套餐开启；关闭时前端入口与服务端接口会同步收口。',
+        steps: ['检查套餐是否开启 DAV', '确认客户端地址和用户名密码', '必要时移除客户端账户后重新添加']
+      },
+      {
+        title: '迁移与备份',
+        summary: '结构调整和历史数据清理都通过迁移执行，升级前保留 data 目录即可降低回滚风险。',
+        steps: ['备份 data/z7note.db 与 uploads', '启动后查看迁移日志', '发现异常先恢复备份再排查']
+      }
+    ]);
   } catch (error) {
     console.error('加载帮助页套餐配置失败:', error);
   }

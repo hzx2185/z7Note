@@ -9,7 +9,8 @@ const ICalGenerator = require('../utils/icalGenerator');
 const ICalParser = require('../utils/icalParser');
 const { basicAuthMiddleware } = require('../middleware/basicAuth');
 const { broadcast } = require('./ws');
-const { scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
+const { getCalendarIdCandidates, scopeExternalCalendarId, toClientCalendarId } = require('../utils/calendarIds');
+const { filterCalendarDisplayEvents, parseMaterializedRecurringInstanceId } = require('../utils/calendarShadowEvents');
 const { requirePlanCapability } = require('../middleware/memberAccess');
 const { getItemQuotaState } = require('../services/itemQuotaService');
 
@@ -39,6 +40,38 @@ function debouncedBroadcast(username) {
 function getItemQuotaErrorMessage(error) {
   if (error?.message !== 'ITEM_QUOTA_EXCEEDED') return '套餐数量限制';
   return `${error.label || '内容'}数量已达套餐上限 (${error.current || 0} / ${error.limit || 0})`;
+}
+
+async function hasRecurringMasterForMaterializedInstance(username, id, cache = new Map()) {
+    const materializedInstance = parseMaterializedRecurringInstanceId(username, id);
+    if (!materializedInstance) return false;
+
+    const cacheKey = `${username}:${materializedInstance.parentId}`;
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+    const candidates = getCalendarIdCandidates(username, materializedInstance.parentId);
+    const placeholders = candidates.map(() => '?').join(',');
+    const master = await db.queryOne(
+        `SELECT id FROM events WHERE username = ? AND recurrence IS NOT NULL AND recurrence != '' AND id IN (${placeholders}) LIMIT 1`,
+        [username, ...candidates]
+    );
+    const exists = !!master;
+    cache.set(cacheKey, exists);
+    return exists;
+}
+
+async function filterCaldavItems(username, items) {
+    const cache = new Map();
+    const filtered = [];
+
+    for (const item of items) {
+        if (item?.type === 'event' && !item.recurrence && await hasRecurringMasterForMaterializedInstance(username, item.id, cache)) {
+            continue;
+        }
+        filtered.push(item);
+    }
+
+    return filtered;
 }
 
 // XML 转义
@@ -105,7 +138,15 @@ router.propfind('/:username/', basicAuthMiddleware, async (req, res) => {
     let itemsXml = '';
 
     if (depth === '1') {
-      const items = await db.queryAll(`SELECT DISTINCT id, updatedAt FROM (SELECT id, updatedAt FROM events WHERE username = ? UNION ALL SELECT id, updatedAt FROM todos WHERE username = ?) ORDER BY updatedAt DESC`, [username, username]);
+      const [rawEvents, todos] = await Promise.all([
+        db.queryAll(`SELECT id, updatedAt, recurrence FROM events WHERE username = ?`, [username]),
+        db.queryAll(`SELECT id, updatedAt FROM todos WHERE username = ?`, [username])
+      ]);
+      const events = filterCalendarDisplayEvents(username, rawEvents);
+      const items = [
+        ...events.map(item => ({ id: item.id, updatedAt: item.updatedAt })),
+        ...todos
+      ].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       items.forEach(item => {
         const clientId = toClientCalendarId(username, item.id);
         itemsXml += `<D:response><D:href>/caldav/${urlEsc(username)}/${urlEsc(clientId)}.ics</D:href><D:propstat><D:prop><D:getetag>"${item.updatedAt}"</D:getetag><D:getcontenttype>text/calendar; charset=utf-8</D:getcontenttype><D:resourcetype/></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`;
@@ -191,6 +232,7 @@ router.report('/:username/', basicAuthMiddleware, async (req, res) => {
       const lastDelTs = del.length ? del[del.length-1].deletedAt : 0;
       newToken = Math.max(lastItemTs, lastDelTs, startTs);
     }
+    items = await filterCaldavItems(username, items);
 
     if (!newToken) {
         const lastUpdate = await db.queryOne(`SELECT MAX(ts) as maxTs FROM (SELECT updatedAt as ts FROM events WHERE username = ? UNION ALL SELECT updatedAt as ts FROM todos WHERE username = ? UNION ALL SELECT deletedAt as ts FROM deleted_items WHERE username = ?)`, [username, username, username]);
@@ -221,6 +263,9 @@ router.get('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
     const item = await db.queryOne('SELECT *, "event" as type FROM events WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]) ||
                  await db.queryOne('SELECT *, "todo" as type FROM todos WHERE id IN (?, ?) AND username = ?', [id, scopedId, username]);
     if (!item) return res.status(404).end();
+    if (item.type === 'event' && !item.recurrence && await hasRecurringMasterForMaterializedInstance(username, item.id)) {
+        return res.status(404).end();
+    }
     const exportItem = { ...item, id: toClientCalendarId(username, item.id) };
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('ETag', `"${item.updatedAt}"`);
@@ -241,6 +286,16 @@ router.put('/:username/:filename.ics', basicAuthMiddleware, async (req, res) => 
         let nextTodoCount = todoQuota.current;
         for (const e of parsed.events) {
             const recurrenceStr = e.recurrence ? JSON.stringify(e.recurrence) : null;
+            const materializedInstance = parseMaterializedRecurringInstanceId(username, e.id || id);
+            if (materializedInstance) {
+                const candidates = getCalendarIdCandidates(username, materializedInstance.parentId);
+                const placeholders = candidates.map(() => '?').join(',');
+                const master = await db.queryOne(
+                    `SELECT id FROM events WHERE username = ? AND recurrence IS NOT NULL AND recurrence != '' AND id IN (${placeholders}) LIMIT 1`,
+                    [username, ...candidates]
+                );
+                if (master) continue;
+            }
             const eventId = scopeExternalCalendarId(username, e.id || id);
             const ex = await db.queryOne('SELECT id FROM events WHERE id IN (?, ?) AND username = ?', [e.id || id, eventId, username]);
             if (ex) await db.execute('UPDATE events SET title=?, description=?, startTime=?, endTime=?, allDay=?, color=?, timezone=?, reminderEmail=?, reminderBrowser=?, reminderCaldav=?, reminderPreset=?, recurrence=?, recurrenceEnd=?, updatedAt=? WHERE id=? AND username=?', [e.title, e.description||'', e.startTime, e.endTime, e.allDay?1:0, e.color||'#2563eb', e.timezone || null, e.reminderEmail ? 1 : 0, e.reminderBrowser ? 1 : 0, e.reminderCaldav ? 1 : 0, e.reminderPreset || (e.allDay ? 'same_day_9am' : '15m'), recurrenceStr, e.recurrenceEnd||null, now, ex.id, username]);
