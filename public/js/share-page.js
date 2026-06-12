@@ -205,10 +205,6 @@ function renderFile(data, token) {
         iframe.allowFullscreen = true;
         iframe.referrerPolicy = 'no-referrer';
 
-        iframe.onload = function onLoad() {
-          console.log('[Share PDF] 加载成功');
-        };
-
         iframe.onerror = () => {
           console.error('[Share PDF] 加载失败');
           placeholder.innerHTML = `

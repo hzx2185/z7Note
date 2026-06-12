@@ -45,14 +45,10 @@ import wsManager from './websocket.js';
     // 从服务器加载笔记
     async function loadNotesFromServer() {
         try {
-            const startTime = performance.now();
-
             const res = await fetchWithTimeout('/api/files');
             if (res.ok) {
                 const notes = await res.json() || [];
                 ui.notes = notes;
-
-                const loadTime = performance.now() - startTime;
 
                 // 使用 requestAnimationFrame 优化渲染
                 requestAnimationFrame(() => {
@@ -156,7 +152,6 @@ import wsManager from './websocket.js';
                     const serverNoteMap = new Map(serverNotes.map(n => [n.id.toString(), n]));
                     const remainingNotes = [];
                     let hasUpdate = false;
-                    let deleteCount = 0;
 
                     // 处理服务器上的笔记
                     for (const serverNote of serverNotes) {
@@ -180,7 +175,6 @@ import wsManager from './websocket.js';
                     for (const localNote of localNotes) {
                         if (!serverNoteMap.has(localNote.id.toString())) {
                             // 服务器上没有这条笔记，说明被删除了
-                            deleteCount++;
                             hasUpdate = true;
                         }
                     }

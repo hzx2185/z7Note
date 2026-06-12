@@ -1,52 +1,52 @@
 export const HOME_METRICS = [
   {
-    value: '统一工作区',
-    description: '笔记、日历、联系人等模块可按套餐统一组合'
+    value: '1.0.9',
+    description: '当前稳定版本，聚焦笔记切换可靠性与发布链路整理'
   },
   {
-    value: '全栈自托管',
-    description: '数据完全自主可控，支持 Docker 一键部署'
+    value: '多端编辑',
+    description: '列表切换、标题编辑、内容保存围绕同一编辑器状态收口'
   },
   {
-    value: '免费开源',
-    description: 'MIT 协议开源，可自由定制和二次开发'
+    value: '双标签镜像',
+    description: '发布时同步推送语义版本与 latest，便于升级和回滚'
   }
 ];
 
 export const HOME_FEATURES = [
   {
-    title: '📝 模块化笔记',
-    summary: '围绕笔记编辑、分类整理和持续沉淀构建统一内容工作区。'
+    title: '📝 稳定笔记编辑',
+    summary: '点击列表标题会可靠切换内容，编辑器初始化失败也会显示明确状态。'
   },
   {
-    title: '📅 日历排期',
-    summary: '把事件、待办和时间安排放进同一套工作流，按套餐逐步扩展能力。'
+    title: '⚡ 快速切换保护',
+    summary: '快速连续切换多篇笔记时，过期编辑器初始化会被丢弃，避免标题和正文错位。'
   },
   {
-    title: '👥 联系人协同',
-    summary: '沉淀联系人与客户信息，适合个人管理和小团队协作。'
+    title: '📅 日历与提醒',
+    summary: '事件、待办、重复日程、订阅和提醒继续服务于同一个自托管工作区。'
   },
   {
     title: '🔧 套餐可配',
     summary: '配额、功能开关、模块入口都可在后台按套餐统一配置。'
   },
   {
-    title: '🔗 渐进开放',
-    summary: '分享、同步、导入导出、提醒等能力可以按版本逐步开放。'
+    title: '🔗 同步与分享',
+    summary: 'WebDAV、CalDAV、CardDAV、公开分享和附件能力可按部署需要逐步开放。'
   },
   {
-    title: '🎨 主题定制',
-    summary: '保留品牌层与界面层的灵活性，适合持续演进你的自托管工作区。'
+    title: '🧹 发布包更干净',
+    summary: '清理无用调试代码和系统临时文件，让镜像与源码保持更易维护的状态。'
   }
 ];
 
 export const HOME_HERO = {
-  eyebrow: '全栈自托管笔记工作区',
-  title: '高效管理你的笔记、日历与联系人',
-  subtitle: '把内容、排期与联系人沉淀到同一个自托管工作区，并通过套餐配置灵活控制开放范围。',
+  eyebrow: 'z7Note 1.0.9 已发布',
+  title: '更可靠的笔记切换与自托管工作区',
+  subtitle: '本次发布修复列表标题点击后内容偶发不显示的问题，并同步整理首页、更新日志、缓存版本和发布包清洁度。',
   actions: {
     primary: '立即开始',
-    secondary: '查看演示'
+    secondary: '查看更新日志'
   }
 };
 
@@ -60,13 +60,13 @@ export const HOME_SOCIAL_PROOF = {
     },
     {
       icon: '🚀',
-      title: '轻量快速部署',
-      summary: 'Docker 一键部署，资源占用极低，树莓派也能流畅运行。'
+      title: '可靠发布升级',
+      summary: '版本号、更新日志、缓存标识和 Docker 标签统一推进，升级状态更容易确认。'
     },
     {
-      icon: '💡',
-      title: '能力统一治理',
-      summary: '前台入口、后台配置与套餐能力保持一致，减少功能描述和实际权限脱节。'
+      icon: '✍️',
+      title: '编辑体验更稳',
+      summary: '编辑器等待 CodeMirror 就绪后再初始化，失败时不再静默空白。'
     },
     {
       icon: '🌐',
@@ -77,7 +77,7 @@ export const HOME_SOCIAL_PROOF = {
 };
 
 export const HOME_CTA = {
-  title: '准备好开始了吗？',
-  subtitle: '立即体验 z7Note，打造属于你的高效工作区。',
-  button: '免费试用'
+  title: '升级到 1.0.9',
+  subtitle: '刷新镜像后即可获得更稳的笔记切换体验和更新后的首页说明。',
+  button: '打开应用'
 };

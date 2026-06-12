@@ -261,9 +261,6 @@ export function enhanceUISave(UIManager, fetchWithTimeout) {
             this.updateNoteMeta(this.notes[idx]);
         }
 
-        // 更新编辑器最后修改时间
-        this._editorLastUpdateTime = now * 1000; // UI 内部计时仍可保留 ms 用于防抖比较，但在 note 结构中存秒
-
         // 直接调用API保存到云端
         return await this.saveToCloud(this.notes[idx], 1, options);
     },

@@ -1,4 +1,4 @@
-import { CHANGELOG_ENTRIES } from '/js/changelog-data.js?v=20260609-release-108';
+import { CHANGELOG_ENTRIES } from '/js/changelog-data.js?v=20260612-release-109';
 
 const timeline = document.getElementById('timeline');
 const totalVersions = document.getElementById('total-versions');

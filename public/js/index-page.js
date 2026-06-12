@@ -4,7 +4,7 @@ import {
   HOME_SOCIAL_PROOF,
   HOME_CTA,
   HOME_HERO
-} from '/js/site-data.js';
+} from '/js/site-data.js?v=20260612-release-109';
 
 const heroMetrics = document.getElementById('hero-metrics');
 const homepageFeatures = document.getElementById('homepage-features');
@@ -201,7 +201,7 @@ if (heroSubtitle && HOME_HERO) {
 if (heroActions && HOME_HERO) {
   heroActions.innerHTML = `
     <a class="btn btn-primary" href="/app">${HOME_HERO.actions.primary}</a>
-    <a class="btn btn-secondary" href="/help">${HOME_HERO.actions.secondary}</a>
+    <a class="btn btn-secondary" href="/changelog">${HOME_HERO.actions.secondary}</a>
   `;
 }
 

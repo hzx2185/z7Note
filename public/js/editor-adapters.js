@@ -1,5 +1,28 @@
 // 编辑器适配器系统 - 只使用 CodeMirror
 
+function waitForCodeMirrorReady(timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+        if (window.CodeMirror) {
+            resolve(window.CodeMirror);
+            return;
+        }
+
+        const startedAt = Date.now();
+        const timer = window.setInterval(() => {
+            if (window.CodeMirror) {
+                window.clearInterval(timer);
+                resolve(window.CodeMirror);
+                return;
+            }
+
+            if (Date.now() - startedAt >= timeoutMs) {
+                window.clearInterval(timer);
+                reject(new Error('CodeMirror core did not finish loading.'));
+            }
+        }, 50);
+    });
+}
+
 // CodeMirror 上传辅助函数
 async function uploadFileAndInsertCodeMirror(editor, file, ui) {
     const placeholder = ` [上传中: ${file.name}] `;
@@ -99,8 +122,10 @@ const CodeMirrorAdapter = {
         // 检查是否自动换行 - 默认开启
         const lineWrapping = localStorage.getItem('line-wrapping') !== 'false';
 
+        const CodeMirrorCtor = await waitForCodeMirrorReady();
+
         // 创建 CodeMirror 实例
-        const editor = CodeMirror(container, {
+        const editor = CodeMirrorCtor(container, {
             value: content || '',
             mode: 'markdown',
             lineNumbers: showLineNumbers,
@@ -844,6 +869,7 @@ const CodeMirrorAdapter = {
             setPosition: (pos) => editor.setCursor(pos),
             getCursor: () => editor.getCursor(),
             setCursor: (pos) => editor.setCursor(pos),
+            refresh: () => editor.refresh(),
             toggleLineNumbers: (show) => {
                 editor.setOption('lineNumbers', show);
                 editor.setOption('gutters', show ? ['CodeMirror-linenumbers', 'CodeMirror-activeline-gutter'] : ['CodeMirror-activeline-gutter']);
@@ -886,6 +912,7 @@ const CodeMirrorAdapter = {
                 width: editor.getScrollInfo().clientWidth
             }),
             getWrapperElement: () => editor.getWrapperElement(),
+            hasNumberHighlight: true,
             addLineClass: (line, where, cls) => editor.addLineClass(line, where, cls),
             removeLineClass: (line, where, cls) => editor.removeLineClass(line, where, cls),
             markText: (from, to, options) => editor.markText(from, to, options),
@@ -942,6 +969,9 @@ const EditorAdapterManager = {
 
         const adapter = this.adapters[type];
         this.currentEditor = await adapter.create(container, content, options);
+        if (!this.currentEditor) {
+            throw new Error(`Editor adapter "${type}" did not return an editor instance.`);
+        }
         this.currentEditor.adapterName = type;
         return this.currentEditor;
     },

@@ -6,7 +6,7 @@ import { enhanceUIList } from './ui-list.js?v=1.0.18';
 import { enhanceUIMarker } from './ui-marker.js';
 import { enhanceUIPreview } from './ui-preview.js';
 import { enhanceUIPreviewRenderer } from './ui-preview-renderer.js?v=1.0.15';
-import { enhanceUISave } from './ui-save.js?v=1.0.20';
+import { enhanceUISave } from './ui-save.js?v=1.0.9';
 import { enhanceUIHistory } from './ui-history.js?v=1.0.17';
 
 const UIManager = {
@@ -27,13 +27,13 @@ const UIManager = {
     currentLimit: 50, // 新增：保存当前的限制条目数
     _isInitializingEditor: false,
     _pendingEditorInit: null,
-    _lastActiveId: null,
+    _currentEditorInitNoteId: null,
     _lastRenderedNotesHash: '', // 用于检测笔记是否真正变化
-    _editorLastUpdateTime: 0, // 记录编辑器最后更新的时间戳
     _isComposing: false, // 输入法状态锁
     _isSaving: false, // 防止重复保存
     _isCreatingNote: false,
     _markedLoadingPromise: null, // 渲染引擎加载状态
+    _editorInitRequestId: 0,
 
     // 标记功能相关属性
     markerStart: null,    // 标记起始位置
@@ -262,7 +262,7 @@ const UIManager = {
     },
 
     // 初始化编辑器
-    async initEditor(content) {
+    async initEditor(content, noteId = this.activeId) {
         // 如果正在使用输入法，不重新初始化
         if (this._isComposing && this.activeId) {
             return;
@@ -270,21 +270,25 @@ const UIManager = {
 
         // 防抖：如果正在初始化，记录待处理的内容
         if (this._isInitializingEditor) {
-            this._pendingEditorInit = content;
+            this._pendingEditorInit = { content, noteId };
+            if (noteId?.toString() !== this._currentEditorInitNoteId?.toString()) {
+                this._editorInitRequestId++;
+            }
             return;
         }
 
+        const requestId = ++this._editorInitRequestId;
         this._isInitializingEditor = true;
         this._isInitializing = true;
         this._pendingEditorInit = null;
+        this._currentEditorInitNoteId = noteId;
 
         try {
             const container = document.getElementById("editor-container");
             if (!container) {
-                this._isInitializingEditor = false;
-                this._isInitializing = false;
                 return;
             }
+            container.classList.remove('editor-load-error');
 
             if (window.EditorAdapterManager && typeof window.EditorAdapterManager.destroyCurrentEditor === 'function') {
                 window.EditorAdapterManager.destroyCurrentEditor();
@@ -298,9 +302,16 @@ const UIManager = {
             this.editor = null;
 
             // 使用适配器系统创建编辑器
-            this.editor = await window.EditorAdapterManager.createEditor(container, content, {
+            const editor = await window.EditorAdapterManager.createEditor(container, content, {
                 onScroll: () => this.syncScroll(container, 'editor')
             });
+            if (requestId !== this._editorInitRequestId) {
+                if (editor && typeof editor.destroy === 'function') {
+                    editor.destroy();
+                }
+                return;
+            }
+            this.editor = editor;
 
             if (this.editor) {
                 const activeNote = this.activeId
@@ -352,14 +363,26 @@ const UIManager = {
                 });
             }
         } catch (e) {
+            console.error('[Editor] 初始化失败:', e);
+            this.editor = null;
+            const container = document.getElementById("editor-container");
+            if (container) {
+                container.classList.add('editor-load-error');
+                container.textContent = '编辑器加载失败，请稍后重试或刷新页面';
+            }
+            this.updateStatus('error', '编辑器加载失败');
         } finally {
             // 初始化完成，检查是否有待处理的内容
             this._isInitializingEditor = false;
             this._isInitializing = false;
-            if (this._pendingEditorInit !== null && this._pendingEditorInit !== content) {
-                const pending = this._pendingEditorInit;
-                this._pendingEditorInit = null;
-                setTimeout(() => this.initEditor(pending), 100);
+            this._currentEditorInitNoteId = null;
+            const pending = this._pendingEditorInit;
+            this._pendingEditorInit = null;
+            if (pending && (
+                pending.content !== content ||
+                pending.noteId?.toString() !== noteId?.toString()
+            )) {
+                setTimeout(() => this.initEditor(pending.content, pending.noteId), 100);
             }
         }
     },
@@ -423,12 +446,6 @@ const UIManager = {
         return keyNotes;
     },
 
-    // 标记编辑器有新修改（用于冲突检测）
-    markEditorModified() {
-        this._editorLastUpdateTime = Date.now();
-
-    },
-
     // 切换笔记 (shouldScroll 参数控制是否滚动列表)
     switch(id, shouldScroll = true) {
         const newId = id.toString();
@@ -437,6 +454,12 @@ const UIManager = {
         if (this.activeId === newId) {
             // 依然更新激活状态（以防列表刚重绘完）
             this.updateActiveStatus(shouldScroll);
+            if (!this.editor && !this._isInitializingEditor) {
+                const currentNote = this.notes.find(x => x.id.toString() === newId);
+                if (currentNote) {
+                    void this.initEditor(currentNote.content || '', currentNote.id);
+                }
+            }
             return;
         }
 
@@ -449,7 +472,6 @@ const UIManager = {
             void this.flushPendingSave({ noteSnapshot: this._captureActiveNoteSnapshot() });
         }
 
-        this._lastActiveId = newId;
         this.activeId = newId;
 
         // 切换笔记时清除标记
@@ -477,7 +499,7 @@ const UIManager = {
             this._lastSavedSignature = this._buildNoteSignature(n, n.content || '');
             this.updateNoteMeta(n);
 
-            this.initEditor(n.content || '');
+            void this.initEditor(n.content || '', n.id);
 
             // 额外触发刷新，解决沉浸式模式下行号宽度计算延迟的问题
             setTimeout(() => {
