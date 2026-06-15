@@ -17,4 +17,6 @@
   - Database Migrations: Do not perform direct SQLite schema modifications. Always create a new migration script under `src/migrations/`, verify its execution at startup, and ensure the new migration script is tracked, staged, and committed.
   - Changelog Synchronization: Before pushing a new version to GitHub and Docker Hub, ensure the local version in `package.json` is bumped, the `CHANGELOG_ENTRIES` array in `public/js/changelog-data.js` has a corresponding release entry matching the version and release date, and cache-busters are updated.
   - Multi-platform Docker Builds: When compiling multi-architecture manifests (amd64 and arm64), explicitly specify a Buildx builder using the `docker-container` driver (such as `--builder mybuilder`) to avoid build failures associated with default host platform drivers.
+- Communication Rule: Always communicate with the user in Chinese. (始终使用中文与用户进行沟通。)
+
 

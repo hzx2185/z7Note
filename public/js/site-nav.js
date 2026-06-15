@@ -62,7 +62,7 @@ function updateNavForUser(userInfo) {
     logoutLink.addEventListener('click', async (e) => {
       e.preventDefault();
       try {
-        await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+        await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
         window.location.reload();
       } catch (err) {
         console.error('Logout failed:', err);

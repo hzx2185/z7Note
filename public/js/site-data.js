@@ -1,7 +1,7 @@
 export const HOME_METRICS = [
   {
-    value: '1.0.9',
-    description: '当前稳定版本，聚焦笔记切换可靠性与发布链路整理'
+    value: '1.1.0',
+    description: '当前最新版本，修复退出登录按钮、完善文档与帮助、推送多架构镜像'
   },
   {
     value: '多端编辑',
@@ -41,9 +41,9 @@ export const HOME_FEATURES = [
 ];
 
 export const HOME_HERO = {
-  eyebrow: 'z7Note 1.0.9 已发布',
-  title: '更可靠的笔记切换与自托管工作区',
-  subtitle: '本次发布修复列表标题点击后内容偶发不显示的问题，并同步整理首页、更新日志、缓存版本和发布包清洁度。',
+  eyebrow: 'z7Note 1.1.0 已发布',
+  title: '更稳定好用的自托管笔记工作区',
+  subtitle: '本次发布修复了退出登录按钮点击无效的 Bug，完善了首页帮助中心、更新日志及部署文档，并清理了发布包中的冗余文件。',
   actions: {
     primary: '立即开始',
     secondary: '查看更新日志'
@@ -77,7 +77,7 @@ export const HOME_SOCIAL_PROOF = {
 };
 
 export const HOME_CTA = {
-  title: '升级到 1.0.9',
-  subtitle: '刷新镜像后即可获得更稳的笔记切换体验和更新后的首页说明。',
+  title: '升级到 1.1.0',
+  subtitle: '刷新镜像后即可获得更稳定的退出登录体验、最新的帮助中心与部署指南。',
   button: '打开应用'
 };

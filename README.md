@@ -496,21 +496,50 @@ docker compose up -d
   - **数据库**: 已通过迁移脚本清理了历史遗留的非标数据。
 - **毫秒级单位**: 仅用于短效会话（Session）和上传分片（Upload Chunks）的过期管理。
 
-## 🚀 最近更新 (2026-04-30)
+## 📦 开发者发布指南
 
-- **笔记列表交互调整**
-  - 笔记列表默认不显示分类，按最后修改时间倒序排列。
-  - 顶部“分类”按钮用于显示/隐藏分类视图，分类默认折叠，点击分类名展开。
-  - 新建笔记防重复提交，删除笔记增加确认框。
-  - 未修改内容时切换笔记不再刷新 `updatedAt`，避免笔记无故跳到列表顶部。
-- **通讯录 CardDAV 修复**
-  - 兼容 iPhone / macOS 通讯录写入的 `item1.TEL` 分组电话字段。
-  - 修复 iPhone 新增联系人后只同步姓名、不同步号码的问题。
-  - 增加 vCard 解析回归测试，覆盖 Apple 分组电话字段和普通电话字段。
-- **维护性清理**
-  - 拆分日历、附件、后台内容管理、UI 保存/预览、站点样式等长文件。
-  - 清理确认无用的损坏数据库备份和系统临时文件。
-  - 保留运行日志、用户数据和常规备份，避免误删生产数据。
+为了确保发布的稳定性，开发人员在向 GitHub 和 Docker Hub 发布新版本时必须遵循以下工作流程：
+
+### 1. 质量检验
+在发布或提交代码前，确保本地所有单元测试均能顺利通过：
+```bash
+npm test
+```
+
+### 2. 版本升级与更新日志同步
+- **升级版本号**：在 `package.json` 中更新语义化版本号，例如 `"version": "1.1.0"`。
+- **同步更新日志**：向 `public/js/changelog-data.js` 的 `CHANGELOG_ENTRIES` 数组最前端插入本版本的更新记录，记录中的 `version` 和发布日期需与 package 配置及实际情况保持一致。
+- **静态资源缓存控制**：当修改了 `public/js/` 或 `public/css/` 下的代码时，务必同步更新引用这些资源的所有 HTML (如 `app.html`, `index.html`, `help.html` 等) 和 CSS 文件中的 cache-busting 查询参数（如 `?v=20260615-release-110`），防止用户浏览器加载旧版本的缓存脚本。
+
+### 3. 多平台 Docker 构建与推送 (Buildx)
+发布 Docker 镜像时，要求一次性构建包含 `linux/amd64` 和 `linux/arm64` 的多架构 Manifest 镜像，且必须同时推送到语义版本标签 (如 `:1.1.0`) 和 `:latest`。
+- **使用专属 Buildx 构造器**：默认宿主机的驱动可能不支持并发多架构打包，因此必须显式指定使用 `docker-container` 驱动的专属 builder（例如 `mybuilder`）：
+  ```bash
+  # 如果尚未创建，运行以下命令创建并启用
+  docker buildx create --name mybuilder --driver docker-container --use
+  ```
+- **构建并推送**（需提前 `docker login` 到 Docker Hub）：
+  ```bash
+  docker buildx build --builder mybuilder --platform linux/amd64,linux/arm64 -t hzx2185/z7note:1.1.0 -t hzx2185/z7note:latest --push .
+  ```
+
+## 🚀 最近更新 (2026-06-15)
+
+### v1.1.0 (2026-06-15)
+- **退出登录功能修复**
+  - 修复主导航栏及会员中心退出登录按钮点击无响应的问题。
+  - 将退出登录的 API 请求从 `/auth/logout` 统一修正为 `/api/logout`。
+- **帮助中心与文档完善**
+  - 完善帮助中心页面，新增关于退出登录和最新镜像版本的 FAQ，优化运维指南排版。
+  - 更新 `README.md` 与 `DOCKER.md`，添加使用 Docker Buildx 编译并推送多架构镜像（`linux/amd64` 与 `linux/arm64`）的指南，补充最新参数说明。
+- **发布清理**
+  - 清理工程目录中的多余冗余文件，进一步减小 Docker 镜像打包体积。
+
+### v1.0.9 (2026-06-12)
+- **编辑器切换与稳定性优化**
+  - 修复笔记列表中点击标题后，CodeMirror 编辑器正文偶发不显示的问题。
+  - 优化快速连续切换笔记时的加载竞态保护，避免标题与正文短暂错位。
+  - 首页及更新日志同步版本内容，清理无用的调试代码和临时开发文件。
 
 ## 📁 目录结构
 

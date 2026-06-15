@@ -383,7 +383,7 @@ async function refresh2FABackupCodes() {
 
 async function logoutFromMemberPage() {
   try {
-    await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' });
   } finally {
     window.location.href = '/login.html';
   }

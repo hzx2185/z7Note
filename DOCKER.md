@@ -262,20 +262,48 @@ chown -R 1001:1001 data/ logs/
 docker compose up -d
 ```
 
-## 更新镜像
+## 更新与版本控制
+
+z7Note 的官方 Docker 镜像（例如 `hzx2185/z7note:latest` 或语义版本镜像如 `hzx2185/z7note:1.1.0`）是多架构（Multi-architecture）清单镜像，同时原生支持 `linux/amd64` (常见 Intel/AMD 服务器) 和 `linux/arm64` (常见 Apple Silicon、树莓派等 ARM 服务器)。部署时，Docker 将自动识别并拉取匹配宿主机架构的镜像分片。
+
+### 更新镜像（使用 Docker Compose）
+
+推荐直接使用 Compose 的 Pull 命令一键式拉取并热更新重建容器：
 
 ```bash
-# 1. 拉取最新镜像
-docker pull hzx2185/z7note:latest
+# 1. 拉取最新定义的镜像分片
+docker compose pull
 
-# 2. 停止并删除旧容器
-docker compose down
-
-# 3. 启动新容器
+# 2. 重建并后台启动受影响的容器（保留旧数据卷数据，进行无损升级）
 docker compose up -d
 
-# 4. 查看日志确认启动成功
+# 3. 检查控制台日志以确认新容器已成功启动
 docker compose logs -f
+```
+
+### 更新镜像（使用原生 Docker 命令）
+
+```bash
+# 1. 拉取最新版本的镜像
+docker pull hzx2185/z7note:latest
+
+# 2. 停止并移除正在运行的旧容器
+docker stop z7note
+docker rm z7note
+
+# 3. 使用原有的映射路径及环境参数重新启动新容器
+docker run -d \
+  --name z7note \
+  -p 3000:80 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  -e TZ=Asia/Shanghai \
+  -e ADMIN_USER=admin \
+  --restart unless-stopped \
+  hzx2185/z7note:latest
+
+# 4. 查看日志确认启动成功
+docker logs -f z7note
 ```
 
 ## DAV 客户端配置
