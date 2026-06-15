@@ -623,6 +623,29 @@ const Admin = {
         currentEl.textContent = status.currentVersion || '-';
         latestEl.textContent = latestVersion || (status.remoteError ? '获取失败' : '-');
 
+        const dockerEl = document.getElementById('version-docker');
+        const githubEl = document.getElementById('version-github');
+        if (dockerEl) {
+            dockerEl.textContent = status.dockerVersion || (status.dockerError ? '获取失败' : '-');
+            if (status.dockerError) {
+                dockerEl.title = status.dockerError;
+                dockerEl.style.color = 'var(--text-danger, #d9534f)';
+            } else {
+                dockerEl.removeAttribute('title');
+                dockerEl.style.color = '';
+            }
+        }
+        if (githubEl) {
+            githubEl.textContent = status.githubVersion || (status.githubError ? '获取失败' : '-');
+            if (status.githubError) {
+                githubEl.title = status.githubError;
+                githubEl.style.color = 'var(--text-danger, #d9534f)';
+            } else {
+                githubEl.removeAttribute('title');
+                githubEl.style.color = '';
+            }
+        }
+
         badgeEl.classList.remove('update', 'ok', 'warn', 'running');
         if (updateState.running) {
             badgeEl.textContent = '更新中';

@@ -274,25 +274,48 @@ async function getRemoteVersion(options = {}) {
 
   const githubRepo = getGithubRepo();
   const dockerImage = getDockerImage();
-  const errors = [];
 
-  try {
-    const remote = await fetchLatestGithubTag(githubRepo);
-    remoteCache = { cachedAt: now, value: remote };
-    return remote;
-  } catch (error) {
-    errors.push(`GitHub: ${error.message}`);
+  let githubRemote = null;
+  let dockerRemote = null;
+  let githubError = null;
+  let dockerError = null;
+
+  // 并行获取 GitHub 和 Docker Hub 版本，出错时记录错误而不直接中断
+  const [githubResult, dockerResult] = await Promise.allSettled([
+    fetchLatestGithubTag(githubRepo),
+    fetchLatestDockerTag(dockerImage)
+  ]);
+
+  if (githubResult.status === 'fulfilled') {
+    githubRemote = githubResult.value;
+  } else {
+    githubError = githubResult.reason?.message || '获取 GitHub 版本失败';
   }
 
-  try {
-    const remote = await fetchLatestDockerTag(dockerImage);
-    remoteCache = { cachedAt: now, value: remote };
-    return remote;
-  } catch (error) {
-    errors.push(`Docker Hub: ${error.message}`);
+  if (dockerResult.status === 'fulfilled') {
+    dockerRemote = dockerResult.value;
+  } else {
+    dockerError = dockerResult.reason?.message || '获取 Docker Hub 版本失败';
   }
 
-  throw new Error(errors.join('；') || '无法获取远端版本');
+  // 如果两个都失败，则抛出错误
+  if (!githubRemote && !dockerRemote) {
+    const errorMsg = [
+      githubError ? `GitHub: ${githubError}` : '',
+      dockerError ? `Docker Hub: ${dockerError}` : ''
+    ].filter(Boolean).join('；');
+    throw new Error(errorMsg || '无法获取远端版本');
+  }
+
+  const value = {
+    github: githubRemote,
+    docker: dockerRemote,
+    githubError,
+    dockerError
+  };
+
+  remoteCache = { cachedAt: now, value };
+  return value;
 }
 
 function buildUpdateHint(targetTag, context = {}) {
@@ -338,31 +361,42 @@ async function getVersionStatus(options = {}) {
     remoteError = error.message;
   }
 
-  const latestTag = remote?.tagName || '';
+  const githubTag = remote?.github?.tagName || '';
+  const dockerTag = remote?.docker?.tagName || '';
+  
+  // 探测远程最新版本，优先以 Docker 镜像版本为准，如果没有则以 GitHub 版本为准
+  const latestTag = dockerTag || githubTag || '';
   const comparison = latestTag ? compareVersions(currentVersion, latestTag) : null;
   const updateAvailable = comparison === 1;
   const comparable = comparison !== null;
-  const remotePlatforms = Array.isArray(remote?.platforms) ? remote.platforms : [];
+  const remotePlatforms = Array.isArray(remote?.docker?.platforms) ? remote.docker.platforms : [];
+
+  // 判断来源：如果 Docker 成功，标记为 docker-hub，否则如果 GitHub 成功标记为 github-tag / github-release
+  const activeRemote = remote?.docker || remote?.github || null;
 
   return {
     currentVersion,
     latestVersion: latestTag || '',
+    githubVersion: githubTag || '',
+    dockerVersion: dockerTag || '',
+    githubError: remote?.githubError || '',
+    dockerError: remote?.dockerError || '',
     comparable,
     updateAvailable,
     comparison,
     remoteError,
-    source: remote?.source || '',
-    publishedAt: remote?.publishedAt || '',
-    releaseUrl: remote?.htmlUrl || releaseUrl,
+    source: activeRemote?.source || '',
+    publishedAt: activeRemote?.publishedAt || '',
+    releaseUrl: activeRemote?.htmlUrl || releaseUrl,
     githubRepo,
     dockerImage,
     runtimePlatform,
     remotePlatforms,
     remotePlatformText: remotePlatforms.length ? remotePlatforms.join(' / ') : '',
     platformMatched: remotePlatforms.length ? remotePlatforms.includes(runtimePlatform) : true,
-    targetImage: latestTag ? `${dockerImage}:${latestTag}` : `${dockerImage}:latest`,
+    targetImage: dockerTag ? `${dockerImage}:${dockerTag}` : `${dockerImage}:latest`,
     updateEnabled: !!getUpdateCommand(),
-    updateHint: buildUpdateHint(latestTag, { runtimePlatform, remotePlatforms, dockerImage }),
+    updateHint: buildUpdateHint(dockerTag || latestTag, { runtimePlatform, remotePlatforms, dockerImage }),
     updateState: getUpdateState()
   };
 }

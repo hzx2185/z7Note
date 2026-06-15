@@ -2,6 +2,20 @@ export const CHANGELOG_ENTRIES = [
   {
     date: '2026-06-15',
     month: '2026-06',
+    version: '1.1.1',
+    type: '新功能',
+    title: '后台版本更新面板改进与远程 Docker 版本探测',
+    summary: '管理后台增加检查更新与探测远程 Docker 版本功能，支持并行检测并单独展示 Docker 镜像和 GitHub 源码版本。',
+    details: [
+      '并行抓取 GitHub 与 Docker Hub tag，避免单一网络接口失败导致整体版本检查不可用',
+      '后台“版本更新”卡片中新增“Docker 镜像”和“GitHub 源码”展示行，详细呈现各来源的远程最新 tag',
+      '版本检查出错时，可直接在对应行悬停查看具体网络报错信息，方便排查限流或网络问题',
+      '默认优先使用远程 Docker 镜像 tag 作为自动更新的目标和匹配依据，更贴合容器化运维环境'
+    ]
+  },
+  {
+    date: '2026-06-15',
+    month: '2026-06',
     version: '1.1.0',
     type: '问题修复与完善',
     title: '退出登录按钮修复、文档完善与发布清理',

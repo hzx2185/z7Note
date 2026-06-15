@@ -1,7 +1,7 @@
 export const HOME_METRICS = [
   {
-    value: '1.1.0',
-    description: '当前最新版本，修复退出登录按钮、完善文档与帮助、推送多架构镜像'
+    value: '1.1.1',
+    description: '当前最新版本，后台支持显示并单独检测远程 Docker 镜像与 GitHub 源码版本'
   },
   {
     value: '多端编辑',
@@ -41,9 +41,9 @@ export const HOME_FEATURES = [
 ];
 
 export const HOME_HERO = {
-  eyebrow: 'z7Note 1.1.0 已发布',
+  eyebrow: 'z7Note 1.1.1 已发布',
   title: '更稳定好用的自托管笔记工作区',
-  subtitle: '本次发布修复了退出登录按钮点击无效的 Bug，完善了首页帮助中心、更新日志及部署文档，并清理了发布包中的冗余文件。',
+  subtitle: '本次发布在后台管理中新增了独立的 Docker 镜像及 GitHub 源码版本检测，并对版本状态渲染逻辑进行了完善。',
   actions: {
     primary: '立即开始',
     secondary: '查看更新日志'
@@ -77,7 +77,7 @@ export const HOME_SOCIAL_PROOF = {
 };
 
 export const HOME_CTA = {
-  title: '升级到 1.1.0',
-  subtitle: '刷新镜像后即可获得更稳定的退出登录体验、最新的帮助中心与部署指南。',
+  title: '升级到 1.1.1',
+  subtitle: '升级到最新版本以获得最新的后台独立版本探测与自动更新参考目标。',
   button: '打开应用'
 };

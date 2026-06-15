@@ -507,12 +507,12 @@ npm test
 ```
 
 ### 2. 版本升级与更新日志同步
-- **升级版本号**：在 `package.json` 中更新语义化版本号，例如 `"version": "1.1.0"`。
+- **升级版本号**：在 `package.json` 中更新语义化版本号，例如 `"version": "1.1.1"`。
 - **同步更新日志**：向 `public/js/changelog-data.js` 的 `CHANGELOG_ENTRIES` 数组最前端插入本版本的更新记录，记录中的 `version` 和发布日期需与 package 配置及实际情况保持一致。
-- **静态资源缓存控制**：当修改了 `public/js/` 或 `public/css/` 下的代码时，务必同步更新引用这些资源的所有 HTML (如 `app.html`, `index.html`, `help.html` 等) 和 CSS 文件中的 cache-busting 查询参数（如 `?v=20260615-release-110`），防止用户浏览器加载旧版本的缓存脚本。
+- **静态资源缓存控制**：当修改了 `public/js/` 或 `public/css/` 下的代码时，务必同步更新引用这些资源的所有 HTML (如 `app.html`, `index.html`, `help.html` 等) 和 CSS 文件中的 cache-busting 查询参数（如 `?v=20260615-release-111`），防止用户浏览器加载旧版本的缓存脚本。
 
 ### 3. 多平台 Docker 构建与推送 (Buildx)
-发布 Docker 镜像时，要求一次性构建包含 `linux/amd64` 和 `linux/arm64` 的多架构 Manifest 镜像，且必须同时推送到语义版本标签 (如 `:1.1.0`) 和 `:latest`。
+发布 Docker 镜像时，要求一次性构建包含 `linux/amd64` 和 `linux/arm64` 的多架构 Manifest 镜像，且必须同时推送到语义版本标签 (如 `:1.1.1`) 和 `:latest`。
 - **使用专属 Buildx 构造器**：默认宿主机的驱动可能不支持并发多架构打包，因此必须显式指定使用 `docker-container` 驱动的专属 builder（例如 `mybuilder`）：
   ```bash
   # 如果尚未创建，运行以下命令创建并启用
@@ -520,10 +520,17 @@ npm test
   ```
 - **构建并推送**（需提前 `docker login` 到 Docker Hub）：
   ```bash
-  docker buildx build --builder mybuilder --platform linux/amd64,linux/arm64 -t hzx2185/z7note:1.1.0 -t hzx2185/z7note:latest --push .
+  docker buildx build --builder mybuilder --platform linux/amd64,linux/arm64 -t hzx2185/z7note:1.1.1 -t hzx2185/z7note:latest --push .
   ```
 
 ## 🚀 最近更新 (2026-06-15)
+
+### v1.1.1 (2026-06-15)
+- **后台更新面板改进与 Docker 版本探测**
+  - 改进管理后台版本检查机制，改为并行查询 GitHub 和 Docker Hub 标签，提高网络稳定性。
+  - 在后台“版本更新”面板中新增独立的“Docker 镜像”和“GitHub 源码”版本展示行，详细说明各来源的最新 tag 状态。
+  - 版本检测出错时支持鼠标悬浮展示详细请求错误，便于排查网络及限流问题。
+  - 默认将 Docker 镜像 tag 作为主要的匹配和自动更新参考目标。
 
 ### v1.1.0 (2026-06-15)
 - **退出登录功能修复**

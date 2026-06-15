@@ -264,7 +264,7 @@ docker compose up -d
 
 ## 更新与版本控制
 
-z7Note 的官方 Docker 镜像（例如 `hzx2185/z7note:latest` 或语义版本镜像如 `hzx2185/z7note:1.1.0`）是多架构（Multi-architecture）清单镜像，同时原生支持 `linux/amd64` (常见 Intel/AMD 服务器) 和 `linux/arm64` (常见 Apple Silicon、树莓派等 ARM 服务器)。部署时，Docker 将自动识别并拉取匹配宿主机架构的镜像分片。
+z7Note 的官方 Docker 镜像（例如 `hzx2185/z7note:latest` 或语义版本镜像如 `hzx2185/z7note:1.1.1`）是多架构（Multi-architecture）清单镜像，同时原生支持 `linux/amd64` (常见 Intel/AMD 服务器) 和 `linux/arm64` (常见 Apple Silicon、树莓派等 ARM 服务器)。部署时，Docker 将自动识别并拉取匹配宿主机架构的镜像分片。
 
 ### 更新镜像（使用 Docker Compose）
 
