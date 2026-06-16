@@ -1,7 +1,7 @@
 export const HOME_METRICS = [
   {
-    value: '1.1.1',
-    description: '当前最新版本，后台支持显示并单独检测远程 Docker 镜像与 GitHub 源码版本'
+    value: '自托管',
+    description: '数据完全由您自主掌控，无隐私泄露与数据丢失风险'
   },
   {
     value: '多端编辑',
@@ -41,9 +41,9 @@ export const HOME_FEATURES = [
 ];
 
 export const HOME_HERO = {
-  eyebrow: 'z7Note 1.1.1 已发布',
+  eyebrow: '全栈自托管笔记工作区',
   title: '更稳定好用的自托管笔记工作区',
-  subtitle: '本次发布在后台管理中新增了独立的 Docker 镜像及 GitHub 源码版本检测，并对版本状态渲染逻辑进行了完善。',
+  subtitle: '将笔记、日历、联系人、提醒与分享整合为一个轻量、安全、可自托管的个人与团队协作空间。',
   actions: {
     primary: '立即开始',
     secondary: '查看更新日志'
@@ -77,7 +77,7 @@ export const HOME_SOCIAL_PROOF = {
 };
 
 export const HOME_CTA = {
-  title: '升级到 1.1.1',
-  subtitle: '升级到最新版本以获得最新的后台独立版本探测与自动更新参考目标。',
-  button: '打开应用'
+  title: '准备好开始了吗？',
+  subtitle: '立即体验 z7Note，打造属于您的专属高效自托管工作区。',
+  button: '免费试用'
 };

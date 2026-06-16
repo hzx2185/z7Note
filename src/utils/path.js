@@ -109,41 +109,9 @@ function isValidFilename(filename) {
   return true;
 }
 
-/**
- * 清理文件名
- * @param {string} filename - 原始文件名
- * @returns {string} 清理后的安全文件名
- */
-function sanitizeFilename(filename) {
-  if (typeof filename !== 'string') {
-    throw new Error('文件名必须是字符串');
-  }
-
-  // 移除路径部分
-  const name = path.basename(filename);
-
-  // 替换非法字符为下划线
-  const cleaned = name
-    .replace(/[<>:"|?*\x00-\x1f]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/\.{2,}/g, '.');
-
-  // 限制长度
-  const maxLength = 200; // 留出空间给扩展名
-  const ext = path.extname(cleaned);
-  const baseName = path.basename(cleaned, ext);
-
-  if (baseName.length > maxLength) {
-    return baseName.substring(0, maxLength) + ext;
-  }
-
-  return cleaned;
-}
-
 module.exports = {
   sanitizePath,
   validatePath,
   safePath,
-  isValidFilename,
-  sanitizeFilename
+  isValidFilename
 };

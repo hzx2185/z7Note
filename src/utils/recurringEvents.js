@@ -184,57 +184,10 @@ function createRecurrenceRule(rule) {
   return JSON.stringify(rule);
 }
 
-/**
- * 检查日期是否符合重复规则
- * @param {Date} date - 要检查的日期
- * @param {Object} recurrence - 重复规则
- * @param {Date} startDate - 事件开始日期
- * @returns {boolean} 是否符合
- */
-function matchesRecurrenceRule(date, recurrence, startDate) {
-  if (!recurrence || !recurrence.type) return false;
-
-  const { type, interval = 1, daysOfWeek = [], dayOfMonth, monthOfYear } = recurrence;
-
-  switch (type) {
-    case 'daily':
-      return true;
-
-    case 'weekly':
-      if (daysOfWeek.length > 0) {
-        return daysOfWeek.includes(date.getUTCDay());
-      }
-      // 计算周数间隔
-      const weekDiff = Math.floor((date - startDate) / (7 * 24 * 60 * 60 * 1000));
-      return weekDiff % interval === 0;
-
-    case 'monthly':
-      if (dayOfMonth) {
-        return date.getUTCDate() === dayOfMonth;
-      }
-      const monthDiff = (date.getUTCFullYear() - startDate.getUTCFullYear()) * 12 +
-                       (date.getUTCMonth() - startDate.getUTCMonth());
-      return monthDiff % interval === 0 && date.getUTCDate() === startDate.getUTCDate();
-
-    case 'yearly':
-      if (monthOfYear && dayOfMonth) {
-        return date.getUTCMonth() + 1 === monthOfYear && date.getUTCDate() === dayOfMonth;
-      }
-      const yearDiff = date.getUTCFullYear() - startDate.getUTCFullYear();
-      return yearDiff % interval === 0 &&
-             date.getUTCMonth() === startDate.getUTCMonth() &&
-             date.getUTCDate() === startDate.getUTCDate();
-
-    default:
-      return false;
-  }
-}
-
 module.exports = {
   generateRecurringEvents,
   parseRecurrenceRule,
   createRecurrenceRule,
-  matchesRecurrenceRule,
   parseExcludedDates,
   getNextRecurringOccurrenceStart
 };

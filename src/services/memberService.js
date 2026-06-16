@@ -133,21 +133,6 @@ function normalizePlanKey(planKey) {
   return ['free', 'pro', 'team'].includes(normalized) ? normalized : 'free';
 }
 
-function getPlanQuotaPreset(planKey) {
-  const plan = DEFAULT_PLAN_CONFIGS[normalizePlanKey(planKey)] || DEFAULT_PLAN_CONFIGS.free;
-  return { noteLimit: plan.noteLimit, fileLimit: plan.fileLimit };
-}
-
-function getPlanSummary(planKey) {
-  const plan = DEFAULT_PLAN_CONFIGS[normalizePlanKey(planKey)] || DEFAULT_PLAN_CONFIGS.free;
-  return {
-    planKey: plan.planKey,
-    planName: plan.planName,
-    planBadge: plan.planBadge,
-    planSummary: plan.planSummary
-  };
-}
-
 function getDefaultPlanConfig(planKey) {
   const normalizedPlanKey = normalizePlanKey(planKey);
   const plan = DEFAULT_PLAN_CONFIGS[normalizedPlanKey] || DEFAULT_PLAN_CONFIGS.free;
@@ -784,15 +769,11 @@ async function redeemCodeForUser(code, username) {
 
 module.exports = {
   normalizePlanKey,
-  getPlanQuotaPreset,
   getPlanQuotaPresetAsync,
-  getPlanSummary,
   getPlanSummaryAsync,
   getPlanConfig,
   listPlanConfigs,
   updatePlanConfigs,
-  normalizeCode,
-  generateRedeemCode,
   createRedeemCode,
   createRedeemCodesBatch,
   listRedeemCodes,
@@ -802,7 +783,6 @@ module.exports = {
   setRedeemCodeEnabled,
   syncUserMembershipState,
   adjustUserMembershipDays,
-  calculatePlanExpiry,
   getRemainingPlanDays,
   redeemCodeForUser
 };

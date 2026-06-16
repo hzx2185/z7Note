@@ -218,6 +218,7 @@ function buildApp() {
   app.get('/cdn/:file', createProxyMiddleware());
 
   app.get('/admin', adminAuth, (req, res) => {
+    setNoCachePageHeaders(res);
     res.sendFile(path.join(PUBLIC_DIR, 'admin.html'));
   });
 

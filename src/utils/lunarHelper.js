@@ -28,19 +28,6 @@ function solarToLunar(solarDate) {
   };
 }
 
-/**
- * 将农历日期转换为公历日期
- * @param {number} year - 农历年
- * @param {number} month - 农历月
- * @param {number} day - 农历日
- * @param {boolean} isLeapMonth - 是否闰月(暂不支持)
- * @returns {Date} 公历日期
- */
-function lunarToSolar(year, month, day, isLeapMonth = false) {
-  const lunar = Lunar.fromYmd(year, month, day);
-  const solar = lunar.getSolar();
-  return new Date(solar.toYmd());
-}
 
 /**
  * 获取指定公历日期所在农历年的下一个相同农历日期
@@ -178,22 +165,10 @@ function getLunarFestival(solarDate) {
   return null;
 }
 
-/**
- * 格式化农历日期显示
- * @param {Date} solarDate - 公历日期
- * @returns {string} 格式化的农历日期
- */
-function formatLunarDate(solarDate) {
-  const lunar = solarToLunar(solarDate);
-  return `${lunar.monthCn}${lunar.dayCn}`;
-}
-
 module.exports = {
   solarToLunar,
-  lunarToSolar,
   getNextLunarDate,
   getNextLunarMonthDate,
   generateLunarRecurringEvents,
-  getLunarFestival,
-  formatLunarDate
+  getLunarFestival
 };

@@ -176,44 +176,11 @@ function broadcastNoteDelete(username, noteId) {
   broadcast('note_delete', { noteId }, { username });
 }
 
-// 广播批量笔记更新
-function broadcastBatchNotesUpdate(username, notes) {
-  broadcast('batch_notes_update', { notes }, { username });
-}
-
-// 获取在线用户列表
-function getOnlineUsers() {
-  if (!wss) return [];
-
-  const users = new Set();
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN && client.userId) {
-      users.add(client.userId);
-    }
-  });
-  return Array.from(users);
-}
-
-// 获取在线客户端数量
-function getOnlineCount() {
-  if (!wss) return 0;
-  let count = 0;
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      count++;
-    }
-  });
-  return count;
-}
-
 module.exports = {
   initWebSocketServer,
   broadcast,
   broadcastNoteUpdate,
-  broadcastNoteDelete,
-  broadcastBatchNotesUpdate,
-  getOnlineUsers,
-  getOnlineCount
+  broadcastNoteDelete
 };
 
 function parseCookies(cookieHeader) {

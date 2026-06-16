@@ -9,7 +9,8 @@ const Admin = {
         counts: { note: 0, event: 0, todo: 0, contact: 0 },
         memberPlans: [],
         versionStatus: null,
-        updatePollTimer: null
+        updatePollTimer: null,
+        sidebarCollapsed: false
     },
 
     async api(url, options = {}) {
@@ -108,11 +109,26 @@ const Admin = {
                     { label: '刷新全站数据', handler: 'Admin.refreshAll()' }
                 ]
             },
-            users: {
-                label: '用户与套餐',
-                copy: '直接维护套餐配置、统一配额、用户套餐和账号状态。',
+            settings: {
+                label: '系统设置',
+                copy: '管理系统运行参数、自动化备份策略以及邮件通知服务。',
+                actions: [
+                    { label: '保存 SMTP', handler: "document.getElementById('smtp-config-form').requestSubmit()" },
+                    { label: '保存备份策略', handler: "document.getElementById('backup-config-form').requestSubmit()" }
+                ]
+            },
+            plans: {
+                label: '套餐配置',
+                copy: '管理会员套餐的名称、空间额度以及各层级功能开关。',
                 actions: [
                     { label: '保存套餐配置', handler: 'Admin.saveMemberPlanConfigPanel()' },
+                    { label: '刷新套餐配置', handler: 'Admin.loadMemberPlanConfigs(true)' }
+                ]
+            },
+            users: {
+                label: '会员用户',
+                copy: '维护会员用户、调整时长并分配套餐额度与功能开关。',
+                actions: [
                     { label: '新增用户', handler: 'Admin.showAddUser()' }
                 ]
             },
@@ -260,7 +276,7 @@ const Admin = {
                         </div>
                     </td>
                     <td data-label="套餐">
-                        <select class="admin-select" style="width:96px;min-height:32px" onchange="Admin.updatePlan('${usernameJs}', this.value)">
+                        <select class="admin-select admin-select-sm" onchange="Admin.updatePlan('${usernameJs}', this.value)">
                             <option value="free" ${planKey === 'free' ? 'selected' : ''}>Free</option>
                             <option value="pro" ${planKey === 'pro' ? 'selected' : ''}>Pro</option>
                             <option value="team" ${planKey === 'team' ? 'selected' : ''}>Team</option>
@@ -677,10 +693,15 @@ const Admin = {
             copyEl.textContent = `远端 tag 为 ${latestVersion}`;
             buttonEl.disabled = false;
             buttonEl.textContent = status.updateEnabled ? '自动更新' : '更新提示';
-        } else {
+        } else if (latestVersion) {
             badgeEl.textContent = '已是最新';
             badgeEl.classList.add('ok');
             copyEl.textContent = '当前版本已同步到最新 tag';
+            buttonEl.disabled = true;
+            buttonEl.textContent = '自动更新';
+        } else {
+            badgeEl.textContent = '未检查';
+            copyEl.textContent = '点击“检查更新”按钮获取最新版本';
             buttonEl.disabled = true;
             buttonEl.textContent = '自动更新';
         }
@@ -713,7 +734,8 @@ const Admin = {
 
     async checkVersion(force = false) {
         try {
-            const status = await this.api(`/api/admin/system/version${force ? '?force=1' : ''}`);
+            const query = force ? '?force=1&check=1' : '';
+            const status = await this.api(`/api/admin/system/version${query}`);
             this.renderVersionStatus(status);
             return status;
         } catch (e) {
@@ -877,9 +899,34 @@ const Admin = {
 
     restoreTabFromHash() {
         const hash = (location.hash || '').replace('#', '');
-        if (['overview', 'users', 'shares', 'redeem', 'content'].includes(hash)) {
+        if (['overview', 'settings', 'plans', 'users', 'shares', 'redeem', 'content'].includes(hash)) {
             this.switchTab(hash);
         }
+    },
+
+    applySidebarCollapsed(collapsed) {
+        this.state.sidebarCollapsed = collapsed;
+        document.body.classList.toggle('admin-sidebar-collapsed', collapsed);
+        try {
+            localStorage.setItem('z7note.adminSidebarCollapsed', collapsed ? '1' : '0');
+        } catch (e) {}
+        const toggle = document.getElementById('adminSidebarToggle');
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', String(!collapsed));
+            toggle.title = collapsed ? '展开侧边栏' : '折叠侧边栏';
+        }
+    },
+
+    toggleSidebar() {
+        this.applySidebarCollapsed(!this.state.sidebarCollapsed);
+    },
+
+    loadSidebarState() {
+        try {
+            if (localStorage.getItem('z7note.adminSidebarCollapsed') === '1') {
+                this.applySidebarCollapsed(true);
+            }
+        } catch (e) {}
     }
 };
 
@@ -889,6 +936,7 @@ window.Admin = Admin;
 window.$ = $;
 
 document.addEventListener('DOMContentLoaded', () => {
+    Admin.loadSidebarState();
     Admin.restoreTabFromHash();
     Admin.syncOverviewCounts();
     Admin.syncWorkspaceBatchActions();

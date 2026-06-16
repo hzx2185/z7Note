@@ -355,10 +355,12 @@ async function getVersionStatus(options = {}) {
   let remote = null;
   let remoteError = '';
 
-  try {
-    remote = await getRemoteVersion(options);
-  } catch (error) {
-    remoteError = error.message;
+  if (options.check || options.force) {
+    try {
+      remote = await getRemoteVersion(options);
+    } catch (error) {
+      remoteError = error.message;
+    }
   }
 
   const githubTag = remote?.github?.tagName || '';

@@ -17,11 +17,15 @@
             todo: counts.todo || 0,
             contact: counts.contact || 0
         };
-        document.getElementById('workspace-count-all').textContent = `全部 ${total}`;
-        document.getElementById('workspace-count-note').textContent = `笔记 ${counts.note || 0}`;
-        document.getElementById('workspace-count-event').textContent = `事件 ${counts.event || 0}`;
-        document.getElementById('workspace-count-todo').textContent = `待办 ${counts.todo || 0}`;
-        document.getElementById('workspace-count-contact').textContent = `联系人 ${counts.contact || 0}`;
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+        setText('workspace-count-all', `全部 ${total}`);
+        setText('workspace-count-note', `笔记 ${counts.note || 0}`);
+        setText('workspace-count-event', `事件 ${counts.event || 0}`);
+        setText('workspace-count-todo', `待办 ${counts.todo || 0}`);
+        setText('workspace-count-contact', `联系人 ${counts.contact || 0}`);
         this.syncOverviewCounts();
     },
 

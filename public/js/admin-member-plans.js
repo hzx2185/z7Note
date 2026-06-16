@@ -263,8 +263,7 @@
     },
 
     showMemberPlanConfig() {
-        this.switchTab('users');
-        document.getElementById('member-plan-config-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.switchTab('plans');
     },
         };
     };

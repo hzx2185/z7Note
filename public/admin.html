@@ -8,329 +8,306 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script src="/js/theme-runtime.js?v=20260419-theme-runtime"></script>
     <link rel="stylesheet" href="/css/app.css">
-    <link rel="stylesheet" href="/css/pages/page-admin.css?v=20260421-admin-unify">
+    <link rel="stylesheet" href="/css/pages/site/site-shell.css?v=20260615-release-111">
+    <link rel="stylesheet" href="/css/pages/site/responsive.css?v=20260615-release-111">
+    <link rel="stylesheet" href="/css/pages/page-admin.css?v=20260617-grid-minwidth-fix-v17">
 </head>
 <body data-ui-surface="app" data-theme="default" class="admin-page">
-<header class="admin-header">
-    <div class="admin-brand">
-        <div class="admin-brand-mark">管</div>
-        <div class="admin-brand-copy">
-            <h1 class="admin-brand-title">z7Note 管理工作台</h1>
-            <div class="admin-brand-meta">统一管理用户、分享以及笔记 / 日历 / 待办 / 通讯录后台内容</div>
+<header class="topbar admin-topbar">
+    <div class="shell topbar-inner">
+      <div class="topbar-left">
+        <a class="brand" href="/">
+          <div class="brand-mark">Z</div>
+          <div>
+            <div>z7Note</div>
+            <div class="brand-meta">全栈自托管 · 开源免费</div>
+          </div>
+        </a>
+        <nav class="topnav">
+          <a class="btn btn-secondary" href="/" title="首页">首页</a>
+          <a class="btn btn-secondary" href="/#features" title="功能介绍">功能</a>
+          <a class="btn btn-secondary" href="/pricing" title="会员套餐">套餐</a>
+          <a class="btn btn-secondary" href="/member" title="会员中心">会员</a>
+          <a class="btn btn-secondary" href="/help" title="帮助中心">帮助</a>
+          <a class="btn btn-secondary" href="/changelog" title="更新日志">日志</a>
+        </nav>
+      </div>
+      <div class="topbar-right">
+        <div class="topnav-actions">
+          <a class="btn btn-secondary" href="/login.html" data-site-auth-link>登录</a>
+          <a class="btn btn-secondary site-hidden" href="/login.html?tab=register" data-site-register-link>注册</a>
+          <a class="btn btn-secondary site-hidden" href="#" data-site-logout-link>退出</a>
+          <div class="app-dropdown">
+            <a class="btn btn-primary" href="/app" title="打开应用">应用⌄</a>
+            <div class="app-dropdown-menu">
+              <a class="app-dropdown-item" href="/app" data-site-module="notes">
+                <span class="app-dropdown-item-icon">📝</span>
+                笔记
+              </a>
+              <a class="app-dropdown-item" href="/calendar.html" data-site-module="calendar">
+                <span class="app-dropdown-item-icon">📅</span>
+                日历
+              </a>
+              <a class="app-dropdown-item" href="/contacts.html" data-site-module="contacts">
+                <span class="app-dropdown-item-icon">👥</span>
+                通讯录
+              </a>
+            </div>
+          </div>
         </div>
-    </div>
-    <div class="admin-header-actions">
-        <div data-theme-slot data-theme-mode="compact" data-theme-button-class="tool-btn"></div>
-        <button class="btn btn-secondary" onclick="Admin.refreshAll()">刷新数据</button>
-        <button class="btn btn-secondary" onclick="Admin.checkVersion(true)">检查更新</button>
-        <a class="btn btn-secondary admin-ghost-link" href="/app">返回应用</a>
+        <div data-theme-slot data-theme-mode="compact" data-theme-button-class="btn btn-secondary theme-toggle-compact"></div>
+      </div>
     </div>
 </header>
 
 <div class="admin-shell">
-    <aside class="admin-sidebar">
-        <section class="card admin-section">
-            <div class="admin-section-head">
-                <div>
-                    <h2 class="admin-section-title">后台导航</h2>
-                    <p class="admin-section-kicker">按系统、会员、用户、内容分类进入</p>
-                </div>
-            </div>
-            <div class="admin-nav-group">
-                <div class="admin-nav-label">系统与总览</div>
-                <div class="admin-nav-list">
-                    <button class="admin-nav-btn active" type="button" data-admin-nav="overview" onclick="Admin.switchTab('overview')">总览面板</button>
-                    <button class="admin-nav-btn" type="button" onclick="Admin.showSystemConfig()">系统参数</button>
-                    <button class="admin-nav-btn" type="button" onclick="Admin.vacuumDatabase()">数据库优化</button>
-                </div>
-            </div>
-            <div class="admin-nav-group">
-                <div class="admin-nav-label">会员与套餐</div>
-                <div class="admin-nav-list">
-                    <button class="admin-nav-btn" type="button" onclick="Admin.showMemberPlanConfig()">套餐配置</button>
-                    <button class="admin-nav-btn" type="button" data-admin-nav="redeem" onclick="Admin.switchTab('redeem')">兑换码与记录</button>
-                    <button class="admin-nav-btn" type="button" data-admin-nav="users" onclick="Admin.switchTab('users')">会员用户</button>
-                </div>
-            </div>
-            <div class="admin-nav-group">
-                <div class="admin-nav-label">分享与内容</div>
-                <div class="admin-nav-list">
-                    <button class="admin-nav-btn" type="button" data-admin-nav="shares" onclick="Admin.switchTab('shares')">分享审计</button>
-                    <button class="admin-nav-btn" type="button" data-admin-nav="content" onclick="Admin.switchTab('content')">内容管理</button>
-                </div>
-            </div>
-        </section>
-
-        <section class="card admin-section">
-            <div class="admin-section-head">
-                <div>
-                    <h2 class="admin-section-title">当前区域</h2>
-                    <p class="admin-section-kicker">随导航切换同步更新</p>
-                </div>
-            </div>
-            <div class="admin-context-card">
-                <div class="admin-context-label" id="admin-current-label">总览面板</div>
-                <div class="admin-context-copy" id="admin-current-copy">查看整站内容规模、后台范围和核心入口。</div>
-                <div class="admin-context-actions" id="admin-current-actions">
-                    <button class="admin-nav-btn active" type="button" onclick="Admin.switchTab('overview')">查看总览</button>
-                </div>
-            </div>
-        </section>
-
-        <section class="card admin-section">
-            <div class="admin-section-head">
-                <div>
-                    <h2 class="admin-section-title">系统状态</h2>
-                    <p class="admin-section-kicker">数据库与全站资源概况</p>
-                </div>
-            </div>
-            <div class="admin-stat-grid">
-                <div class="admin-stat-card">
-                    <div class="admin-stat-label">总计</div>
-                    <div class="admin-stat-value" id="db-total-size">-</div>
-                </div>
-                <div class="admin-stat-card">
-                    <div class="admin-stat-label">已用</div>
-                    <div class="admin-stat-value" id="db-used-size">-</div>
-                </div>
-                <div class="admin-stat-card">
-                    <div class="admin-stat-label">碎片</div>
-                    <div class="admin-stat-value warn" id="db-free-size">-</div>
-                </div>
-                <div class="admin-stat-card">
-                    <div class="admin-stat-label">用户</div>
-                    <div class="admin-stat-value" id="stat-user-count">-</div>
-                </div>
-            </div>
-            <div class="admin-inline-actions" style="margin-top:12px">
-                <button class="btn btn-secondary" onclick="Admin.showMemberPlanConfig()">套餐配置</button>
-                <button class="btn btn-secondary" onclick="Admin.vacuumDatabase()">数据库优化</button>
-            </div>
-        </section>
-
-        <section class="card admin-section">
-            <div class="admin-section-head">
-                <div>
-                    <h2 class="admin-section-title">版本更新</h2>
-                    <p class="admin-section-kicker" id="version-status-copy">正在读取当前版本</p>
-                </div>
-                <span class="admin-version-pill" id="version-update-badge">检查中</span>
-            </div>
-            <div class="admin-version-card" id="version-card">
-                <div class="admin-version-row">
-                    <span>当前版本</span>
-                    <strong id="version-current">-</strong>
-                </div>
-                <div class="admin-version-row">
-                    <span>最新版本</span>
-                    <strong id="version-latest">-</strong>
-                </div>
-                <div class="admin-version-row">
-                    <span>Docker 镜像</span>
-                    <strong id="version-docker">-</strong>
-                </div>
-                <div class="admin-version-row">
-                    <span>GitHub 源码</span>
-                    <strong id="version-github">-</strong>
-                </div>
-                <p class="admin-version-tip" id="version-tip">后台会从 GitHub / Docker Hub 获取最新版本。</p>
-                <div class="admin-inline-actions">
-                    <button class="btn btn-secondary" type="button" onclick="Admin.checkVersion(true)">检查更新</button>
-                    <button class="btn admin-primary-fill" type="button" id="version-update-btn" onclick="Admin.startSystemUpdate()" disabled>自动更新</button>
-                </div>
-            </div>
-        </section>
-
-        <section class="card admin-section">
-            <div class="admin-section-head">
-                <div>
-                    <h2 class="admin-section-title">SMTP 配置</h2>
-                    <p class="admin-section-kicker">统一邮件通知与备份发送通道</p>
-                </div>
-            </div>
-            <form id="smtp-config-form" onsubmit="Admin.saveSmtpConfig(event)" class="admin-form-grid">
-                <div class="admin-form-group">
-                    <label for="smtp-host">SMTP 服务器</label>
-                    <input type="text" class="admin-input" id="smtp-host" placeholder="smtp.example.com" autocomplete="off">
-                </div>
-                <div class="admin-form-grid two">
-                    <div class="admin-form-group">
-                        <label for="smtp-port">端口</label>
-                        <input type="number" class="admin-input" id="smtp-port" placeholder="587" autocomplete="off">
-                    </div>
-                    <div class="admin-form-group">
-                        <label for="smtp-secure">SSL/TLS</label>
-                        <select class="admin-select" id="smtp-secure" autocomplete="off">
-                            <option value="false">禁用</option>
-                            <option value="true">启用</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="admin-form-group">
-                    <label for="smtp-user">用户名</label>
-                    <input type="text" class="admin-input" id="smtp-user" placeholder="your@email.com" autocomplete="off">
-                </div>
-                <div class="admin-form-group">
-                    <label for="smtp-pass">密码 / 授权码</label>
-                    <input type="password" class="admin-input" id="smtp-pass" placeholder="授权码或密码" autocomplete="new-password">
-                </div>
-                <div class="admin-inline-actions">
-                    <button type="submit" class="btn admin-success-fill">保存 SMTP</button>
-                    <button type="button" class="btn btn-secondary" onclick="Admin.testSmtpConfig()">发送测试</button>
-                </div>
-            </form>
-        </section>
-
-        <section class="card admin-section">
-            <div class="admin-section-head">
-                <div>
-                    <h2 class="admin-section-title">自动化任务</h2>
-                    <p class="admin-section-kicker">备份、WebDAV、邮件通知</p>
-                </div>
-            </div>
-            <form id="backup-config-form" onsubmit="Admin.saveBackupConfig(event)" class="admin-form-grid">
-                <div class="admin-form-group">
-                    <label for="bc-schedule">备份策略</label>
-                    <select class="admin-select" id="bc-schedule" autocomplete="off" onchange="Admin.toggleCustomSchedule(this)">
-                        <option value="none">已关闭</option>
-                        <option value="0 0 * * *">每天凌晨</option>
-                        <option value="0 0 * * 0">每周日凌晨</option>
-                        <option value="0 */6 * * *">每 6 小时</option>
-                        <option value="custom">自定义 Cron</option>
-                    </select>
-                </div>
-                <div id="bc-schedule-custom-container" class="admin-form-group" style="display:none">
-                    <label for="bc-schedule-custom">自定义 Cron</label>
-                    <input type="text" class="admin-input" id="bc-schedule-custom" placeholder="0 2 * * *" autocomplete="off">
-                </div>
-                <div class="admin-form-group">
-                    <label for="bc-backupMode">备份模式</label>
-                    <select class="admin-select" id="bc-backupMode" autocomplete="off">
-                        <option value="incremental">增量备份</option>
-                        <option value="full">全量备份</option>
-                    </select>
-                </div>
-                <div class="admin-form-group">
-                    <label for="bc-keepCount">保留份数 (WebDAV)</label>
-                    <input type="number" class="admin-input" id="bc-keepCount" min="0" placeholder="0 = 不限制" autocomplete="off">
-                </div>
-                <div class="admin-form-group">
-                    <label for="bc-webdavUrl">WebDAV 地址</label>
-                    <input type="url" class="admin-input" id="bc-webdavUrl" placeholder="https://..." autocomplete="off">
-                </div>
-                <div class="admin-form-grid two">
-                    <div class="admin-form-group">
-                        <label for="bc-webdavUser">WebDAV 用户</label>
-                        <input type="text" class="admin-input" id="bc-webdavUser" autocomplete="off">
-                    </div>
-                    <div class="admin-form-group">
-                        <label for="bc-webdavPassword">WebDAV 密码</label>
-                        <input type="password" class="admin-input" id="bc-webdavPassword" autocomplete="new-password">
-                    </div>
-                </div>
-                <div class="admin-form-group">
-                    <label for="bc-emailAddress">通知邮箱</label>
-                    <input type="email" class="admin-input" id="bc-emailAddress" autocomplete="off">
-                </div>
-                <div class="admin-checkbox-list">
-                    <label class="admin-checkbox"><input type="checkbox" id="bc-useWebDAV"> <span>启用 WebDAV 同步</span></label>
-                    <label class="admin-checkbox"><input type="checkbox" id="bc-sendEmail"> <span>发送备份成功邮件</span></label>
-                    <label class="admin-checkbox"><input type="checkbox" id="bc-attachments"> <span>备份压缩包包含附件</span></label>
-                </div>
-                <div class="admin-inline-actions">
-                    <button type="submit" class="btn admin-success-fill">保存策略</button>
-                    <button type="button" class="btn btn-secondary" onclick="Admin.backupNow()">立即备份</button>
-                </div>
-            </form>
-        </section>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <nav class="admin-nav" aria-label="后台导航">
+            <button class="admin-sidebar-toggle" id="adminSidebarToggle" type="button" onclick="Admin.toggleSidebar()" aria-expanded="true" title="折叠侧边栏" aria-controls="adminSidebar">
+                <span class="admin-sidebar-toggle-icon" aria-hidden="true">‹</span>
+            </button>
+            <button class="admin-nav-btn active" type="button" data-admin-nav="overview" data-icon="总" title="总览面板" onclick="Admin.switchTab('overview')">总览</button>
+            <button class="admin-nav-btn" type="button" data-admin-nav="settings" data-icon="设" title="系统设置" onclick="Admin.switchTab('settings')">设置</button>
+            <span class="admin-nav-sep" aria-hidden="true"></span>
+            <button class="admin-nav-btn" type="button" data-admin-nav="plans" data-icon="套" title="套餐配置" onclick="Admin.switchTab('plans')">套餐</button>
+            <button class="admin-nav-btn" type="button" data-admin-nav="redeem" data-icon="兑" title="兑换码与记录" onclick="Admin.switchTab('redeem')">兑换</button>
+            <button class="admin-nav-btn" type="button" data-admin-nav="users" data-icon="用" title="会员用户" onclick="Admin.switchTab('users')">用户</button>
+            <span class="admin-nav-sep" aria-hidden="true"></span>
+            <button class="admin-nav-btn" type="button" data-admin-nav="shares" data-icon="分" title="分享审计" onclick="Admin.switchTab('shares')">分享</button>
+            <button class="admin-nav-btn" type="button" data-admin-nav="content" data-icon="内" title="内容管理" onclick="Admin.switchTab('content')">内容</button>
+        </nav>
     </aside>
 
     <main class="admin-main">
-        <section class="card admin-hero">
-            <h2 class="admin-hero-title">后台样式与内容管理已收拢为同一个工作台</h2>
-            <p class="admin-hero-copy">用户管理、分享审计和内容后台不再割裂。笔记、日历事件、待办、通讯录都在同一套筛选、统计、预览和删除动作下统一处理，便于后台巡检和运营管理。</p>
-            <div class="admin-overview-grid">
-                <article class="admin-overview-card" data-type="note">
-                    <div class="admin-overview-label">笔记管理</div>
-                    <div class="admin-overview-value" id="overview-note-count">0</div>
-                    <div class="admin-overview-desc">集中查看标题、摘要、更新时间</div>
-                    <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('note')">进入笔记后台</button>
-                </article>
-                <article class="admin-overview-card" data-type="event">
-                    <div class="admin-overview-label">日历事件</div>
-                    <div class="admin-overview-value" id="overview-event-count">0</div>
-                    <div class="admin-overview-desc">筛查事件、重复规则与时间状态</div>
-                    <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('event')">进入日历后台</button>
-                </article>
-                <article class="admin-overview-card" data-type="todo">
-                    <div class="admin-overview-label">待办事项</div>
-                    <div class="admin-overview-value" id="overview-todo-count">0</div>
-                    <div class="admin-overview-desc">统一跟踪完成状态与截止时间</div>
-                    <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('todo')">进入待办后台</button>
-                </article>
-                <article class="admin-overview-card" data-type="contact">
-                    <div class="admin-overview-label">通讯录管理</div>
-                    <div class="admin-overview-value" id="overview-contact-count">0</div>
-                    <div class="admin-overview-desc">快速定位联系人、组织和备注</div>
-                    <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('contact')">进入通讯录后台</button>
-                </article>
-            </div>
-        </section>
-
         <section id="tab-overview" class="admin-tab-pane active">
+            <section class="card admin-hero admin-hero-compact">
+                <div class="admin-hero-head">
+                    <div>
+                        <h2 class="admin-hero-title">统一管理笔记、日历、待办与通讯录</h2>
+                        <p class="admin-hero-copy">通过统一的筛选、统计与删除动作快速巡检整站内容，点击下方卡片直接进入对应管理视角。</p>
+                    </div>
+                </div>
+                <div class="admin-overview-grid">
+                    <article class="admin-overview-card" data-type="note">
+                        <div class="admin-overview-label">笔记</div>
+                        <div class="admin-overview-value" id="overview-note-count">0</div>
+                        <div class="admin-overview-desc">集中查看标题、摘要、更新时间</div>
+                        <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('note')">进入笔记后台</button>
+                    </article>
+                    <article class="admin-overview-card" data-type="event">
+                        <div class="admin-overview-label">日历事件</div>
+                        <div class="admin-overview-value" id="overview-event-count">0</div>
+                        <div class="admin-overview-desc">筛查事件、重复规则与时间状态</div>
+                        <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('event')">进入日历后台</button>
+                    </article>
+                    <article class="admin-overview-card" data-type="todo">
+                        <div class="admin-overview-label">待办事项</div>
+                        <div class="admin-overview-value" id="overview-todo-count">0</div>
+                        <div class="admin-overview-desc">统一跟踪完成状态与截止时间</div>
+                        <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('todo')">进入待办后台</button>
+                    </article>
+                    <article class="admin-overview-card" data-type="contact">
+                        <div class="admin-overview-label">通讯录</div>
+                        <div class="admin-overview-value" id="overview-contact-count">0</div>
+                        <div class="admin-overview-desc">快速定位联系人、组织和备注</div>
+                        <button class="btn btn-secondary" type="button" onclick="Admin.openContentManager('contact')">进入通讯录后台</button>
+                    </article>
+                </div>
+                <div class="admin-hero-meta">
+                    <span class="admin-muted">全部内容合计</span>
+                    <strong id="overview-total-count">0</strong>
+                    <span class="admin-muted">条</span>
+                </div>
+            </section>
+
             <div class="admin-summary-grid">
                 <article class="card admin-panel">
                     <div class="admin-panel-head">
                         <div>
-                            <h3 class="admin-panel-title">后台范围</h3>
-                            <p class="admin-panel-copy">统一接入的后台模块</p>
+                            <h3 class="admin-panel-title">系统状态</h3>
+                            <p class="admin-panel-copy">数据库与全站资源概况</p>
                         </div>
                     </div>
-                    <div class="admin-badge-row">
-                        <span class="admin-badge">用户管理</span>
-                        <span class="admin-badge">分享审计</span>
-                        <span class="admin-badge">笔记后台</span>
-                        <span class="admin-badge">日历事件后台</span>
-                        <span class="admin-badge">待办后台</span>
-                        <span class="admin-badge">通讯录后台</span>
-                        <span class="admin-badge">回收站清理</span>
+                    <div class="admin-stat-grid admin-stat-grid-quad">
+                        <div class="admin-stat-card">
+                            <div class="admin-stat-label">总计</div>
+                            <div class="admin-stat-value" id="db-total-size">-</div>
+                        </div>
+                        <div class="admin-stat-card">
+                            <div class="admin-stat-label">已用</div>
+                            <div class="admin-stat-value" id="db-used-size">-</div>
+                        </div>
+                        <div class="admin-stat-card">
+                            <div class="admin-stat-label">碎片</div>
+                            <div class="admin-stat-value warn" id="db-free-size">-</div>
+                        </div>
+                        <div class="admin-stat-card">
+                            <div class="admin-stat-label">用户</div>
+                            <div class="admin-stat-value" id="stat-user-count">-</div>
+                        </div>
+                    </div>
+                    <div class="admin-inline-actions admin-panel-actions">
+                        <button class="btn btn-secondary" onclick="Admin.switchTab('plans')">套餐配置</button>
+                        <button class="btn btn-secondary" onclick="Admin.vacuumDatabase()">数据库优化</button>
                     </div>
                 </article>
+
                 <article class="card admin-panel">
                     <div class="admin-panel-head">
                         <div>
-                            <h3 class="admin-panel-title">当前内容总量</h3>
-                            <p class="admin-panel-copy">来自统一内容管理接口</p>
+                            <h3 class="admin-panel-title">版本更新</h3>
+                            <p class="admin-panel-copy" id="version-status-copy">点击“检查更新”获取最新版本</p>
+                        </div>
+                        <span class="admin-version-pill" id="version-update-badge">未检查</span>
+                    </div>
+                    <div class="admin-version-card" id="version-card">
+                        <div class="admin-version-row">
+                            <span>当前版本</span>
+                            <strong id="version-current">-</strong>
+                        </div>
+                        <div class="admin-version-row">
+                            <span>最新版本</span>
+                            <strong id="version-latest">-</strong>
+                        </div>
+                        <div class="admin-version-row">
+                            <span>Docker 镜像</span>
+                            <strong id="version-docker">-</strong>
+                        </div>
+                        <div class="admin-version-row">
+                            <span>GitHub 源码</span>
+                            <strong id="version-github">-</strong>
+                        </div>
+                        <p class="admin-version-tip" id="version-tip">后台会从 GitHub / Docker Hub 获取最新版本。</p>
+                        <div class="admin-inline-actions admin-panel-actions">
+                            <button class="btn btn-secondary" type="button" onclick="Admin.checkVersion(true)">检查更新</button>
+                            <button class="btn admin-primary-fill" type="button" id="version-update-btn" onclick="Admin.startSystemUpdate()" disabled>自动更新</button>
                         </div>
                     </div>
-                    <div class="admin-badge-row">
-                        <span class="admin-badge" id="overview-total-count">全部 0</span>
-                        <span class="admin-badge" id="workspace-count-note">笔记 0</span>
-                        <span class="admin-badge" id="workspace-count-event">事件 0</span>
-                        <span class="admin-badge" id="workspace-count-todo">待办 0</span>
-                        <span class="admin-badge" id="workspace-count-contact">联系人 0</span>
+                </article>
+            </div>
+        </section>
+
+        <section id="tab-settings" class="admin-tab-pane">
+            <div class="admin-summary-grid">
+                <article class="card admin-panel">
+                    <div class="admin-panel-head">
+                        <div>
+                            <h3 class="admin-panel-title">SMTP 配置</h3>
+                            <p class="admin-panel-copy">统一邮件通知与备份发送通道</p>
+                        </div>
                     </div>
+                    <form id="smtp-config-form" onsubmit="Admin.saveSmtpConfig(event)" class="admin-form-grid">
+                        <div class="admin-form-group">
+                            <label for="smtp-host">SMTP 服务器</label>
+                            <input type="text" class="admin-input" id="smtp-host" placeholder="smtp.example.com" autocomplete="off">
+                        </div>
+                        <div class="admin-form-grid two">
+                            <div class="admin-form-group">
+                                <label for="smtp-port">端口</label>
+                                <input type="number" class="admin-input" id="smtp-port" placeholder="587" autocomplete="off">
+                            </div>
+                            <div class="admin-form-group">
+                                <label for="smtp-secure">SSL/TLS</label>
+                                <select class="admin-select" id="smtp-secure" autocomplete="off">
+                                    <option value="false">禁用</option>
+                                    <option value="true">启用</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="smtp-user">用户名</label>
+                            <input type="text" class="admin-input" id="smtp-user" placeholder="your@email.com" autocomplete="off">
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="smtp-pass">密码 / 授权码</label>
+                            <input type="password" class="admin-input" id="smtp-pass" placeholder="授权码或密码" autocomplete="new-password">
+                        </div>
+                        <div class="admin-inline-actions admin-panel-actions">
+                            <button type="submit" class="btn admin-success-fill">保存 SMTP</button>
+                            <button type="button" class="btn btn-secondary" onclick="Admin.testSmtpConfig()">发送测试</button>
+                        </div>
+                    </form>
+                </article>
+
+                <article class="card admin-panel">
+                    <div class="admin-panel-head">
+                        <div>
+                            <h3 class="admin-panel-title">自动化任务</h3>
+                            <p class="admin-panel-copy">备份、WebDAV、邮件通知</p>
+                        </div>
+                    </div>
+                    <form id="backup-config-form" onsubmit="Admin.saveBackupConfig(event)" class="admin-form-grid">
+                        <div class="admin-form-group">
+                            <label for="bc-schedule">备份策略</label>
+                            <select class="admin-select" id="bc-schedule" autocomplete="off" onchange="Admin.toggleCustomSchedule(this)">
+                                <option value="none">已关闭</option>
+                                <option value="0 0 * * *">每天凌晨</option>
+                                <option value="0 0 * * 0">每周日凌晨</option>
+                                <option value="0 */6 * * *">每 6 小时</option>
+                                <option value="custom">自定义 Cron</option>
+                            </select>
+                        </div>
+                        <div id="bc-schedule-custom-container" class="admin-form-group admin-is-hidden">
+                            <label for="bc-schedule-custom">自定义 Cron</label>
+                            <input type="text" class="admin-input" id="bc-schedule-custom" placeholder="0 2 * * *" autocomplete="off">
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="bc-backupMode">备份模式</label>
+                            <select class="admin-select" id="bc-backupMode" autocomplete="off">
+                                <option value="incremental">增量备份</option>
+                                <option value="full">全量备份</option>
+                            </select>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="bc-keepCount">保留份数 (WebDAV)</label>
+                            <input type="number" class="admin-input" id="bc-keepCount" min="0" placeholder="0 = 不限制" autocomplete="off">
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="bc-webdavUrl">WebDAV 地址</label>
+                            <input type="url" class="admin-input" id="bc-webdavUrl" placeholder="https://..." autocomplete="off">
+                        </div>
+                        <div class="admin-form-grid two">
+                            <div class="admin-form-group">
+                                <label for="bc-webdavUser">WebDAV 用户</label>
+                                <input type="text" class="admin-input" id="bc-webdavUser" autocomplete="off">
+                            </div>
+                            <div class="admin-form-group">
+                                <label for="bc-webdavPassword">WebDAV 密码</label>
+                                <input type="password" class="admin-input" id="bc-webdavPassword" autocomplete="new-password">
+                            </div>
+                        </div>
+                        <div class="admin-form-group">
+                            <label for="bc-emailAddress">通知邮箱</label>
+                            <input type="email" class="admin-input" id="bc-emailAddress" autocomplete="off">
+                        </div>
+                        <div class="admin-checkbox-list">
+                            <label class="admin-checkbox"><input type="checkbox" id="bc-useWebDAV"> <span>启用 WebDAV 同步</span></label>
+                            <label class="admin-checkbox"><input type="checkbox" id="bc-sendEmail"> <span>发送备份成功邮件</span></label>
+                            <label class="admin-checkbox"><input type="checkbox" id="bc-attachments"> <span>备份压缩包包含附件</span></label>
+                        </div>
+                        <div class="admin-inline-actions admin-panel-actions">
+                            <button type="submit" class="btn admin-success-fill">保存策略</button>
+                            <button type="button" class="btn btn-secondary" onclick="Admin.backupNow()">立即备份</button>
+                        </div>
+                    </form>
                 </article>
             </div>
 
             <article class="card admin-panel">
                 <div class="admin-panel-head">
                     <div>
-                        <h3 class="admin-panel-title">快速入口</h3>
-                        <p class="admin-panel-copy">直接进入各后台管理视角</p>
+                        <h3 class="admin-panel-title">系统维护与优化</h3>
+                        <p class="admin-panel-copy">直接管理系统运行参数与数据库性能优化</p>
                     </div>
                 </div>
-                <div class="admin-inline-actions">
-                    <button class="btn btn-secondary" onclick="Admin.openContentManager('all')">查看全部内容</button>
-                    <button class="btn btn-secondary" onclick="Admin.openContentManager('note')">查看笔记后台</button>
-                    <button class="btn btn-secondary" onclick="Admin.openContentManager('event')">查看日历后台</button>
-                    <button class="btn btn-secondary" onclick="Admin.openContentManager('todo')">查看待办后台</button>
-                    <button class="btn btn-secondary" onclick="Admin.openContentManager('contact')">查看通讯录后台</button>
+                <div class="admin-inline-actions admin-panel-actions">
+                    <button class="btn btn-secondary" onclick="Admin.showSystemConfig()">系统运行参数</button>
+                    <button class="btn btn-secondary" onclick="Admin.vacuumDatabase()">优化数据库空间 (Vacuum)</button>
                 </div>
             </article>
         </section>
 
-        <section id="tab-users" class="admin-tab-pane">
+        <section id="tab-plans" class="admin-tab-pane">
             <article class="card admin-panel">
                 <div class="admin-panel-head">
                     <div>
@@ -349,38 +326,40 @@
                     <div class="admin-empty">正在加载套餐配置...</div>
                 </div>
             </article>
+        </section>
 
-            <div class="admin-section-grid">
-                <article class="card admin-panel">
-                    <div class="admin-panel-head">
-                        <div>
-                            <h3 class="admin-panel-title">用户管理</h3>
-                            <p class="admin-panel-copy">套餐、配额、数据体量与账号维护</p>
-                        </div>
+        <section id="tab-users" class="admin-tab-pane">
+            <article class="card admin-panel">
+                <div class="admin-panel-head">
+                    <div>
+                        <h3 class="admin-panel-title">用户管理</h3>
+                        <p class="admin-panel-copy">套餐、配额、数据体量与账号维护</p>
                     </div>
-                    <div class="admin-toolbar">
-                        <input type="text" class="admin-input" id="userSearch" placeholder="搜索用户名或邮箱..." autocomplete="off" oninput="Admin.debounce('userSearch', Admin.loadUsers)">
+                    <div class="admin-inline-actions">
                         <button class="btn admin-success-fill" onclick="Admin.showAddUser()">新增用户</button>
                     </div>
-                </article>
-                <article class="card admin-panel admin-table-shell">
-                    <table class="admin-table admin-table-stack">
-                        <thead>
-                            <tr>
-                                <th style="cursor:pointer" onclick="Admin.sortUsers('username')">用户 ⇅</th>
-                                <th>存储数据概览</th>
-                                <th>套餐</th>
-                                <th>会员有效期</th>
-                                <th style="cursor:pointer" onclick="Admin.sortUsers('dbSize')">DB 占用 ⇅</th>
-                                <th style="cursor:pointer" onclick="Admin.sortUsers('attachmentSize')">附件占用 ⇅</th>
-                                <th>套餐额度 / 功能</th>
-                                <th style="text-align:right">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="userList"></tbody>
-                    </table>
-                </article>
-            </div>
+                </div>
+                <div class="admin-toolbar">
+                    <input type="text" class="admin-input" id="userSearch" placeholder="搜索用户名或邮箱..." autocomplete="off" oninput="Admin.debounce('userSearch', Admin.loadUsers)">
+                </div>
+            </article>
+            <article class="card admin-panel admin-table-shell">
+                <table class="admin-table admin-table-stack">
+                    <thead>
+                        <tr>
+                            <th class="admin-th-sort" onclick="Admin.sortUsers('username')">用户 ⇅</th>
+                            <th>存储数据概览</th>
+                            <th>套餐</th>
+                            <th>会员有效期</th>
+                            <th class="admin-th-sort" onclick="Admin.sortUsers('dbSize')">DB 占用 ⇅</th>
+                            <th class="admin-th-sort" onclick="Admin.sortUsers('attachmentSize')">附件占用 ⇅</th>
+                            <th>套餐额度 / 功能</th>
+                            <th class="admin-th-end">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userList"></tbody>
+                </table>
+            </article>
         </section>
 
         <section id="tab-shares" class="admin-tab-pane">
@@ -390,9 +369,9 @@
                         <h3 class="admin-panel-title">分享审计</h3>
                         <p class="admin-panel-copy">统一管理当前活跃的分享链接</p>
                     </div>
-                </div>
-                <div class="admin-inline-actions">
-                    <button class="btn btn-secondary admin-danger" onclick="Admin.batchRevokeShares()">批量撤销选中分享</button>
+                    <div class="admin-inline-actions">
+                        <button class="btn btn-secondary admin-danger" onclick="Admin.batchRevokeShares()">批量撤销选中分享</button>
+                    </div>
                 </div>
             </article>
             <article class="card admin-panel admin-table-shell">
@@ -405,7 +384,7 @@
                             <th>类型</th>
                             <th>创建时间</th>
                             <th>有效期</th>
-                            <th style="text-align:right">操作</th>
+                            <th class="admin-th-end">操作</th>
                         </tr>
                     </thead>
                     <tbody id="shareList"></tbody>
@@ -457,7 +436,7 @@
                             <label for="redeem-expires-at">过期时间</label>
                             <input id="redeem-expires-at" class="admin-input" type="datetime-local" autocomplete="off">
                         </div>
-                        <div class="admin-form-group">
+                        <div class="admin-form-group admin-form-grid-full">
                             <label for="redeem-custom-code">自定义兑换码</label>
                             <input id="redeem-custom-code" class="admin-input" type="text" placeholder="可留空自动生成" autocomplete="off">
                         </div>
@@ -491,7 +470,7 @@
                                 <th>使用情况</th>
                                 <th>过期时间</th>
                                 <th>状态</th>
-                                <th style="text-align:right">操作</th>
+                                <th class="admin-th-end">操作</th>
                             </tr>
                         </thead>
                         <tbody id="redeemCodeList"></tbody>
@@ -500,7 +479,7 @@
             </div>
 
             <div class="admin-summary-grid admin-summary-grid-equal">
-                <article class="card admin-panel admin-table-shell">
+                <article class="card admin-panel">
                     <div class="admin-panel-head">
                         <div>
                             <h3 class="admin-panel-title">兑换记录</h3>
@@ -510,22 +489,24 @@
                     <div class="admin-toolbar">
                         <input type="text" class="admin-input" id="redeemRedemptionSearch" placeholder="搜索用户名、兑换码或套餐..." autocomplete="off" oninput="Admin.debounce('redeemRedemptionSearch', Admin.loadRedeemRedemptions)">
                     </div>
-                    <table class="admin-table admin-table-stack admin-panel-block">
-                        <thead>
-                            <tr>
-                                <th>用户</th>
-                                <th>兑换码</th>
-                                <th>套餐</th>
-                                <th>会员到期</th>
-                                <th>配额</th>
-                                <th>兑换时间</th>
-                            </tr>
-                        </thead>
-                        <tbody id="redeemRedemptionList"></tbody>
-                    </table>
+                    <div class="admin-table-shell admin-panel-block">
+                        <table class="admin-table admin-table-stack">
+                            <thead>
+                                <tr>
+                                    <th>用户</th>
+                                    <th>兑换码</th>
+                                    <th>套餐</th>
+                                    <th>会员到期</th>
+                                    <th>配额</th>
+                                    <th>兑换时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="redeemRedemptionList"></tbody>
+                        </table>
+                    </div>
                 </article>
 
-                <article class="card admin-panel admin-table-shell">
+                <article class="card admin-panel">
                     <div class="admin-panel-head">
                         <div>
                             <h3 class="admin-panel-title">会员操作日志</h3>
@@ -535,20 +516,22 @@
                     <div class="admin-toolbar">
                         <input type="text" class="admin-input" id="membershipOperationSearch" placeholder="搜索用户、操作人、来源、套餐、兑换码..." autocomplete="off" oninput="Admin.debounce('membershipOperationSearch', Admin.loadMembershipOperations)">
                     </div>
-                    <table class="admin-table admin-table-stack admin-panel-block">
-                        <thead>
-                            <tr>
-                                <th>时间</th>
-                                <th>用户</th>
-                                <th>动作</th>
-                                <th>操作人</th>
-                                <th>套餐 / 到期</th>
-                                <th>兑换码</th>
-                                <th>详情</th>
-                            </tr>
-                        </thead>
-                        <tbody id="membershipOperationList"></tbody>
-                    </table>
+                    <div class="admin-table-shell admin-panel-block">
+                        <table class="admin-table admin-table-stack">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>用户</th>
+                                    <th>动作</th>
+                                    <th>操作人</th>
+                                    <th>套餐 / 到期</th>
+                                    <th>兑换码</th>
+                                    <th>详情</th>
+                                </tr>
+                            </thead>
+                            <tbody id="membershipOperationList"></tbody>
+                        </table>
+                    </div>
                 </article>
             </div>
         </section>
@@ -558,11 +541,13 @@
                 <div class="admin-panel-head">
                     <div>
                         <h3 class="admin-panel-title">内容管理</h3>
-                        <p class="admin-panel-copy">笔记、日历、待办、通讯录后台统一在这里</p>
+                        <p class="admin-panel-copy" id="content-active-copy">当前视角：全部内容</p>
                     </div>
-                    <div class="admin-muted" id="content-active-copy">当前视角：全部内容</div>
+                    <div class="admin-inline-actions" id="workspace-batch-actions">
+                        <button class="btn btn-secondary admin-danger" onclick="Admin.batchDeleteWorkspace()">批量彻底删除</button>
+                    </div>
                 </div>
-                <div class="admin-filter-bar">
+                <div class="admin-filter-bar admin-panel-block">
                     <button class="admin-filter-chip active" data-type="all" onclick="Admin.setWorkspaceType('all')">全部内容</button>
                     <button class="admin-filter-chip" data-type="note" onclick="Admin.setWorkspaceType('note')">笔记管理</button>
                     <button class="admin-filter-chip" data-type="event" onclick="Admin.setWorkspaceType('event')">日历事件</button>
@@ -580,14 +565,14 @@
                 </div>
             </article>
 
-            <div class="admin-summary-grid">
-                <article class="card admin-panel admin-table-shell">
-                    <div class="admin-panel-head">
-                        <div>
-                            <h3 class="admin-panel-title">用户内容概览</h3>
-                            <p class="admin-panel-copy">按最近更新时间排序，便于快速定位活跃用户</p>
-                        </div>
+            <article class="card admin-panel">
+                <div class="admin-panel-head">
+                    <div>
+                        <h3 class="admin-panel-title">用户内容概览</h3>
+                        <p class="admin-panel-copy">按最近更新时间排序，便于快速定位活跃用户</p>
                     </div>
+                </div>
+                <div class="admin-table-shell">
                     <table class="admin-table admin-table-stack">
                         <thead>
                             <tr>
@@ -598,26 +583,13 @@
                                 <th>待办</th>
                                 <th>联系人</th>
                                 <th>最近更新</th>
-                                <th style="text-align:right">操作</th>
+                                <th class="admin-th-end">操作</th>
                             </tr>
                         </thead>
                         <tbody id="workspaceUserSummary"></tbody>
                     </table>
-                </article>
-
-                <article class="card admin-panel">
-                    <div class="admin-panel-head">
-                        <div>
-                            <h3 class="admin-panel-title">批量操作</h3>
-                            <p class="admin-panel-copy">针对当前筛选结果执行</p>
-                        </div>
-                    </div>
-                    <div class="admin-inline-actions" id="workspace-batch-actions">
-                        <button class="btn btn-secondary admin-danger" onclick="Admin.batchDeleteWorkspace()">批量彻底删除</button>
-                    </div>
-                    <p class="admin-muted admin-panel-block">先在下方列表勾选内容，再执行批量动作。</p>
-                </article>
-            </div>
+                </div>
+            </article>
 
             <article class="card admin-panel admin-table-shell">
                 <table class="admin-table admin-table-stack">
@@ -630,7 +602,7 @@
                             <th>状态</th>
                             <th>更新时间</th>
                             <th>摘要</th>
-                            <th style="text-align:right">操作</th>
+                            <th class="admin-th-end">操作</th>
                         </tr>
                     </thead>
                     <tbody id="workspaceList"></tbody>
@@ -663,9 +635,10 @@
     </div>
 </div>
 
-<script src="/js/admin-member-plans.js?v=20260615-release-111"></script>
-<script src="/js/admin-system-config.js?v=20260615-release-111"></script>
-<script src="/js/admin-workspace.js?v=20260615-release-111"></script>
-<script src="/js/admin-page.js?v=20260615-release-111"></script>
+<script type="module" src="/js/site-nav.js?v=20260615-release-111"></script>
+<script src="/js/admin-member-plans.js?v=20260616-layout-refactor-v2"></script>
+<script src="/js/admin-system-config.js?v=20260616-layout-refactor-v2"></script>
+<script src="/js/admin-workspace.js?v=20260616-layout-refactor-v2"></script>
+<script src="/js/admin-page.js?v=20260617-manual-update-v6"></script>
 </body>
 </html>

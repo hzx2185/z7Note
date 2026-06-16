@@ -100,10 +100,6 @@ async function setSystemConfigWithExecutor(executor, key, value, description = n
   await executor.upsert('system_config', insertData, updateFields, ['key']);
 }
 
-async function setSystemConfig(key, value, description = null) {
-  await setSystemConfigWithExecutor(db, key, value, description);
-}
-
 /**
  * 批量设置系统配置
  */
@@ -195,7 +191,6 @@ async function setSmtpConfig(config) {
 module.exports = {
   getSystemConfig,
   getAllSystemConfig,
-  setSystemConfig,
   setMultipleSystemConfig,
   deleteSystemConfig,
   getMaxFileSize,

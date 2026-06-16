@@ -1074,7 +1074,8 @@ router.post('/api/admin/system/init-defaults', async (req, res) => {
 router.get('/api/admin/system/version', async (req, res) => {
   try {
     const force = req.query.force === '1' || req.query.force === 'true';
-    const status = await getVersionStatus({ force });
+    const check = req.query.check === '1' || req.query.check === 'true';
+    const status = await getVersionStatus({ force, check });
     res.json({ status: 'ok', ...status });
   } catch (e) {
     log('ERROR', '获取系统版本信息失败', {

@@ -92,34 +92,6 @@ async function compressImage(inputBuffer, mimeType) {
   }
 }
 
-/**
- * 生成图片缩略图
- * @param {Buffer} inputBuffer - 输入图片数据
- * @param {number} size - 缩略图尺寸（正方形）
- * @returns {Promise<Buffer>} 缩略图数据
- */
-async function generateThumbnail(inputBuffer, size = 200) {
-  // 检查 sharp 是否可用
-  if (!sharp) {
-    return null;
-  }
-  try {
-    const thumbnail = await sharp(inputBuffer)
-      .resize(size, size, {
-        fit: 'cover',
-        position: 'center'
-      })
-      .jpeg({ quality: 80 })
-      .toBuffer();
-
-    return thumbnail;
-  } catch (error) {
-    log('ERROR', '生成缩略图失败', { error: error.message, stack: error.stack });
-    return null;
-  }
-}
-
 module.exports = {
-  compressImage,
-  generateThumbnail
+  compressImage
 };
