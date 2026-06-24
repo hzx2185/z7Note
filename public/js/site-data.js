@@ -4,8 +4,8 @@ export const HOME_METRICS = [
     description: '数据完全由您自主掌控，无隐私泄露与数据丢失风险'
   },
   {
-    value: '多端编辑',
-    description: '列表切换、标题编辑、内容保存围绕同一编辑器状态收口'
+    value: '无扰打开',
+    description: '从日历打开笔记不会因为空同步刷新最后更新时间'
   },
   {
     value: '双标签镜像',
@@ -15,12 +15,12 @@ export const HOME_METRICS = [
 
 export const HOME_FEATURES = [
   {
-    title: '📝 稳定笔记编辑',
-    summary: '点击列表标题会可靠切换内容，编辑器初始化失败也会显示明确状态。'
+    title: '📝 更新时间更准确',
+    summary: '打开笔记、切换页面或重复同步相同内容时，不再把最后更新时间错误推进。'
   },
   {
-    title: '⚡ 快速切换保护',
-    summary: '快速连续切换多篇笔记时，过期编辑器初始化会被丢弃，避免标题和正文错位。'
+    title: '⚡ 同步写入更克制',
+    summary: '服务端识别无实质变化的同步请求，跳过写库、历史记录和广播。'
   },
   {
     title: '📅 日历与提醒',
@@ -36,14 +36,14 @@ export const HOME_FEATURES = [
   },
   {
     title: '🧹 发布包更干净',
-    summary: '清理无用调试代码和系统临时文件，让镜像与源码保持更易维护的状态。'
+    summary: '同步陈旧版本元数据，清理无效更新路径，让镜像与源码保持更易维护的状态。'
   }
 ];
 
 export const HOME_HERO = {
   eyebrow: '全栈自托管笔记工作区',
-  title: '更稳定好用的自托管笔记工作区',
-  subtitle: '将笔记、日历、联系人、提醒与分享整合为一个轻量、安全、可自托管的个人与团队协作空间。',
+  title: '更准确记录修改时间的自托管笔记工作区',
+  subtitle: '将笔记、日历、联系人、提醒与分享整合为一个轻量、安全、可自托管的个人与团队协作空间。打开和浏览不会被误判为编辑，真正的修改才会进入更新时间线。',
   actions: {
     primary: '立即开始',
     secondary: '查看更新日志'
@@ -65,8 +65,8 @@ export const HOME_SOCIAL_PROOF = {
     },
     {
       icon: '✍️',
-      title: '编辑体验更稳',
-      summary: '编辑器等待 CodeMirror 就绪后再初始化，失败时不再静默空白。'
+      title: '编辑记录更可信',
+      summary: '无变化保存会被服务端识别并跳过，更新时间更接近真实编辑行为。'
     },
     {
       icon: '🌐',

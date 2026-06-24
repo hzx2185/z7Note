@@ -1,7 +1,7 @@
 // 应用入口 - 优化模块加载
 (async () => {
     // 使用应用版本号作为缓存版本
-    const VERSION = '1.1.2';
+    const VERSION = '1.1.3';
     const cacheBuster = `?v=${VERSION}`;
 
     try {

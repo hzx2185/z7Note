@@ -4,7 +4,7 @@ import {
   HOME_SOCIAL_PROOF,
   HOME_CTA,
   HOME_HERO
-} from '/js/site-data.js?v=20260617-manual-update-v112';
+} from '/js/site-data.js?v=20260624-release-113';
 
 const heroMetrics = document.getElementById('hero-metrics');
 const homepageFeatures = document.getElementById('homepage-features');

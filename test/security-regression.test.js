@@ -198,6 +198,34 @@ test('records and restores note history versions', async () => {
   assert.equal(current.json.content, 'first version');
 });
 
+test('preserves note updatedAt when sync payload has no content changes', async () => {
+  const ownerCookie = await registerUser('syncnoop', 'password123');
+  const note = await createNote(ownerCookie, 'calendar/open-note', 'unchanged content');
+  const pushedTimestamp = Number(note.updatedAt) + 3600;
+
+  const sync = await request('/api/files', {
+    method: 'POST',
+    cookie: ownerCookie,
+    body: [{
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      createdAt: note.createdAt,
+      updatedAt: pushedTimestamp
+    }]
+  });
+
+  assert.equal(sync.response.status, 200, JSON.stringify(sync.json));
+  assert.equal(sync.json.changed, 0);
+  assert.equal(sync.json.notes[0].updatedAt, note.updatedAt);
+
+  const current = await request(`/api/notes/${note.id}`, {
+    cookie: ownerCookie
+  });
+  assert.equal(current.response.status, 200, JSON.stringify(current.json));
+  assert.equal(current.json.updatedAt, note.updatedAt);
+});
+
 test('serves public note shares and only allows referenced attachments', async () => {
   const aliceCookie = await registerUser('alice2', 'password123');
   await upgradeUserPlan('alice2', 'pro');

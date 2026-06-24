@@ -440,15 +440,17 @@ router.put('/api/notes/:id', async (req, res) => {
 
     const updatedAt = Math.floor(Date.now() / 1000);
     const cleanTitle = sanitizeTitle(title) || '未命名';
-    await db.withTransaction(async (tx) => {
-      const nextNote = {
-        title: cleanTitle,
-        content: content !== undefined ? content : existingNote.content
-      };
+    const nextNote = {
+      title: cleanTitle,
+      content: content !== undefined ? content : existingNote.content
+    };
 
-      if (hasMeaningfulNoteChange(existingNote, nextNote)) {
-        await recordNoteVersion(tx, existingNote, { now: updatedAt, source: 'edit' });
-      }
+    if (!hasMeaningfulNoteChange(existingNote, nextNote)) {
+      return res.json({ status: "ok", note: existingNote, unchanged: true });
+    }
+
+    await db.withTransaction(async (tx) => {
+      await recordNoteVersion(tx, existingNote, { now: updatedAt, source: 'edit' });
 
       await tx.execute(
         'UPDATE notes SET content = COALESCE(?, content), title = ?, updatedAt = ? WHERE id = ? AND username = ?',
@@ -729,24 +731,32 @@ router.post('/api/files', async (req, res) => {
     }
 
     // 使用事务批量更新
+    const changedIds = [];
     await db.withTransaction(async (tx) => {
       for (const item of validItems) {
         // 处理时间戳：确保不为空或 0
         const now = Math.floor(Date.now() / 1000);
-        const updatedAt = normalizeNoteTimestamp(item.updatedAt, now);
         const existingNote = existingNotesById.get(item.id);
+        const hasExistingNote = !!existingNote;
+        const incomingUpdatedAt = normalizeNoteTimestamp(item.updatedAt, now);
         const createdAt = normalizeNoteTimestamp(
           item.createdAt,
-          existingNote?.createdAt || updatedAt || now
+          existingNote?.createdAt || incomingUpdatedAt || now
         );
         const nextNote = {
           title: item.title || '未命名',
           content: item.content || '',
           deleted: item.deleted ? 1 : 0
         };
+        const changed = !hasExistingNote || hasMeaningfulNoteChange(existingNote, nextNote);
+        const updatedAt = changed ? incomingUpdatedAt : existingNote.updatedAt;
 
-        if (existingNote && hasMeaningfulNoteChange(existingNote, nextNote)) {
+        if (existingNote && changed) {
           await recordNoteVersion(tx, existingNote, { now, source: item.deleted ? 'sync-delete' : 'sync' });
+        }
+
+        if (!changed) {
+          continue;
         }
 
         await tx.upsert('notes', {
@@ -763,6 +773,7 @@ router.post('/api/files', async (req, res) => {
           'updatedAt',
           'deleted'
         ], ['id']);
+        changedIds.push(item.id);
 
         // 如果笔记被删除，同步清理分享链接
         if (item.deleted) {
@@ -775,6 +786,7 @@ router.post('/api/files', async (req, res) => {
     });
 
     // 为更新的笔记批量广播通知（优化：一次性获取所有更新后的笔记）
+    let syncedNotes = [];
     try {
       const updatedIds = validItems.map(item => item.id);
       if (updatedIds.length > 0) {
@@ -783,10 +795,13 @@ router.post('/api/files', async (req, res) => {
           `SELECT * FROM notes WHERE username = ? AND id IN (${placeholders})`,
           [req.user, ...updatedIds]
         );
+        syncedNotes = updatedNotes || [];
 
-        if (updatedNotes && updatedNotes.length > 0) {
+        const changedIdSet = new Set(changedIds.map(id => id.toString()));
+        const notesToBroadcast = syncedNotes.filter(note => changedIdSet.has(note.id.toString()));
+        if (notesToBroadcast.length > 0) {
           // 使用新定义的批量广播函数（如果可用）或快速循环
-          for (const note of updatedNotes) {
+          for (const note of notesToBroadcast) {
             broadcastNoteUpdate(req.user, note.id, note);
             wsBroadcastNoteUpdate(req.user, note);
           }
@@ -805,7 +820,9 @@ router.post('/api/files', async (req, res) => {
     res.json({
       status: "ok",
       count: validItems.length,
+      changed: changedIds.length,
       deleted: deletedItems.length,
+      notes: syncedNotes,
       usage: ((finalNoteData?.size || 0) / (1024 * 1024)).toFixed(2),
       limit: limitMB
     });
